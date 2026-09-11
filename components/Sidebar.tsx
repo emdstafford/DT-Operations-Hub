@@ -11,7 +11,6 @@ export default function Sidebar() {
 
       <nav className="px-4">
         <ul className="space-y-2">
-
           <li>
             /
               Dashboard
@@ -37,7 +36,7 @@ export default function Sidebar() {
           </li>
 
           <li>
-            /insights
+            <Linkghts
               Insights
             </Link>
           </li>
@@ -47,7 +46,6 @@ export default function Sidebar() {
               Upload
             </Link>
           </li>
-
         </ul>
       </nav>
     </aside>

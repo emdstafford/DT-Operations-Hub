@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Header from "@/components/Header";
 import { processReport } from "@/lib/processors/reportProcessor";
 import { saveContractsToDatabase } from "@/lib/saveContracts";
 import { updateContractMaster } from "@/lib/updateContractMaster";
+import Sidebar from "@/components/Sidebar";
 
 export default function UploadPage() {
   const [fileName, setFileName] = useState("");
@@ -41,15 +41,14 @@ export default function UploadPage() {
   }
 
   return (
-    <>
-      <Header />
+    <div className="flex">
+      <Sidebar />
 
-      <main className="min-h-screen bg-slate-100 p-8">
+      <main className="flex-1 min-h-screen bg-slate-100 p-8">
         <div className="bg-white rounded-lg shadow p-6">
-
-          <h2 className="text-2xl font-bold mb-4">
+          <h1 className="text-3xl font-bold mb-6">
             Weekly Report Upload
-          </h2>
+          </h1>
 
           <input
             type="file"
@@ -67,11 +66,11 @@ export default function UploadPage() {
             <>
               <div className="mt-4">
                 <button
-                  onClick={handleSave}
-                  className="bg-[#D4A017] text-black px-4 py-2 rounded font-semibold hover:opacity-90"
-                >
-                  Save Weekly Summary
-                </button>
+  onClick={handleSave}
+  className="bg-yellow-500 text-black px-4 py-2 rounded"
+>
+  Save Weekly Summary
+</button>
               </div>
 
               <div className="mt-8">
@@ -79,25 +78,19 @@ export default function UploadPage() {
                   Contract Summary ({contracts.length} contracts)
                 </h2>
 
-                <table className="w-full border border-slate-300 bg-white">
+                <table className="w-full border border-slate-300">
                   <thead>
                     <tr className="bg-slate-200">
-                      <th className="border p-2 text-left">
-                        Contract
-                      </th>
-
+                      <th className="border p-2 text-left">Contract</th>
                       <th className="border p-2 text-left">
                         Total Stops
                       </th>
-
                       <th className="border p-2 text-left">
                         Completed
                       </th>
-
                       <th className="border p-2 text-left">
                         Incomplete
                       </th>
-
                       <th className="border p-2 text-left">
                         % Complete
                       </th>
@@ -133,9 +126,8 @@ export default function UploadPage() {
               </div>
             </>
           )}
-
         </div>
       </main>
-    </>
+    </div>
   );
 }
