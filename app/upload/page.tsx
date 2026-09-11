@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { processReport } from "@/lib/processors/reportProcessor";
 import { saveContractsToDatabase } from "@/lib/saveContracts";
+import { updateContractMaster } from "@/lib/updateContractMaster";
 
 export default function UploadPage() {
   const [fileName, setFileName] = useState("");
@@ -24,6 +25,8 @@ export default function UploadPage() {
 
   async function handleSave() {
     try {
+      await updateContractMaster(contracts);
+
       await saveContractsToDatabase(contracts);
 
       alert(
