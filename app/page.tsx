@@ -14,35 +14,15 @@ export default function Home() {
       </header>
 
       <div className="max-w-7xl mx-auto p-6">
-
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-
-          <Card
-            title="Overall Completion"
-            value="94.66%"
-          />
-
-          <Card
-            title="Geofence Compliance"
-            value="94.25%"
-          />
-
-          <Card
-            title="Total Stops"
-            value="30,831"
-          />
-
-          <Card
-            title="Incomplete Stops"
-            value="1,646"
-          />
-
+          <Card title="Overall Completion" value="94.66%" />
+          <Card title="Geofence Compliance" value="94.25%" />
+          <Card title="Total Stops" value="30,831" />
+          <Card title="Incomplete Stops" value="1,646" />
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 mt-6">
-
           <div className="bg-white rounded-xl shadow p-6">
-
             <h2 className="text-xl font-bold mb-4">
               AI Daily Brief
             </h2>
@@ -52,11 +32,9 @@ export default function Home() {
               Geofence compliance remains strong.
               Contract 296C2 continues to perform well.
             </p>
-
           </div>
 
           <div className="bg-white rounded-xl shadow p-6">
-
             <h2 className="text-xl font-bold mb-4">
               Top Supervisors
             </h2>
@@ -66,11 +44,8 @@ export default function Home() {
               <li>🥈 Ronnie Wooldridge</li>
               <li>🥉 Kevin Shields</li>
             </ul>
-
           </div>
-
         </div>
-
       </div>
     </main>
   );
@@ -85,13 +60,8 @@ function Card({
 }) {
   return (
     <div className="bg-white rounded-xl shadow p-6">
-      <p className="text-slate-500">
-        {title}
-      </p>
-
-      <h3 className="text-4xl font-bold mt-3">
-        {value}
-      </h3>
+      <p className="text-slate-500">{title}</p>
+      <h3 className="text-4xl font-bold mt-3">{value}</h3>
     </div>
   );
 }
