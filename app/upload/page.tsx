@@ -4,7 +4,7 @@ import { useState } from "react";
 import { processReport } from "@/lib/processors/reportProcessor";
 import { saveContractsToDatabase } from "@/lib/saveContracts";
 import { updateContractMaster } from "@/lib/updateContractMaster";
-import Sidebar from "@/components/Sidebar";
+import { saveRawLoads } from "@/lib/saveRawLoads";
 
 export default function UploadPage() {
   const [fileName, setFileName] = useState("");
@@ -21,28 +21,35 @@ export default function UploadPage() {
 
     const result = await processReport(file);
 
+    console.log(result);
+    
     setContracts(result.contracts);
   }
 
-  async function handleSave() {
-    try {
-      await updateContractMaster(contracts);
+async function handleSave() {
+  try {
+    // Save raw loads first
+    await saveRawLoads(rawRows);
 
-      await saveContractsToDatabase(contracts);
+    // Update contract master
+    await updateContractMaster(contracts);
 
-      alert(
-        `${contracts.length} contracts saved successfully!`
-      );
-    } catch (error) {
-      console.error(error);
+    // Save contract summary
+    await saveContractsToDatabase(contracts);
 
-      alert("Failed to save contracts.");
-    }
+    alert(
+      `${contracts.length} contracts saved successfully!`
+    );
+  } catch (error) {
+    console.error(error);
+
+    alert(JSON.stringify(error));
   }
+}
 
   return (
     <div className="flex">
-      <Sidebar />
+    
 
       <main className="flex-1 min-h-screen bg-slate-100 p-8">
         <div className="bg-white rounded-lg shadow p-6">
