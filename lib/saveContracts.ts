@@ -14,22 +14,18 @@ export async function saveContractsToDatabase(
       .split("T")[0],
   }));
 
-  console.log("ROWS TO SAVE:");
-  console.log(rows);
+  console.log("ROWS TO SAVE", rows);
 
-  const { data, error } = await supabase
+  const result = await supabase
     .from("weekly_contract_summary")
-    .insert(rows)
-    .select();
+    .insert(rows);
 
-  console.log("SAVE DATA:");
-  console.log(data);
+  console.log("SUPABASE RESULT", result);
 
-  console.log("SAVE ERROR:");
-  console.log(error);
-
-  if (error) {
-    throw error;
+  if (result.error) {
+    throw new Error(
+      JSON.stringify(result.error)
+    );
   }
 
   return true;

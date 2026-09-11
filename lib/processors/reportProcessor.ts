@@ -6,9 +6,10 @@ export async function processReport(file: File) {
 
   const workbook = XLSX.read(data);
 
-  const mainSheet = workbook.Sheets["Load Details"];
+  const loadDetailsSheet =
+    workbook.Sheets["Load Details"];
 
-  if (!mainSheet) {
+  if (!loadDetailsSheet) {
     return {
       contracts: [],
       rows: [],
@@ -16,7 +17,7 @@ export async function processReport(file: File) {
   }
 
   const rows: any[] =
-    XLSX.utils.sheet_to_json(mainSheet);
+    XLSX.utils.sheet_to_json(loadDetailsSheet);
 
   const contractList = await getContracts();
 
