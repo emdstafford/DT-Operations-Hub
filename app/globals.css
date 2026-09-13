@@ -99,14 +99,25 @@ button, input { font: inherit; }
 .data-table td { padding: 11px 13px; text-align: right; border-top: 1px solid #edf0f3; }
 .data-table tbody tr:hover { background: #f7f9fb; }
 .attention-row { background: #eef2f5; }
+.top-performer-row { background: #e8f5ea; }
+.bottom-contract-row { background: #f9e8ea; }
+.top-performer-row:hover { background: #dff0e2 !important; }
+.bottom-contract-row:hover { background: #f5dde0 !important; }
+.selected-day-row { background: #eaf1f7; }
+.day-button { border: 0; padding: 0; color: var(--navy); background: transparent; font: inherit; font-weight: 800; text-align: left; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .text-navy { color: var(--navy); }
 .two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
 .email-panel pre { max-height: 520px; overflow: auto; margin: 0; padding: 22px; color: #293a4a; background: #f8fafb; font: 13px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+.history-picker { display: grid; grid-template-columns: auto minmax(240px, 420px) 1fr; align-items: center; gap: 16px; padding: 18px 20px; }
+.history-picker label { color: var(--navy); font-weight: 800; }
+.history-picker select { border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--navy); font: inherit; font-weight: 700; padding: 11px 38px 11px 12px; }
+.history-picker span { color: var(--muted); font-size: .84rem; overflow-wrap: anywhere; }
 
 @media (max-width: 980px) {
   .feature-grid, .metric-grid { grid-template-columns: repeat(2, 1fr); }
   .notice-grid { grid-template-columns: repeat(2, 1fr); }
   .two-column, .workflow-card { grid-template-columns: 1fr; }
+  .history-picker { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
   .brand-row { height: 74px; padding: 0 18px; }

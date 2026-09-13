@@ -6,7 +6,7 @@ export default function HistoricalUploadPage() {
       </h1>
 
       <p className="mt-4">
-        Upload monthly FourKites files here.
+        Upload monthly USPS load-detail files here.
       </p>
 
       <ul className="mt-4 list-disc ml-6">

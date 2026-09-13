@@ -4,10 +4,10 @@ import Link from "next/link";
 const links = [
   ["Dashboard", "/"],
   ["Upload", "/upload"],
+  ["History", "/history"],
   ["Completion", "/completion-totals"],
   ["Supervisors", "/supervisors"],
   ["Contracts", "/contracts"],
-  ["Missed Stops", "/operational-exceptions"],
 ];
 
 export default function NavBar() {

@@ -63,7 +63,11 @@ function parseReportDate(value: string) {
   return toIsoDate(year, months[match[2].toLowerCase()], Number(match[1]));
 }
 
-function getReportPeriod(workbook: XLSX.WorkBook) {
+function getReportPeriod(fileName: string, workbook: XLSX.WorkBook) {
+  const fileDates = fileName.match(/(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})/);
+  if (fileDates) {
+    return { periodStart: fileDates[1], periodEnd: fileDates[2] };
+  }
   const summary = workbook.Sheets.Summary;
   if (!summary) return { periodStart: "", periodEnd: "" };
   const rows = XLSX.utils.sheet_to_json<unknown[]>(summary, { header: 1, defval: "" });
@@ -80,7 +84,8 @@ function getOperatingDate(tags: string) {
 }
 
 function getTripInfo(tags: string) {
-  const match = tags.match(/LDT-([A-Z0-9]+)-(\d+)/i);
+  const match = tags.match(/LDT-([A-Z0-9]+)-(\d+)/i)
+    ?? tags.match(/(?:^|,)\s*([A-Z0-9]+)-(\d+)(?=,|$)/i);
   return match
     ? { contract: match[1].toUpperCase(), trip: String(Number(match[2])) }
     : { contract: "", trip: null };
@@ -177,7 +182,7 @@ export async function processReport(file: File): Promise<ProcessedReport> {
     assignments = [];
   }
 
-  const { periodStart, periodEnd } = getReportPeriod(workbook);
+  const { periodStart, periodEnd } = getReportPeriod(file.name, workbook);
   const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(loadDetails, {
     range: 4,
     defval: "",
