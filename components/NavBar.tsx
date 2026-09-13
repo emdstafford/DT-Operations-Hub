@@ -1,13 +1,28 @@
+import Image from "next/image";
+import Link from "next/link";
+
+const links = [
+  ["Dashboard", "/"],
+  ["Upload", "/upload"],
+  ["Completion", "/completion-totals"],
+  ["Supervisors", "/supervisors"],
+  ["Contracts", "/contracts"],
+  ["Missed Stops", "/operational-exceptions"],
+];
+
 export default function NavBar() {
   return (
-    <div
-      style={{
-        background: "#0A2342",
-        color: "white",
-        padding: "12px 20px",
-      }}
-    >
-      Navigation
-    </div>
+    <header className="site-header">
+      <div className="brand-row">
+        <Link href="/" className="brand">
+          <Image src="/logo.png" alt="Davenport Transportation" width={68} height={68} priority />
+          <div><strong>DT Operations Hub</strong><span>Performance intelligence</span></div>
+        </Link>
+        <div className="header-status"><span className="status-dot" />Operations reporting</div>
+      </div>
+      <nav className="main-nav" aria-label="Primary navigation">
+        {links.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}
+      </nav>
+    </header>
   );
 }

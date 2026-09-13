@@ -1,101 +1,241 @@
 import * as XLSX from "xlsx";
 import { getContracts } from "../getContracts";
+import { isTonyaTrip } from "../tonyaTrips";
 
-export async function processReport(file: File) {
-  const data = await file.arrayBuffer();
+export type Totals = {
+  totalStops: number;
+  completedStops: number;
+  incompleteStops: number;
+  percentComplete: number;
+};
 
-  const workbook = XLSX.read(data);
+export type ProcessedLoad = {
+  loadNumber: string;
+  operatingDate: string;
+  contract: string;
+  trip: string | null;
+  totalStops: number;
+  completedStops: number;
+  incompleteStops: number;
+  tags: string;
+};
 
-  const loadDetailsSheet =
-    workbook.Sheets["Load Details"];
+export type SummaryRow = Totals & {
+  key: string;
+  label: string;
+  loadCount: number;
+};
 
-  if (!loadDetailsSheet) {
-    return {
-      contracts: [],
-      rows: [],
-    };
-  }
+export type ProcessedReport = {
+  fileName: string;
+  periodStart: string;
+  periodEnd: string;
+  reportLoads: ProcessedLoad[];
+  historicalLoads: ProcessedLoad[];
+  totals: Totals;
+  daily: SummaryRow[];
+  contracts: SummaryRow[];
+  supervisors: SummaryRow[];
+  duplicateLoadNumbers: string[];
+  outsidePeriodCount: number;
+  unmatchedContractCount: number;
+  unmatchedSupervisorCount: number;
+};
 
-  const rows: any[] =
-  XLSX.utils.sheet_to_json(loadDetailsSheet, {
-    range: 4,
-  });
+type ContractAssignment = {
+  contract_number: string | null;
+  supervisor?: string | null;
+};
 
-  const contractList = await getContracts();
-
-  const contracts: Record<
-    string,
-    {
-      totalStops: number;
-      completedStops: number;
-      incompleteStops: number;
-    }
-  > = {};
-
-  rows.forEach((row) => {
-  const tags = String(
-    row["Tags"] || ""
-  ).toUpperCase();
-if (
-  tags.includes("296B8") ||
-  tags.includes("296C2")
-) {
-  console.log(tags);
+function toIsoDate(year: number, month: number, day: number) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-  contractList.forEach((record: any) => {
-      const contract = String(
-        record.contract_number || ""
-      ).trim();
+function parseReportDate(value: string) {
+  const months: Record<string, number> = {
+    jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+    jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+  };
+  const match = value.trim().match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2,4})$/);
+  if (!match) return "";
+  const yearNumber = Number(match[3]);
+  const year = yearNumber < 100 ? 2000 + yearNumber : yearNumber;
+  return toIsoDate(year, months[match[2].toLowerCase()], Number(match[1]));
+}
 
-      if (!contract) return;
+function getReportPeriod(workbook: XLSX.WorkBook) {
+  const summary = workbook.Sheets.Summary;
+  if (!summary) return { periodStart: "", periodEnd: "" };
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(summary, { header: 1, defval: "" });
+  const text = rows.flat().map(String).find((value) => value.includes("Analysis from")) ?? "";
+  const match = text.match(/Analysis from\s+(\d{1,2}\s+[A-Za-z]{3}\s+\d{2,4})\s+-\s+(\d{1,2}\s+[A-Za-z]{3}\s+\d{2,4})/i);
+  return {
+    periodStart: match ? parseReportDate(match[1]) : "",
+    periodEnd: match ? parseReportDate(match[2]) : "",
+  };
+}
 
-      if (
-        tags.includes(
-          contract.toUpperCase()
-        )
-      ) {
-        if (!contracts[contract]) {
-          contracts[contract] = {
-            totalStops: 0,
-            completedStops: 0,
-            incompleteStops: 0,
-          };
-        }
+function getOperatingDate(tags: string) {
+  return tags.match(/(?:^|,)(\d{4}-\d{2}-\d{2})(?:,|$)/)?.[1] ?? "";
+}
 
-        contracts[contract].totalStops += Number(
-          row["Stops Count"] || 0
-        );
+function getTripInfo(tags: string) {
+  const match = tags.match(/LDT-([A-Z0-9]+)-(\d+)/i);
+  return match
+    ? { contract: match[1].toUpperCase(), trip: String(Number(match[2])) }
+    : { contract: "", trip: null };
+}
 
-        contracts[contract].completedStops += Number(
-          row["Stops With Timestamp"] || 0
-        );
+function findContract(tags: string, assignments: ContractAssignment[]) {
+  const tripInfo = getTripInfo(tags);
+  if (tripInfo.contract) return tripInfo;
+  const tagSet = new Set(tags.toUpperCase().split(",").map((tag) => tag.trim()));
+  const assignment = assignments.find((row) => {
+    const contract = String(row.contract_number ?? "").trim().toUpperCase();
+    return contract && tagSet.has(contract);
+  });
+  return {
+    contract: String(assignment?.contract_number ?? "").trim().toUpperCase(),
+    trip: null,
+  };
+}
 
-        contracts[contract].incompleteStops += Number(
-          row["Incomplete Stops"] || 0
-        );
-      }
+function createTotals(rows: ProcessedLoad[]): Totals {
+  const totals = rows.reduce(
+    (sum, row) => ({
+      totalStops: sum.totalStops + row.totalStops,
+      completedStops: sum.completedStops + row.completedStops,
+      incompleteStops: sum.incompleteStops + row.incompleteStops,
+    }),
+    { totalStops: 0, completedStops: 0, incompleteStops: 0 },
+  );
+  return {
+    ...totals,
+    percentComplete: totals.totalStops > 0
+      ? totals.completedStops / totals.totalStops
+      : 0,
+  };
+}
+
+function summarize(
+  rows: ProcessedLoad[],
+  keyFor: (row: ProcessedLoad) => string,
+  labelFor: (key: string) => string = (key) => key,
+) {
+  const groups = new Map<string, ProcessedLoad[]>();
+  rows.forEach((row) => {
+    const key = keyFor(row);
+    if (!key) return;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  });
+  return Array.from(groups.entries()).map(([key, group]): SummaryRow => ({
+    key,
+    label: labelFor(key),
+    loadCount: group.length,
+    ...createTotals(group),
+  }));
+}
+
+function supervisorNames(value: string | null | undefined) {
+  return String(value ?? "")
+    .split("/")
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .filter((name) => name !== "Candi Tanner");
+}
+
+function buildSupervisorSummary(rows: ProcessedLoad[], assignments: ContractAssignment[]) {
+  const assignedRows: Array<ProcessedLoad & { supervisor: string }> = [];
+  rows.forEach((row) => {
+    const assignment = assignments.find(
+      (item) => String(item.contract_number ?? "").trim().toUpperCase() === row.contract,
+    );
+    const names = supervisorNames(assignment?.supervisor);
+    const tonya = isTonyaTrip(row.contract, row.trip);
+    const resolved = tonya
+      ? ["Tonya Capps-Owen"]
+      : names.filter((name) => name !== "Tonya Capps-Owen" && name !== "Tonya Owens");
+    (resolved.length ? resolved : ["Unassigned"]).forEach((supervisor) => {
+      assignedRows.push({ ...row, supervisor });
+    });
+  });
+  return summarize(
+    assignedRows,
+    (row) => (row as ProcessedLoad & { supervisor: string }).supervisor,
+  );
+}
+
+export async function processReport(file: File): Promise<ProcessedReport> {
+  const workbook = XLSX.read(await file.arrayBuffer());
+  const loadDetails = workbook.Sheets["Load Details"];
+  if (!loadDetails) throw new Error('This workbook does not contain a "Load Details" sheet.');
+
+  let assignments: ContractAssignment[] = [];
+  try {
+    assignments = await getContracts();
+  } catch {
+    assignments = [];
+  }
+
+  const { periodStart, periodEnd } = getReportPeriod(workbook);
+  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(loadDetails, {
+    range: 4,
+    defval: "",
+  });
+  const seen = new Set<string>();
+  const duplicateLoadNumbers: string[] = [];
+  const historicalLoads: ProcessedLoad[] = [];
+
+  rawRows.forEach((row) => {
+    const loadNumber = String(row["Load Number"] ?? "").trim();
+    if (!loadNumber) return;
+    if (seen.has(loadNumber)) {
+      duplicateLoadNumbers.push(loadNumber);
+      return;
+    }
+    seen.add(loadNumber);
+    const tags = String(row.Tags ?? "");
+    const { contract, trip } = findContract(tags, assignments);
+    historicalLoads.push({
+      loadNumber,
+      operatingDate: getOperatingDate(tags),
+      contract,
+      trip,
+      totalStops: Number(row["Stops Count"] || 0),
+      completedStops: Number(row["Stops With Timestamp"] || 0),
+      incompleteStops: Number(row["Incomplete Stops"] || 0),
+      tags,
     });
   });
 
-  const contractSummary = Object.entries(
-    contracts
-  ).map(([contract, values]) => ({
-    contract,
-    totalStops: values.totalStops,
-    completedStops:
-      values.completedStops,
-    incompleteStops:
-      values.incompleteStops,
-    percentComplete:
-      values.totalStops > 0
-        ? values.completedStops /
-          values.totalStops
-        : 0,
-  }));
+  const reportLoads = historicalLoads.filter((row) =>
+    (!periodStart || row.operatingDate >= periodStart) &&
+    (!periodEnd || row.operatingDate <= periodEnd),
+  );
+  const dayNames = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" });
+  const daily = summarize(
+    reportLoads,
+    (row) => row.operatingDate,
+    (date) => `${dayNames.format(new Date(`${date}T12:00:00Z`))}, ${date}`,
+  ).sort((a, b) => a.key.localeCompare(b.key));
+  const contracts = summarize(reportLoads, (row) => row.contract)
+    .sort((a, b) => a.percentComplete - b.percentComplete);
+  const supervisors = buildSupervisorSummary(reportLoads, assignments)
+    .sort((a, b) => b.percentComplete - a.percentComplete);
 
   return {
-    contracts: contractSummary,
-    rows,
+    fileName: file.name,
+    periodStart,
+    periodEnd,
+    reportLoads,
+    historicalLoads,
+    totals: createTotals(reportLoads),
+    daily,
+    contracts,
+    supervisors,
+    duplicateLoadNumbers: Array.from(new Set(duplicateLoadNumbers)),
+    outsidePeriodCount: historicalLoads.length - reportLoads.length,
+    unmatchedContractCount: historicalLoads.filter((row) => !row.contract).length,
+    unmatchedSupervisorCount: supervisors.find((row) => row.key === "Unassigned")?.loadCount ?? 0,
   };
 }

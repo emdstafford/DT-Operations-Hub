@@ -210,11 +210,11 @@ if (!exists) {
 
                 {sup.contracts
                   .sort(
-                    (a, b) =>
+                    (a: any, b: any) =>
                       a.completion_percent -
                       b.completion_percent
                   )
-                  .map((c) => (
+                  .map((c: any) => (
 
                     <tr
                       key={c.contract_number}

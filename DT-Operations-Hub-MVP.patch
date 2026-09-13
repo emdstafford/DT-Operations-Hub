@@ -1,0 +1,1798 @@
+diff --git a/app/debug/page.tsx b/app/debug/page.tsx
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/app/geofence/page.tsx b/app/geofence/page.tsx
+index 94c1f31..fbf97cf 100644
+--- a/app/geofence/page.tsx
++++ b/app/geofence/page.tsx
+@@ -1 +1,5 @@
+-<Contracts
+\ No newline at end of file
++import Link from "next/link";
++
++export default function GeofencePage() {
++  return <main className="page-shell"><section className="empty-state"><div className="empty-icon">MS</div><h1>Geofence and missed stops</h1><p>Use the Missed Stops upload to review geofence compliance by load, contract, trip, and location.</p><Link className="primary-link" href="/operational-exceptions">Open Missed Stops</Link></section></main>;
++}
+diff --git a/app/globals.css b/app/globals.css
+index a2dc41e..35795c9 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -1,26 +1,122 @@
+ @import "tailwindcss";
++@import "@fontsource/inter/400.css";
++@import "@fontsource/inter/600.css";
++@import "@fontsource/inter/700.css";
+ 
+ :root {
+-  --background: #ffffff;
+-  --foreground: #171717;
++  --navy: #0b3158;
++  --navy-deep: #07233f;
++  --navy-soft: #eaf0f6;
++  --ink: #1d2935;
++  --muted: #667789;
++  --line: #dce3ea;
++  --surface: #ffffff;
++  --canvas: #f3f5f7;
+ }
+ 
+-@theme inline {
+-  --color-background: var(--background);
+-  --color-foreground: var(--foreground);
+-  --font-sans: var(--font-geist-sans);
+-  --font-mono: var(--font-geist-mono);
+-}
++* { box-sizing: border-box; }
++html { background: var(--canvas); }
++body { margin: 0; background: var(--canvas); color: var(--ink); font-family: Inter, Arial, sans-serif; }
++a { color: inherit; text-decoration: none; }
++button, input { font: inherit; }
+ 
+-@media (prefers-color-scheme: dark) {
+-  :root {
+-    --background: #0a0a0a;
+-    --foreground: #ededed;
+-  }
+-}
++.site-header { position: sticky; top: 0; z-index: 30; color: white; background: var(--navy-deep); box-shadow: 0 1px 0 rgb(255 255 255 / 10%); }
++.brand-row { max-width: 1440px; height: 86px; margin: 0 auto; padding: 0 34px; display: flex; align-items: center; justify-content: space-between; }
++.brand { display: flex; align-items: center; gap: 14px; }
++.brand img { width: 64px; height: 64px; object-fit: contain; border-radius: 8px; background: white; }
++.brand strong { display: block; font-size: 1.12rem; letter-spacing: .01em; }
++.brand span { display: block; margin-top: 3px; color: #c8d6e4; font-size: .78rem; text-transform: uppercase; letter-spacing: .12em; }
++.header-status { display: flex; gap: 8px; align-items: center; color: #dce6ef; font-size: .86rem; }
++.status-dot { width: 8px; height: 8px; border-radius: 50%; background: white; box-shadow: 0 0 0 4px rgb(255 255 255 / 12%); }
++.main-nav { border-top: 1px solid rgb(255 255 255 / 10%); max-width: none; padding: 0 max(34px, calc((100vw - 1372px) / 2)); display: flex; overflow-x: auto; }
++.main-nav a { padding: 13px 17px; color: #dce6ef; font-size: .9rem; white-space: nowrap; border-bottom: 3px solid transparent; }
++.main-nav a:hover { color: white; background: rgb(255 255 255 / 6%); border-bottom-color: white; }
++
++.page-shell { width: min(1372px, calc(100% - 48px)); margin: 0 auto; padding: 38px 0 64px; }
++.page-intro, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
++.page-intro h1, .section-heading h2 { margin: 3px 0 8px; color: var(--navy-deep); font-size: clamp(1.8rem, 3vw, 2.55rem); letter-spacing: -.035em; }
++.page-intro p:not(.eyebrow) { margin: 0; color: var(--muted); max-width: 720px; }
++.eyebrow { margin: 0; color: var(--navy); font-size: .72rem; line-height: 1.4; font-weight: 700; text-transform: uppercase; letter-spacing: .15em; }
++.eyebrow-light { color: #c9d9e7; }
++
++.upload-button, .primary-link, .secondary-button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 8px; padding: 0 18px; font-weight: 700; cursor: pointer; transition: transform .15s ease, background .15s ease; }
++.upload-button, .primary-link { color: white; background: var(--navy); }
++.upload-button:hover, .primary-link:hover { background: var(--navy-deep); transform: translateY(-1px); }
++.upload-button input { display: none; }
++.secondary-button { border: 1px solid white; color: var(--navy-deep); background: white; }
++.secondary-button:hover { transform: translateY(-1px); background: #edf2f6; }
++.text-button { border: 0; color: var(--navy); background: transparent; font-weight: 700; cursor: pointer; }
++
++.file-strip { display: flex; gap: 14px; align-items: center; padding: 13px 17px; margin-bottom: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: .9rem; }
++.file-strip span { color: var(--muted); }
++.alert { margin-bottom: 20px; border-radius: 8px; padding: 14px 17px; }
++.alert-error { color: #7b2430; background: #f7e9eb; border: 1px solid #edcdd2; }
+ 
+-body {
+-  background: var(--background);
+-  color: var(--foreground);
+-  font-family: Arial, Helvetica, sans-serif;
++.dashboard-hero, .report-banner { display: flex; align-items: center; justify-content: space-between; gap: 28px; color: white; background: linear-gradient(135deg, var(--navy-deep), var(--navy)); border-radius: 14px; padding: clamp(30px, 5vw, 58px); box-shadow: 0 18px 45px rgb(7 35 63 / 16%); }
++.dashboard-hero h1 { max-width: 760px; margin: 8px 0 15px; font-size: clamp(2.1rem, 5vw, 4rem); line-height: 1.04; letter-spacing: -.05em; }
++.dashboard-hero p:not(.eyebrow), .report-banner p:not(.eyebrow) { max-width: 720px; margin: 0; color: #d7e2ec; line-height: 1.7; }
++.report-banner { padding: 26px 30px; border-radius: 11px; box-shadow: none; }
++.report-banner h2 { margin: 6px 0; font-size: clamp(1.45rem, 3vw, 2.25rem); }
++
++.section-heading { margin: 42px 0 20px; }
++.feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
++.feature-card { min-height: 240px; padding: 26px; border: 1px solid var(--line); border-radius: 11px; background: white; box-shadow: 0 7px 24px rgb(20 45 70 / 5%); }
++.feature-mark { width: 42px; height: 5px; margin-bottom: 25px; border-radius: 99px; background: var(--navy); }
++.feature-card h3 { margin: 0 0 12px; color: var(--navy-deep); font-size: 1.3rem; }
++.feature-card p { min-height: 70px; color: var(--muted); line-height: 1.62; }
++.feature-card a { color: var(--navy); font-weight: 700; }
++.workflow-card { margin-top: 22px; padding: 28px; display: grid; grid-template-columns: 1fr 1.5fr; gap: 28px; border: 1px solid var(--line); border-radius: 11px; background: white; }
++.workflow-card h2 { margin: 7px 0 0; color: var(--navy-deep); }
++.workflow-card ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
++.workflow-card li { display: flex; gap: 10px; align-items: center; padding: 14px; border-radius: 8px; background: var(--canvas); }
++.workflow-card li strong { display: grid; place-items: center; min-width: 28px; height: 28px; border-radius: 50%; color: white; background: var(--navy); }
++.workflow-card li span { font-size: .86rem; font-weight: 600; }
++
++.empty-state { min-height: 420px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 38px; border: 1px dashed #bcc8d3; border-radius: 12px; background: white; }
++.empty-state h1, .empty-state h2 { margin: 18px 0 8px; color: var(--navy-deep); }
++.empty-state p { max-width: 620px; margin: 0 0 22px; color: var(--muted); line-height: 1.65; }
++.empty-icon { display: grid; place-items: center; width: 66px; height: 66px; border-radius: 13px; color: white; background: var(--navy); font-weight: 800; letter-spacing: .08em; }
++.report-stack { display: grid; gap: 20px; }
++.metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
++.metric-card { padding: 21px; border: 1px solid var(--line); border-radius: 10px; background: white; }
++.metric-card span { display: block; color: var(--muted); font-size: .82rem; font-weight: 600; }
++.metric-card strong { display: block; margin-top: 9px; color: var(--navy-deep); font-size: clamp(1.65rem, 3vw, 2.35rem); letter-spacing: -.04em; }
++.metric-primary { color: white; background: var(--navy); border-color: var(--navy); }
++.metric-primary span, .metric-primary strong { color: white; }
++.notice-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
++.notice { display: flex; gap: 11px; align-items: center; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: #f8fafb; }
++.notice strong { color: var(--navy); font-size: 1.35rem; }
++.notice span { color: var(--muted); font-size: .78rem; line-height: 1.35; }
++
++.panel { border: 1px solid var(--line); border-radius: 10px; background: white; box-shadow: 0 6px 22px rgb(20 45 70 / 4%); }
++.panel-heading { min-height: 62px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
++.panel-heading h2 { margin: 0; color: var(--navy-deep); font-size: 1.12rem; }
++.panel-heading span { color: var(--muted); font-size: .78rem; }
++.table-scroll { overflow-x: auto; }
++.data-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
++.data-table th { padding: 11px 13px; text-align: right; color: #536577; background: #f2f5f7; font-size: .69rem; text-transform: uppercase; letter-spacing: .06em; }
++.data-table th:first-child, .data-table td:first-child { text-align: left; }
++.data-table td { padding: 11px 13px; text-align: right; border-top: 1px solid #edf0f3; }
++.data-table tbody tr:hover { background: #f7f9fb; }
++.attention-row { background: #eef2f5; }
++.text-navy { color: var(--navy); }
++.two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
++.email-panel pre { max-height: 520px; overflow: auto; margin: 0; padding: 22px; color: #293a4a; background: #f8fafb; font: 13px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
++
++@media (max-width: 980px) {
++  .feature-grid, .metric-grid { grid-template-columns: repeat(2, 1fr); }
++  .notice-grid { grid-template-columns: repeat(2, 1fr); }
++  .two-column, .workflow-card { grid-template-columns: 1fr; }
++}
++@media (max-width: 640px) {
++  .brand-row { height: 74px; padding: 0 18px; }
++  .brand img { width: 50px; height: 50px; }
++  .brand strong { font-size: .98rem; }
++  .brand span, .header-status { display: none; }
++  .main-nav { padding: 0 4px; }
++  .main-nav a { padding: 11px 13px; font-size: .8rem; }
++  .page-shell { width: min(100% - 28px, 1372px); padding-top: 24px; }
++  .page-intro, .dashboard-hero, .report-banner { align-items: stretch; flex-direction: column; }
++  .feature-grid, .metric-grid, .notice-grid { grid-template-columns: 1fr; }
++  .workflow-card ol { grid-template-columns: 1fr; }
+ }
+diff --git a/app/insights/page.tsx b/app/insights/page.tsx
+index 258f15b..375fb2c 100644
+--- a/app/insights/page.tsx
++++ b/app/insights/page.tsx
+@@ -1 +1,5 @@
+-Contracts
+\ No newline at end of file
++import Link from "next/link";
++
++export default function InsightsPage() {
++  return <main className="page-shell"><section className="empty-state"><div className="empty-icon">DT</div><h1>Performance insights</h1><p>Daily, weekly, and monthly trends will appear here as historical reports are imported.</p><Link className="primary-link" href="/upload">Import report history</Link></section></main>;
++}
+diff --git a/app/layout.tsx b/app/layout.tsx
+index d1d2348..58cf07f 100644
+--- a/app/layout.tsx
++++ b/app/layout.tsx
+@@ -4,8 +4,7 @@ import NavBar from "@/components/NavBar";
+ 
+ export const metadata: Metadata = {
+   title: "DT Operations Hub",
+-  description:
+-    "Davenport Transportation Intelligence Platform",
++  description: "Davenport Transportation operations reporting and performance intelligence",
+ };
+ 
+ export default function RootLayout({
+@@ -15,13 +14,10 @@ export default function RootLayout({
+ }) {
+   return (
+     <html lang="en">
+-      <body className="bg-slate-100 text-slate-900">
+-
++      <body>
+         <NavBar />
+-
+         {children}
+-
+       </body>
+     </html>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/app/operational-exceptions/page.tsx b/app/operational-exceptions/page.tsx
+index 9f684d6..348a4d2 100644
+--- a/app/operational-exceptions/page.tsx
++++ b/app/operational-exceptions/page.tsx
+@@ -1,82 +1,61 @@
+ "use client";
+ 
+ import { useState } from "react";
+-import { processOperationalExceptions } from "@/lib/processOperationalExceptions";
+-import { saveOperationalExceptions } from "@/lib/saveOperationalExceptions";
++import {
++  processOperationalExceptions,
++  type MissedStopSummary,
++} from "@/lib/processOperationalExceptions";
+ 
+ export default function OperationalExceptionsPage() {
+-  const [rows, setRows] = useState<any[]>([]);
++  const [summary, setSummary] = useState<MissedStopSummary | null>(null);
+   const [fileName, setFileName] = useState("");
++  const [loading, setLoading] = useState(false);
++  const [error, setError] = useState("");
+ 
+-  async function handleFileSelect(
+-    e: React.ChangeEvent<HTMLInputElement>
+-  ) {
+-    const file = e.target.files?.[0];
+-
++  async function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
++    const file = event.target.files?.[0];
+     if (!file) return;
+-
+     setFileName(file.name);
+-
+-    const result =
+-      await processOperationalExceptions(
+-        file
+-      );
+-
+-    setRows(result);
+-  }
+-
+-  async function handleSave() {
++    setLoading(true);
++    setError("");
+     try {
+-      const count =
+-        await saveOperationalExceptions(
+-          rows
+-        );
+-
+-      alert(
+-        `${count} operational exceptions saved`
+-      );
+-    } catch (error: any) {
+-      console.error(error);
+-
+-      alert(
+-        error?.message ||
+-        "Import failed"
+-      );
++      setSummary(await processOperationalExceptions(file));
++    } catch (reason) {
++      setError(reason instanceof Error ? reason.message : "The missed-stops report could not be processed.");
++    } finally {
++      setLoading(false);
+     }
+   }
+ 
+   return (
+-    <main className="p-8">
+-      <h1 className="text-3xl font-bold mb-6">
+-        Operational Exceptions
+-      </h1>
+-
+-      <input
+-        type="file"
+-        accept=".xlsx,.xls"
+-        onChange={handleFileSelect}
+-      />
+-
+-      {fileName && (
+-        <div className="mt-4">
+-          File: {fileName}
++    <main className="page-shell">
++      <header className="page-intro">
++        <div><p className="eyebrow">Sunday reporting</p><h1>Missed stops</h1><p>Upload the Davenport non-compliant loads workbook to review missing geofence stops by date, contract, and location.</p></div>
++        <label className="upload-button"><span>{loading ? "Processing report…" : "Choose missed-stops report"}</span><input type="file" accept=".xlsx,.xls" onChange={handleFileSelect} disabled={loading} /></label>
++      </header>
++      {fileName && <div className="file-strip"><span>Selected file</span><strong>{fileName}</strong></div>}
++      {error && <div className="alert alert-error">{error}</div>}
++      {!summary && !loading && <section className="empty-state"><div className="empty-icon">MS</div><h2>Upload the Sunday report</h2><p>Each unique Load Number will be counted once. “Others” and unmapped contract rows will remain visible for review.</p></section>}
++      {summary && <div className="report-stack">
++        <section className="report-banner"><div><p className="eyebrow eyebrow-light">Missed-stops report ready</p><h2>{summary.rows.length.toLocaleString()} unique non-compliant loads</h2><p>Load-level detail is ready to connect with TQ history and supervisor assignments.</p></div></section>
++        <section className="metric-grid">
++          <article className="metric-card metric-primary"><span>Missing stops</span><strong>{summary.totalMissingStops.toLocaleString()}</strong></article>
++          <article className="metric-card"><span>Geofence non-compliant loads</span><strong>{summary.geofenceNonCompliantLoads.toLocaleString()}</strong></article>
++          <article className="metric-card"><span>Ping non-compliant loads</span><strong>{summary.pingNonCompliantLoads.toLocaleString()}</strong></article>
++          <article className="metric-card"><span>Loads requiring mapping</span><strong>{summary.unmappedLoads.toLocaleString()}</strong></article>
++        </section>
++        <section className="notice-grid">
++          <div className="notice"><strong>{summary.duplicateLoadNumbers.length}</strong><span>duplicate Load Numbers skipped</span></div>
++          <div className="notice"><strong>{summary.byDate.length}</strong><span>operating dates represented</span></div>
++          <div className="notice"><strong>{summary.byContract.length}</strong><span>contract groups represented</span></div>
++          <div className="notice"><strong>{summary.byLocation.length}</strong><span>missing-stop locations identified</span></div>
++        </section>
++        <div className="two-column">
++          <section className="panel overflow-hidden"><div className="panel-heading"><h2>Missing stops by day</h2></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Date</th><th>Loads</th><th>Missing stops</th></tr></thead><tbody>{summary.byDate.map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{row.loads.toLocaleString()}</td><td>{row.missingStops.toLocaleString()}</td></tr>)}</tbody></table></div></section>
++          <section className="panel overflow-hidden"><div className="panel-heading"><h2>Contracts with most missing stops</h2></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Loads</th><th>Missing stops</th></tr></thead><tbody>{summary.byContract.slice(0, 20).map((row) => <tr key={row.key} className={row.key === "Others" || row.key === "Unmapped" ? "attention-row" : ""}><td className="font-semibold text-navy">{row.key}</td><td>{row.loads.toLocaleString()}</td><td>{row.missingStops.toLocaleString()}</td></tr>)}</tbody></table></div></section>
+         </div>
+-      )}
+-
+-      {rows.length > 0 && (
+-        <>
+-          <div className="mt-4">
+-            Rows Found: {rows.length}
+-          </div>
+-
+-          <button
+-            onClick={handleSave}
+-            className="bg-blue-500 text-white px-4 py-2 rounded mt-4"
+-          >
+-            Import Exceptions
+-          </button>
+-        </>
+-      )}
++        <section className="panel overflow-hidden"><div className="panel-heading"><h2>Most frequently missed locations</h2><span>Top 25</span></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Location</th><th>Occurrences</th></tr></thead><tbody>{summary.byLocation.slice(0, 25).map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{row.occurrences.toLocaleString()}</td></tr>)}</tbody></table></div></section>
++      </div>}
+     </main>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/app/page.backup.tsx b/app/page.backup.tsx
+deleted file mode 100644
+index c092b99..0000000
+--- a/app/page.backup.tsx
++++ /dev/null
+@@ -1,16 +0,0 @@
+-export default function HomePage() {
+-  return (
+-    <main>
+-      <h1>DT Operations Hub</h1>
+-
+-      <ul>
+-        <li>Upload Center</li>
+-        <li>Completion Totals</li>
+-        <li>Supervisors</li>
+-        <li>Contracts</li>
+-        <li>Missed Stops</li>
+-        <li>Contract Admin</li>
+-      </ul>
+-    </main>
+-  );
+-}
+\ No newline at end of file
+diff --git a/app/page.dashboard.backup.tsx b/app/page.dashboard.backup.tsx
+deleted file mode 100644
+index c092b99..0000000
+--- a/app/page.dashboard.backup.tsx
++++ /dev/null
+@@ -1,16 +0,0 @@
+-export default function HomePage() {
+-  return (
+-    <main>
+-      <h1>DT Operations Hub</h1>
+-
+-      <ul>
+-        <li>Upload Center</li>
+-        <li>Completion Totals</li>
+-        <li>Supervisors</li>
+-        <li>Contracts</li>
+-        <li>Missed Stops</li>
+-        <li>Contract Admin</li>
+-      </ul>
+-    </main>
+-  );
+-}
+\ No newline at end of file
+diff --git a/app/page.tsx b/app/page.tsx
+index c092b99..d4ef63a 100644
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -1,16 +1,25 @@
++import Link from "next/link";
++
++const areas = [
++  { title: "TQ reporting", text: "Upload weekly or daily FourKites reports and calculate unique-load performance.", href: "/upload", action: "Upload report" },
++  { title: "Completion totals", text: "Review overall, contract, and supervisor completion for the selected period.", href: "/completion-totals", action: "View completion" },
++  { title: "Missed stops", text: "Import Sunday geofence reports and investigate missing stops by location and trip.", href: "/operational-exceptions", action: "Review missed stops" },
++];
++
+ export default function HomePage() {
+   return (
+-    <main>
+-      <h1>DT Operations Hub</h1>
+-
+-      <ul>
+-        <li>Upload Center</li>
+-        <li>Completion Totals</li>
+-        <li>Supervisors</li>
+-        <li>Contracts</li>
+-        <li>Missed Stops</li>
+-        <li>Contract Admin</li>
+-      </ul>
++    <main className="page-shell">
++      <header className="dashboard-hero">
++        <div><p className="eyebrow eyebrow-light">Davenport Transportation</p><h1>Operations performance, clearly organized.</h1><p>Turn TQ and missed-stop files into reliable daily, weekly, monthly, contract, and supervisor reporting.</p></div>
++        <Link href="/upload" className="secondary-button">Start weekly report</Link>
++      </header>
++      <section className="section-heading"><div><p className="eyebrow">Reporting center</p><h2>What do you need to review?</h2></div></section>
++      <section className="feature-grid">
++        {areas.map((area) => (
++          <article className="feature-card" key={area.title}><div className="feature-mark" /><h3>{area.title}</h3><p>{area.text}</p><Link href={area.href}>{area.action} <span aria-hidden="true">→</span></Link></article>
++        ))}
++      </section>
++      <section className="workflow-card"><div><p className="eyebrow">Designed for your weekly process</p><h2>One source of truth for every operating date</h2></div><ol><li><strong>1</strong><span>Upload the source report</span></li><li><strong>2</strong><span>Review assignments and totals</span></li><li><strong>3</strong><span>Copy the email and preserve history</span></li></ol></section>
+     </main>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/app/supervisors.broken.backup.tsx b/app/supervisors.broken.backup.tsx
+deleted file mode 100644
+index fb5d37c..0000000
+--- a/app/supervisors.broken.backup.tsx
++++ /dev/null
+@@ -1,272 +0,0 @@
+-import { supabase } from "@/lib/supabase";
+-
+-export default async function SupervisorsPage() {
+-  const { data: contractsData } = await supabase
+-    .from("weekly_contract_summary")
+-    .select("*");
+-
+-  const { data: supervisorData } = await supabase
+-    .from("contract_supervisors")
+-    .select("*");
+-
+-  const contracts = contractsData ?? [];
+-  const supervisors = supervisorData ?? [];
+-
+-  const reportDate =
+-    contracts[0]?.report_date ??
+-    "No Report Date";
+-
+-  const periodStart =
+-    contracts[0]?.period_start ??
+-    reportDate;
+-
+-  const periodEnd =
+-    contracts[0]?.period_end ??
+-    reportDate;
+-
+-  const supervisorMap = new Map();
+-
+-  contracts.forEach((contract) => {
+-
+-    const sup = supervisors.find(
+-      (s) =>
+-        s.contract_number ===
+-        contract.contract_number
+-    );
+-
+-    if (!sup) return;
+-
+-    const names = String(
+-      sup.supervisor || ""
+-    )
+-      .split("/")
+-      .map((s) => s.trim())
+-      .filter(Boolean)
+-      .filter(
+-        (s) => s !== "Candi Tanner"
+-      );
+-
+-    names.forEach((name) => {
+-
+-      if (!supervisorMap.has(name)) {
+-        supervisorMap.set(name, {
+-          contracts: [],
+-          totalStops: 0,
+-          completed: 0,
+-          incomplete: 0,
+-        });
+-      }
+-
+-      const current =
+-        supervisorMap.get(name);
+-
+-      const exists = current.contracts.some(
+-  (c: any) =>
+-    c.contract_number ===
+-    contract.contract_number
+-);
+-
+-if (!exists) {
+-  current.contracts.push(contract);
+-
+-  current.totalStops +=
+-    contract.total_stops || 0;
+-
+-  current.completed +=
+-    contract.stops_completed || 0;
+-
+-  current.incomplete +=
+-    contract.stops_incomplete || 0;
+-}
+-    });
+-  });
+-  const rankings =
+-    Array.from(supervisorMap.entries())
+-      .map(([name, values]) => ({
+-        name,
+-        ...values,
+-        contractCount:
+-          values.contracts.length,
+-        percent:
+-          values.totalStops > 0
+-            ? values.completed /
+-              values.totalStops
+-            : 0,
+-      }))
+-      .sort(
+-        (a, b) => b.percent - a.percent
+-      );
+-
+-  return (
+-    <main className="min-h-screen bg-slate-100 p-8">
+-
+-      <div className="bg-white rounded-lg shadow p-6">
+-
+-        <h1 className="text-3xl font-bold mb-2">
+-          Supervisor Performance
+-        </h1>
+-
+-        <div className="mb-6 text-slate-600">
+-          Reporting Period:
+-          {" "}
+-          {String(periodStart)}
+-          {" "}
+-          -
+-          {" "}
+-          {String(periodEnd)}
+-        </div>
+-
+-        {rankings.map((sup, index) => (
+-
+-          <div
+-            key={sup.name}
+-            className="mb-8 border rounded p-4 bg-white"
+-          >
+-
+-            <div
+-              className={`p-4 rounded mb-4 ${
+-                index < 5
+-                  ? "bg-green-100"
+-                  : "bg-slate-100"
+-              }`}
+-            >
+-
+-              <div className="text-xl font-bold">
+-
+-                #{index + 1}
+-
+-                {" "}
+-
+-                {sup.name}
+-
+-              </div>
+-
+-              <div>
+-                Contracts:
+-                {" "}
+-                {sup.contractCount}
+-              </div>
+-
+-              <div>
+-                Stops:
+-                {" "}
+-                {sup.totalStops.toLocaleString()}
+-              </div>
+-
+-              <div>
+-                Completed:
+-                {" "}
+-                {sup.completed.toLocaleString()}
+-              </div>
+-
+-              <div>
+-                Missed:
+-                {" "}
+-                {sup.incomplete.toLocaleString()}
+-              </div>
+-
+-              <div className="font-bold">
+-
+-                Completion:
+-                {" "}
+-
+-                {(sup.percent * 100).toFixed(2)}%
+-
+-              </div>
+-
+-            </div>
+-
+-            <table className="w-full border">
+-
+-              <thead>
+-
+-                <tr className="bg-slate-200">
+-
+-                  <th className="border p-2">
+-                    Contract
+-                  </th>
+-
+-                  <th className="border p-2">
+-                    Stops
+-                  </th>
+-
+-                  <th className="border p-2">
+-                    Completed
+-                  </th>
+-
+-                  <th className="border p-2">
+-                    Missed
+-                  </th>
+-
+-                  <th className="border p-2">
+-                    %
+-                  </th>
+-
+-                </tr>
+-
+-              </thead>
+-
+-              <tbody>
+-
+-                {sup.contracts
+-                  .sort(
+-                    (a, b) =>
+-                      a.completion_percent -
+-                      b.completion_percent
+-                  )
+-                  .map((c) => (
+-
+-                    <tr
+-                      key={c.contract_number}
+-                    >
+-
+-                      <td className="border p-2">
+-                        {c.contract_number}
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {c.total_stops}
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {c.stops_completed}
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {c.stops_incomplete}
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {(c.completion_percent * 100).toFixed(2)}%
+-                      </td>
+-
+-                    </tr>
+-
+-                  ))}
+-
+-              </tbody>
+-
+-            </table>
+-
+-          </div>
+-
+-        ))}
+-
+-      </div>
+-
+-    </main>
+-  );
+-}
+-              </tbody>
+-
+-            </table>
+-
+-          </div>
+-
+-        ))}
+-
+-      </div>
+-
+-    </main>
+-  );
+-}
+\ No newline at end of file
+diff --git a/app/supervisors/page.tsx b/app/supervisors/page.tsx
+index 15c912b..797ae69 100644
+--- a/app/supervisors/page.tsx
++++ b/app/supervisors/page.tsx
+@@ -210,11 +210,11 @@ if (!exists) {
+ 
+                 {sup.contracts
+                   .sort(
+-                    (a, b) =>
++                    (a: any, b: any) =>
+                       a.completion_percent -
+                       b.completion_percent
+                   )
+-                  .map((c) => (
++                  .map((c: any) => (
+ 
+                     <tr
+                       key={c.contract_number}
+diff --git a/app/test-page.tsx b/app/test-page.tsx
+deleted file mode 100644
+index bbb540e..0000000
+--- a/app/test-page.tsx
++++ /dev/null
+@@ -1,9 +0,0 @@
+-export default function TestPage() {
+-  return (
+-    <main>
+-      <h1>Test Dashboard</h1>
+-      <div>Completion 95%</div>
+-      <div>Contracts 58</div>
+-    </main>
+-  );
+-}
+\ No newline at end of file
+diff --git a/app/upload.page.working.backup.tsx b/app/upload.page.working.backup.tsx
+deleted file mode 100644
+index e55f115..0000000
+--- a/app/upload.page.working.backup.tsx
++++ /dev/null
+@@ -1,132 +0,0 @@
+-"use client";
+-
+-import { useState } from "react";
+-import { processReport } from "@/lib/processors/reportProcessor";
+-import { saveContractsToDatabase } from "@/lib/saveContracts";
+-import { updateContractMaster } from "@/lib/updateContractMaster";
+-
+-export default function UploadPage() {
+-  const [fileName, setFileName] = useState("");
+-  const [contracts, setContracts] = useState<any[]>([]);
+-
+-  async function handleFileSelect(
+-    e: React.ChangeEvent<HTMLInputElement>
+-  ) {
+-    const file = e.target.files?.[0];
+-
+-    if (!file) return;
+-
+-    setFileName(file.name);
+-
+-    const result = await processReport(file);
+-alert(
+-  JSON.stringify(
+-    {
+-      contracts: result.contracts?.length,
+-      rows: result.rows?.length,
+-    },
+-    null,
+-    2
+-  )
+-);
+-    console.log(result);
+-
+-    setContracts(result.contracts);
+-  }
+-
+-  async function handleSave() {
+-    try {
+-      await updateContractMaster(contracts);
+-      await saveContractsToDatabase(contracts);
+-
+-      alert(
+-        `${contracts.length} contracts saved successfully!`
+-      );
+-    } catch (error: any) {
+-      console.error(error);
+-
+-      alert(
+-        error?.message || "Failed to save contracts."
+-      );
+-    }
+-  }
+-
+-  return (
+-    <main className="min-h-screen bg-slate-100 p-8">
+-      <div className="bg-white rounded-lg shadow p-6">
+-        <h1 className="text-3xl font-bold mb-6">
+-          Weekly Report Upload
+-        </h1>
+-
+-        <input
+-          type="file"
+-          accept=".xlsx,.xlsm,.xls"
+-          onChange={handleFileSelect}
+-        />
+-
+-        {fileName && (
+-          <div className="mt-4 p-4 bg-green-100 rounded">
+-            Selected File: {fileName}
+-          </div>
+-        )}
+-
+-        {contracts.length > 0 && (
+-          <>
+-            <div className="mt-4">
+-              <button
+-                onClick={handleSave}
+-                className="bg-yellow-500 text-black px-4 py-2 rounded"
+-              >
+-                Save Weekly Summary
+-              </button>
+-            </div>
+-
+-            <div className="mt-8">
+-              <h2 className="text-2xl font-bold mb-4">
+-                Contract Summary ({contracts.length} contracts)
+-              </h2>
+-
+-              <table className="w-full border border-slate-300">
+-                <thead>
+-                  <tr className="bg-slate-200">
+-                    <th className="border p-2">Contract</th>
+-                    <th className="border p-2">Stops</th>
+-                    <th className="border p-2">Completed</th>
+-                    <th className="border p-2">Incomplete</th>
+-                    <th className="border p-2">%</th>
+-                  </tr>
+-                </thead>
+-
+-                <tbody>
+-                  {contracts.map((contract) => (
+-                    <tr key={contract.contract}>
+-                      <td className="border p-2">
+-                        {contract.contract}
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {contract.totalStops}
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {contract.completedStops}
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {contract.incompleteStops}
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {(contract.percentComplete * 100).toFixed(2)}%
+-                      </td>
+-                    </tr>
+-                  ))}
+-                </tbody>
+-              </table>
+-            </div>
+-          </>
+-        )}
+-      </div>
+-    </main>
+-  );
+-}
+\ No newline at end of file
+diff --git a/app/upload/page.tsx b/app/upload/page.tsx
+index b47820f..cb90254 100644
+--- a/app/upload/page.tsx
++++ b/app/upload/page.tsx
+@@ -1,179 +1,191 @@
+ "use client";
+ 
+-import { useState } from "react";
+-import { processReport } from "@/lib/processors/reportProcessor";
+-import { saveContractsToDatabase } from "@/lib/saveContracts";
+-import { updateContractMaster } from "@/lib/updateContractMaster";
+-import { saveRawContractLoads } from "@/lib/saveRawContractLoads";
++import { useMemo, useState } from "react";
++import {
++  processReport,
++  type ProcessedReport,
++  type SummaryRow,
++} from "@/lib/processors/reportProcessor";
++
++function number(value: number) {
++  return value.toLocaleString("en-US");
++}
++
++function percent(value: number) {
++  return `${(value * 100).toFixed(2)}%`;
++}
++
++function displayDate(value: string) {
++  if (!value) return "Unknown";
++  return new Intl.DateTimeFormat("en-US", {
++    month: "long",
++    day: "numeric",
++    year: "numeric",
++    timeZone: "UTC",
++  }).format(new Date(`${value}T12:00:00Z`));
++}
++
++function SummaryTable({
++  title,
++  rows,
++  rank = false,
++}: {
++  title: string;
++  rows: SummaryRow[];
++  rank?: boolean;
++}) {
++  return (
++    <section className="panel overflow-hidden">
++      <div className="panel-heading">
++        <h2>{title}</h2>
++        <span>{rows.length} results</span>
++      </div>
++      <div className="table-scroll">
++        <table className="data-table">
++          <thead>
++            <tr>
++              {rank && <th>Rank</th>}
++              <th>{title === "Daily performance" ? "Operating day" : title.includes("Supervisor") ? "Supervisor" : "Contract"}</th>
++              <th>Loads</th>
++              <th>Total stops</th>
++              <th>Completed</th>
++              <th>Incomplete</th>
++              <th>Completion</th>
++            </tr>
++          </thead>
++          <tbody>
++            {rows.map((row, index) => (
++              <tr key={row.key} className={row.key === "Unassigned" ? "attention-row" : ""}>
++                {rank && <td>#{index + 1}</td>}
++                <td className="font-semibold text-navy">{row.label}</td>
++                <td>{number(row.loadCount)}</td>
++                <td>{number(row.totalStops)}</td>
++                <td>{number(row.completedStops)}</td>
++                <td>{number(row.incompleteStops)}</td>
++                <td className="font-semibold">{percent(row.percentComplete)}</td>
++              </tr>
++            ))}
++          </tbody>
++        </table>
++      </div>
++    </section>
++  );
++}
++
++function buildEmail(report: ProcessedReport) {
++  const supervisors = report.supervisors.filter((row) => row.key !== "Unassigned");
++  const lines = [
++    `Completion Totals for ${displayDate(report.periodStart)} - ${displayDate(report.periodEnd)}`,
++    "",
++    `Total Overall: ${percent(report.totals.percentComplete)}`,
++    "",
++  ];
++  if (supervisors[0]) {
++    lines.push(`Congratulations to ${supervisors[0].label} for the highest percentage for the week!`, "");
++  }
++  lines.push("Supervisor\t% Complete");
++  supervisors.forEach((row) => lines.push(`${row.label}\t${percent(row.percentComplete)}`));
++  lines.push("", "Contract\tTotal Stops\tStops Completed\tStops Incomplete\t% Complete");
++  report.contracts.forEach((row) => {
++    lines.push(`${row.label}\t${row.totalStops}\t${row.completedStops}\t${row.incompleteStops}\t${percent(row.percentComplete)}`);
++  });
++  lines.push(
++    `Main Total\t${report.totals.totalStops}\t${report.totals.completedStops}\t${report.totals.incompleteStops}\t${percent(report.totals.percentComplete)}`,
++  );
++  return lines.join("\n");
++}
+ 
+ export default function UploadPage() {
++  const [report, setReport] = useState<ProcessedReport | null>(null);
+   const [fileName, setFileName] = useState("");
+-  const [contracts, setContracts] = useState<any[]>([]);
+-  const [rawRows, setRawRows] = useState<any[]>([]);
+-
+-  async function handleFileSelect(
+-    e: React.ChangeEvent<HTMLInputElement>
+-  ) {
+-    const file = e.target.files?.[0];
++  const [loading, setLoading] = useState(false);
++  const [error, setError] = useState("");
++  const [copied, setCopied] = useState(false);
++  const email = useMemo(() => report ? buildEmail(report) : "", [report]);
+ 
++  async function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
++    const file = event.target.files?.[0];
+     if (!file) return;
+-
+     setFileName(file.name);
+-
+-    const result = await processReport(file);
+-
+-    console.log(result);
+-
+-    setContracts(result.contracts);
+-    setRawRows(result.rows || []);
+-  }
+-
+-  async function handleSave() {
++    setLoading(true);
++    setError("");
++    setReport(null);
+     try {
+-      await saveRawContractLoads(rawRows);
+-
+-      await updateContractMaster(
+-        contracts
+-      );
+-
+-      await saveContractsToDatabase(
+-        contracts
+-      );
+-
+-      alert(
+-        `${contracts.length} contracts saved successfully!`
+-      );
+-    } catch (error: any) {
+-      console.error(error);
+-
+-      alert(
+-        error?.message ||
+-          "Failed to save contracts."
+-      );
++      setReport(await processReport(file));
++    } catch (reason) {
++      setError(reason instanceof Error ? reason.message : "The report could not be processed.");
++    } finally {
++      setLoading(false);
+     }
+   }
+ 
+-  return (
+-    <main className="min-h-screen bg-slate-100 p-8">
+-      <div className="bg-white rounded-lg shadow p-6">
+-
+-        <h1 className="text-3xl font-bold mb-6">
+-          Upload Center
+-        </h1>
+-
+-        <input
+-          type="file"
+-          accept=".xlsx,.xlsm,.xls"
+-          onChange={handleFileSelect}
+-        />
+-
+-        {fileName && (
+-          <div className="mt-4 p-4 bg-green-100 rounded">
+-            Selected File: {fileName}
+-          </div>
+-        )}
+-
+-        {contracts.length > 0 && (
+-          <>
+-            <div className="mt-4 mb-6">
+-              <button
+-                onClick={handleSave}
+-                className="bg-yellow-500 text-black px-4 py-2 rounded"
+-              >
+-                Save Weekly Summary
+-              </button>
+-            </div>
+-
+-            <div className="mb-4 p-4 bg-blue-100 rounded">
+-              <div>
+-                Rows Processed:{" "}
+-                {rawRows.length}
+-              </div>
++  async function copyEmail() {
++    await navigator.clipboard.writeText(email);
++    setCopied(true);
++    window.setTimeout(() => setCopied(false), 1800);
++  }
+ 
+-              <div>
+-                Contracts Found:{" "}
+-                {contracts.length}
+-              </div>
++  return (
++    <main className="page-shell">
++      <header className="page-intro">
++        <div>
++          <p className="eyebrow">FourKites reporting</p>
++          <h1>Upload TQ report</h1>
++          <p>Review weekly, daily, contract, and supervisor results before saving them to history.</p>
++        </div>
++        <label className="upload-button">
++          <span>{loading ? "Processing report…" : "Choose TQ report"}</span>
++          <input type="file" accept=".xlsx,.xlsm,.xls" onChange={handleFileSelect} disabled={loading} />
++        </label>
++      </header>
++
++      {fileName && <div className="file-strip"><span>Selected file</span><strong>{fileName}</strong></div>}
++      {error && <div className="alert alert-error">{error}</div>}
++
++      {!report && !loading && (
++        <section className="empty-state">
++          <div className="empty-icon">DT</div>
++          <h2>Start with the TQ_GENERATENOW workbook</h2>
++          <p>DT Operations Hub will use the report period, actual operating dates, contract tags, trip numbers, and unique Load Numbers.</p>
++        </section>
++      )}
++
++      {report && (
++        <div className="report-stack">
++          <section className="report-banner">
++            <div>
++              <p className="eyebrow eyebrow-light">Weekly report ready</p>
++              <h2>{displayDate(report.periodStart)} - {displayDate(report.periodEnd)}</h2>
++              <p>{number(report.reportLoads.length)} unique loads included in the weekly view</p>
+             </div>
+-
+-            <h2 className="text-2xl font-bold mb-4">
+-              Contract Summary (
+-              {contracts.length} contracts)
+-            </h2>
+-
+-            <table className="w-full border border-slate-300">
+-              <thead>
+-                <tr className="bg-slate-200">
+-                  <th className="border p-2">
+-                    Contract
+-                  </th>
+-
+-                  <th className="border p-2">
+-                    Stops
+-                  </th>
+-
+-                  <th className="border p-2">
+-                    Completed
+-                  </th>
+-
+-                  <th className="border p-2">
+-                    Incomplete
+-                  </th>
+-
+-                  <th className="border p-2">
+-                    %
+-                  </th>
+-                </tr>
+-              </thead>
+-
+-              <tbody>
+-                {contracts.map(
+-                  (contract) => (
+-                    <tr
+-                      key={
+-                        contract.contract
+-                      }
+-                    >
+-                      <td className="border p-2">
+-                        {
+-                          contract.contract
+-                        }
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {
+-                          contract.totalStops
+-                        }
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {
+-                          contract.completedStops
+-                        }
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {
+-                          contract.incompleteStops
+-                        }
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {(
+-                          contract.percentComplete *
+-                          100
+-                        ).toFixed(2)}
+-                        %
+-                      </td>
+-                    </tr>
+-                  )
+-                )}
+-              </tbody>
+-            </table>
+-
+-          </>
+-        )}
+-      </div>
++            <button className="secondary-button" onClick={copyEmail}>{copied ? "Copied" : "Copy email report"}</button>
++          </section>
++
++          <section className="metric-grid">
++            <article className="metric-card metric-primary"><span>Overall completion</span><strong>{percent(report.totals.percentComplete)}</strong></article>
++            <article className="metric-card"><span>Total stops</span><strong>{number(report.totals.totalStops)}</strong></article>
++            <article className="metric-card"><span>Completed stops</span><strong>{number(report.totals.completedStops)}</strong></article>
++            <article className="metric-card"><span>Incomplete stops</span><strong>{number(report.totals.incompleteStops)}</strong></article>
++          </section>
++
++          <section className="notice-grid">
++            <div className="notice"><strong>{report.duplicateLoadNumbers.length}</strong><span>duplicate Load Numbers skipped</span></div>
++            <div className="notice"><strong>{report.outsidePeriodCount}</strong><span>loads kept for dates outside this weekly view</span></div>
++            <div className="notice"><strong>{report.unmatchedContractCount}</strong><span>loads needing a contract review</span></div>
++            <div className="notice"><strong>{report.unmatchedSupervisorCount}</strong><span>loads needing a supervisor assignment</span></div>
++          </section>
++
++          <SummaryTable title="Daily performance" rows={report.daily} />
++          <div className="two-column">
++            <SummaryTable title="Supervisor rankings" rows={report.supervisors} rank />
++            <SummaryTable title="Contract performance" rows={report.contracts} />
++          </div>
++          <section className="panel email-panel">
++            <div className="panel-heading"><h2>Email preview</h2><button className="text-button" onClick={copyEmail}>{copied ? "Copied" : "Copy"}</button></div>
++            <pre>{email}</pre>
++          </section>
++        </div>
++      )}
+     </main>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/components/NavBar.tsx b/components/NavBar.tsx
+index a06d7c3..461bf48 100644
+--- a/components/NavBar.tsx
++++ b/components/NavBar.tsx
+@@ -1,13 +1,28 @@
++import Image from "next/image";
++import Link from "next/link";
++
++const links = [
++  ["Dashboard", "/"],
++  ["Upload", "/upload"],
++  ["Completion", "/completion-totals"],
++  ["Supervisors", "/supervisors"],
++  ["Contracts", "/contracts"],
++  ["Missed Stops", "/operational-exceptions"],
++];
++
+ export default function NavBar() {
+   return (
+-    <div
+-      style={{
+-        background: "#0A2342",
+-        color: "white",
+-        padding: "12px 20px",
+-      }}
+-    >
+-      Navigation
+-    </div>
++    <header className="site-header">
++      <div className="brand-row">
++        <Link href="/" className="brand">
++          <Image src="/logo.png" alt="Davenport Transportation" width={68} height={68} priority />
++          <div><strong>DT Operations Hub</strong><span>Performance intelligence</span></div>
++        </Link>
++        <div className="header-status"><span className="status-dot" />Operations reporting</div>
++      </div>
++      <nav className="main-nav" aria-label="Primary navigation">
++        {links.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}
++      </nav>
++    </header>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/lib/getContracts.ts b/lib/getContracts.ts
+index badee26..d4306c4 100644
+--- a/lib/getContracts.ts
++++ b/lib/getContracts.ts
+@@ -3,11 +3,11 @@ import { supabase } from "./supabase";
+ export async function getContracts() {
+   const { data, error } = await supabase
+     .from("contract_supervisors")
+-    .select("contract_number");
++    .select("contract_number, supervisor");
+ 
+   if (error) {
+     throw error;
+   }
+ 
+   return data ?? [];
+-}
+\ No newline at end of file
++}
+diff --git a/lib/processOperationalExceptions.ts b/lib/processOperationalExceptions.ts
+index 42728c3..a97d839 100644
+--- a/lib/processOperationalExceptions.ts
++++ b/lib/processOperationalExceptions.ts
+@@ -1,22 +1,99 @@
+ import * as XLSX from "xlsx";
+ 
+-export async function processOperationalExceptions(
+-  file: File
+-) {
+-  const data = await file.arrayBuffer();
++export type MissedStopRow = {
++  loadNumber: string;
++  operatingDate: string;
++  contract: string;
++  trip: string;
++  status: string;
++  totalStops: number;
++  geofenceStops: number;
++  missingStops: number;
++  missingLocations: string;
++  geofenceNonCompliant: boolean;
++  pingNonCompliant: boolean;
++};
+ 
+-  const workbook = XLSX.read(data);
++export type MissedStopSummary = {
++  rows: MissedStopRow[];
++  duplicateLoadNumbers: string[];
++  totalMissingStops: number;
++  geofenceNonCompliantLoads: number;
++  pingNonCompliantLoads: number;
++  unmappedLoads: number;
++  byDate: Array<{ key: string; loads: number; missingStops: number }>;
++  byContract: Array<{ key: string; loads: number; missingStops: number }>;
++  byLocation: Array<{ key: string; occurrences: number }>;
++};
+ 
+-  const sheet =
+-    workbook.Sheets["Non-Compliant Loads"];
++function isTrue(value: unknown) {
++  return value === true || value === 1 || String(value).toLowerCase() === "true";
++}
+ 
+-  if (!sheet) {
+-    return [];
+-  }
++export async function processOperationalExceptions(file: File): Promise<MissedStopSummary> {
++  const workbook = XLSX.read(await file.arrayBuffer());
++  const sheet = workbook.Sheets["Non-Compliant Loads"];
++  if (!sheet) throw new Error('This workbook does not contain a "Non-Compliant Loads" sheet.');
+ 
+-  const rows = XLSX.utils.sheet_to_json(
+-    sheet
+-  );
++  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
++  const seen = new Set<string>();
++  const duplicateLoadNumbers: string[] = [];
++  const rows: MissedStopRow[] = [];
+ 
+-  return rows;
+-}
+\ No newline at end of file
++  raw.forEach((row) => {
++    const loadNumber = String(row["Load Number"] ?? "").trim();
++    if (!loadNumber) return;
++    if (seen.has(loadNumber)) {
++      duplicateLoadNumbers.push(loadNumber);
++      return;
++    }
++    seen.add(loadNumber);
++    const appointment = String(row["First Stop Appointment Time(CDT)"] ?? "");
++    rows.push({
++      loadNumber,
++      operatingDate: appointment.slice(0, 10),
++      contract: String(row.Contract ?? "").trim() || "Unmapped",
++      trip: String(row["Contract Trip"] ?? "").replace(/^LDT-[A-Z0-9]+-/i, ""),
++      status: String(row.Status ?? ""),
++      totalStops: Number(row["Total Stops"] || 0),
++      geofenceStops: Number(row["Total Geofence Triggered"] || 0),
++      missingStops: Number(row["Stops Without Geofence Checkin"] || 0),
++      missingLocations: String(row["Stops Missing Geofence"] ?? ""),
++      geofenceNonCompliant: isTrue(row["Geofence Non compliance"]),
++      pingNonCompliant: isTrue(row["Ping frequency Non compliance"]),
++    });
++  });
++
++  const summarize = (keyFor: (row: MissedStopRow) => string) => {
++    const groups = new Map<string, { loads: number; missingStops: number }>();
++    rows.forEach((row) => {
++      const key = keyFor(row) || "Unmapped";
++      const group = groups.get(key) ?? { loads: 0, missingStops: 0 };
++      group.loads += 1;
++      group.missingStops += row.missingStops;
++      groups.set(key, group);
++    });
++    return Array.from(groups.entries()).map(([key, value]) => ({ key, ...value }));
++  };
++
++  const locations = new Map<string, number>();
++  rows.forEach((row) => {
++    row.missingLocations.split(",").map((value) => value.trim()).filter(Boolean).forEach((location) => {
++      locations.set(location, (locations.get(location) ?? 0) + 1);
++    });
++  });
++
++  return {
++    rows,
++    duplicateLoadNumbers: Array.from(new Set(duplicateLoadNumbers)),
++    totalMissingStops: rows.reduce((sum, row) => sum + row.missingStops, 0),
++    geofenceNonCompliantLoads: rows.filter((row) => row.geofenceNonCompliant).length,
++    pingNonCompliantLoads: rows.filter((row) => row.pingNonCompliant).length,
++    unmappedLoads: rows.filter((row) => row.contract === "Unmapped" || row.contract === "Others").length,
++    byDate: summarize((row) => row.operatingDate).sort((a, b) => a.key.localeCompare(b.key)),
++    byContract: summarize((row) => row.contract).sort((a, b) => b.missingStops - a.missingStops),
++    byLocation: Array.from(locations.entries())
++      .map(([key, occurrences]) => ({ key, occurrences }))
++      .sort((a, b) => b.occurrences - a.occurrences),
++  };
++}
+diff --git a/lib/processors/reportProcessor.ts b/lib/processors/reportProcessor.ts
+index 1d6e516..fc66a2b 100644
+--- a/lib/processors/reportProcessor.ts
++++ b/lib/processors/reportProcessor.ts
+@@ -1,101 +1,241 @@
+ import * as XLSX from "xlsx";
+ import { getContracts } from "../getContracts";
++import { isTonyaTrip } from "../tonyaTrips";
++
++export type Totals = {
++  totalStops: number;
++  completedStops: number;
++  incompleteStops: number;
++  percentComplete: number;
++};
++
++export type ProcessedLoad = {
++  loadNumber: string;
++  operatingDate: string;
++  contract: string;
++  trip: string | null;
++  totalStops: number;
++  completedStops: number;
++  incompleteStops: number;
++  tags: string;
++};
++
++export type SummaryRow = Totals & {
++  key: string;
++  label: string;
++  loadCount: number;
++};
++
++export type ProcessedReport = {
++  fileName: string;
++  periodStart: string;
++  periodEnd: string;
++  reportLoads: ProcessedLoad[];
++  historicalLoads: ProcessedLoad[];
++  totals: Totals;
++  daily: SummaryRow[];
++  contracts: SummaryRow[];
++  supervisors: SummaryRow[];
++  duplicateLoadNumbers: string[];
++  outsidePeriodCount: number;
++  unmatchedContractCount: number;
++  unmatchedSupervisorCount: number;
++};
++
++type ContractAssignment = {
++  contract_number: string | null;
++  supervisor?: string | null;
++};
++
++function toIsoDate(year: number, month: number, day: number) {
++  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
++}
+ 
+-export async function processReport(file: File) {
+-  const data = await file.arrayBuffer();
++function parseReportDate(value: string) {
++  const months: Record<string, number> = {
++    jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
++    jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
++  };
++  const match = value.trim().match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2,4})$/);
++  if (!match) return "";
++  const yearNumber = Number(match[3]);
++  const year = yearNumber < 100 ? 2000 + yearNumber : yearNumber;
++  return toIsoDate(year, months[match[2].toLowerCase()], Number(match[1]));
++}
+ 
+-  const workbook = XLSX.read(data);
++function getReportPeriod(workbook: XLSX.WorkBook) {
++  const summary = workbook.Sheets.Summary;
++  if (!summary) return { periodStart: "", periodEnd: "" };
++  const rows = XLSX.utils.sheet_to_json<unknown[]>(summary, { header: 1, defval: "" });
++  const text = rows.flat().map(String).find((value) => value.includes("Analysis from")) ?? "";
++  const match = text.match(/Analysis from\s+(\d{1,2}\s+[A-Za-z]{3}\s+\d{2,4})\s+-\s+(\d{1,2}\s+[A-Za-z]{3}\s+\d{2,4})/i);
++  return {
++    periodStart: match ? parseReportDate(match[1]) : "",
++    periodEnd: match ? parseReportDate(match[2]) : "",
++  };
++}
+ 
+-  const loadDetailsSheet =
+-    workbook.Sheets["Load Details"];
++function getOperatingDate(tags: string) {
++  return tags.match(/(?:^|,)(\d{4}-\d{2}-\d{2})(?:,|$)/)?.[1] ?? "";
++}
+ 
+-  if (!loadDetailsSheet) {
+-    return {
+-      contracts: [],
+-      rows: [],
+-    };
+-  }
++function getTripInfo(tags: string) {
++  const match = tags.match(/LDT-([A-Z0-9]+)-(\d+)/i);
++  return match
++    ? { contract: match[1].toUpperCase(), trip: String(Number(match[2])) }
++    : { contract: "", trip: null };
++}
+ 
+-  const rows: any[] =
+-  XLSX.utils.sheet_to_json(loadDetailsSheet, {
+-    range: 4,
++function findContract(tags: string, assignments: ContractAssignment[]) {
++  const tripInfo = getTripInfo(tags);
++  if (tripInfo.contract) return tripInfo;
++  const tagSet = new Set(tags.toUpperCase().split(",").map((tag) => tag.trim()));
++  const assignment = assignments.find((row) => {
++    const contract = String(row.contract_number ?? "").trim().toUpperCase();
++    return contract && tagSet.has(contract);
+   });
++  return {
++    contract: String(assignment?.contract_number ?? "").trim().toUpperCase(),
++    trip: null,
++  };
++}
+ 
+-  const contractList = await getContracts();
++function createTotals(rows: ProcessedLoad[]): Totals {
++  const totals = rows.reduce(
++    (sum, row) => ({
++      totalStops: sum.totalStops + row.totalStops,
++      completedStops: sum.completedStops + row.completedStops,
++      incompleteStops: sum.incompleteStops + row.incompleteStops,
++    }),
++    { totalStops: 0, completedStops: 0, incompleteStops: 0 },
++  );
++  return {
++    ...totals,
++    percentComplete: totals.totalStops > 0
++      ? totals.completedStops / totals.totalStops
++      : 0,
++  };
++}
+ 
+-  const contracts: Record<
+-    string,
+-    {
+-      totalStops: number;
+-      completedStops: number;
+-      incompleteStops: number;
+-    }
+-  > = {};
++function summarize(
++  rows: ProcessedLoad[],
++  keyFor: (row: ProcessedLoad) => string,
++  labelFor: (key: string) => string = (key) => key,
++) {
++  const groups = new Map<string, ProcessedLoad[]>();
++  rows.forEach((row) => {
++    const key = keyFor(row);
++    if (!key) return;
++    groups.set(key, [...(groups.get(key) ?? []), row]);
++  });
++  return Array.from(groups.entries()).map(([key, group]): SummaryRow => ({
++    key,
++    label: labelFor(key),
++    loadCount: group.length,
++    ...createTotals(group),
++  }));
++}
+ 
++function supervisorNames(value: string | null | undefined) {
++  return String(value ?? "")
++    .split("/")
++    .map((name) => name.trim())
++    .filter(Boolean)
++    .filter((name) => name !== "Candi Tanner");
++}
++
++function buildSupervisorSummary(rows: ProcessedLoad[], assignments: ContractAssignment[]) {
++  const assignedRows: Array<ProcessedLoad & { supervisor: string }> = [];
+   rows.forEach((row) => {
+-  const tags = String(
+-    row["Tags"] || ""
+-  ).toUpperCase();
+-if (
+-  tags.includes("296B8") ||
+-  tags.includes("296C2")
+-) {
+-  console.log(tags);
++    const assignment = assignments.find(
++      (item) => String(item.contract_number ?? "").trim().toUpperCase() === row.contract,
++    );
++    const names = supervisorNames(assignment?.supervisor);
++    const tonya = isTonyaTrip(row.contract, row.trip);
++    const resolved = tonya
++      ? ["Tonya Capps-Owen"]
++      : names.filter((name) => name !== "Tonya Capps-Owen" && name !== "Tonya Owens");
++    (resolved.length ? resolved : ["Unassigned"]).forEach((supervisor) => {
++      assignedRows.push({ ...row, supervisor });
++    });
++  });
++  return summarize(
++    assignedRows,
++    (row) => (row as ProcessedLoad & { supervisor: string }).supervisor,
++  );
+ }
+ 
+-  contractList.forEach((record: any) => {
+-      const contract = String(
+-        record.contract_number || ""
+-      ).trim();
+-
+-      if (!contract) return;
+-
+-      if (
+-        tags.includes(
+-          contract.toUpperCase()
+-        )
+-      ) {
+-        if (!contracts[contract]) {
+-          contracts[contract] = {
+-            totalStops: 0,
+-            completedStops: 0,
+-            incompleteStops: 0,
+-          };
+-        }
+-
+-        contracts[contract].totalStops += Number(
+-          row["Stops Count"] || 0
+-        );
+-
+-        contracts[contract].completedStops += Number(
+-          row["Stops With Timestamp"] || 0
+-        );
+-
+-        contracts[contract].incompleteStops += Number(
+-          row["Incomplete Stops"] || 0
+-        );
+-      }
++export async function processReport(file: File): Promise<ProcessedReport> {
++  const workbook = XLSX.read(await file.arrayBuffer());
++  const loadDetails = workbook.Sheets["Load Details"];
++  if (!loadDetails) throw new Error('This workbook does not contain a "Load Details" sheet.');
++
++  let assignments: ContractAssignment[] = [];
++  try {
++    assignments = await getContracts();
++  } catch {
++    assignments = [];
++  }
++
++  const { periodStart, periodEnd } = getReportPeriod(workbook);
++  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(loadDetails, {
++    range: 4,
++    defval: "",
++  });
++  const seen = new Set<string>();
++  const duplicateLoadNumbers: string[] = [];
++  const historicalLoads: ProcessedLoad[] = [];
++
++  rawRows.forEach((row) => {
++    const loadNumber = String(row["Load Number"] ?? "").trim();
++    if (!loadNumber) return;
++    if (seen.has(loadNumber)) {
++      duplicateLoadNumbers.push(loadNumber);
++      return;
++    }
++    seen.add(loadNumber);
++    const tags = String(row.Tags ?? "");
++    const { contract, trip } = findContract(tags, assignments);
++    historicalLoads.push({
++      loadNumber,
++      operatingDate: getOperatingDate(tags),
++      contract,
++      trip,
++      totalStops: Number(row["Stops Count"] || 0),
++      completedStops: Number(row["Stops With Timestamp"] || 0),
++      incompleteStops: Number(row["Incomplete Stops"] || 0),
++      tags,
+     });
+   });
+ 
+-  const contractSummary = Object.entries(
+-    contracts
+-  ).map(([contract, values]) => ({
+-    contract,
+-    totalStops: values.totalStops,
+-    completedStops:
+-      values.completedStops,
+-    incompleteStops:
+-      values.incompleteStops,
+-    percentComplete:
+-      values.totalStops > 0
+-        ? values.completedStops /
+-          values.totalStops
+-        : 0,
+-  }));
++  const reportLoads = historicalLoads.filter((row) =>
++    (!periodStart || row.operatingDate >= periodStart) &&
++    (!periodEnd || row.operatingDate <= periodEnd),
++  );
++  const dayNames = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" });
++  const daily = summarize(
++    reportLoads,
++    (row) => row.operatingDate,
++    (date) => `${dayNames.format(new Date(`${date}T12:00:00Z`))}, ${date}`,
++  ).sort((a, b) => a.key.localeCompare(b.key));
++  const contracts = summarize(reportLoads, (row) => row.contract)
++    .sort((a, b) => a.percentComplete - b.percentComplete);
++  const supervisors = buildSupervisorSummary(reportLoads, assignments)
++    .sort((a, b) => b.percentComplete - a.percentComplete);
+ 
+   return {
+-    contracts: contractSummary,
+-    rows,
++    fileName: file.name,
++    periodStart,
++    periodEnd,
++    reportLoads,
++    historicalLoads,
++    totals: createTotals(reportLoads),
++    daily,
++    contracts,
++    supervisors,
++    duplicateLoadNumbers: Array.from(new Set(duplicateLoadNumbers)),
++    outsidePeriodCount: historicalLoads.length - reportLoads.length,
++    unmatchedContractCount: historicalLoads.filter((row) => !row.contract).length,
++    unmatchedSupervisorCount: supervisors.find((row) => row.key === "Unassigned")?.loadCount ?? 0,
+   };
+-}
+\ No newline at end of file
++}
+diff --git a/lib/supabase.ts b/lib/supabase.ts
+index dd74c2d..b15ddb1 100644
+--- a/lib/supabase.ts
++++ b/lib/supabase.ts
+@@ -1,11 +1,11 @@
+ import { createClient } from "@supabase/supabase-js";
+ 
+-console.log(
+-  "SUPABASE URL:",
+-  process.env.NEXT_PUBLIC_SUPABASE_URL
+-);
++const supabaseUrl =
++  process.env.NEXT_PUBLIC_SUPABASE_URL ??
++  "https://placeholder.supabase.co";
+ 
+-export const supabase = createClient(
+-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+-);
+\ No newline at end of file
++const supabaseKey =
++  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
++  "placeholder-anon-key";
++
++export const supabase = createClient(supabaseUrl, supabaseKey);
+diff --git a/lib/tonyaTrips.ts b/lib/tonyaTrips.ts
+new file mode 100644
+index 0000000..7a4ea21
+--- /dev/null
++++ b/lib/tonyaTrips.ts
+@@ -0,0 +1,20 @@
++export const TONYA_TRIPS: Record<string, Set<string>> = {
++  "296B8": new Set([
++    "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
++    "17", "18", "19", "20", "21", "22", "23", "24", "25", "26",
++    "29", "30", "33", "34", "39", "40", "41", "42", "43", "44",
++    "45", "46", "321", "322",
++  ]),
++  "296C2": new Set([
++    "77", "78", "79", "80", "81", "82", "83", "84", "85", "86",
++    "87", "88", "89", "90", "91", "92", "93", "94", "95", "96",
++    "97", "98", "157", "158", "159", "160", "161", "162", "163",
++    "164", "165", "166", "167", "168", "169", "170", "1017",
++    "1018", "1019", "1020",
++  ]),
++};
++
++export function isTonyaTrip(contract: string, trip: string | null) {
++  if (!trip) return false;
++  return TONYA_TRIPS[contract]?.has(trip) ?? false;
++}
