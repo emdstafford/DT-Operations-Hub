@@ -54,6 +54,27 @@ export async function saveReportSnapshot(report: ProcessedReport) {
   if (!user) throw new Error("Sign in with an approved DT Express account before uploading.");
   const { error } = await supabase.from("report_history").upsert({ report_type: "usps_loads", period_start: report.periodStart, period_end: report.periodEnd, source_file: report.fileName, data: snapshot, uploaded_by: user.id, updated_at: new Date().toISOString() }, { onConflict: "report_type,period_start,period_end" });
   if (error) throw error;
+
+  const records = report.historicalLoads.filter((load) => load.operatingDate).map((load) => ({
+    load_number: load.loadNumber,
+    operating_date: load.operatingDate,
+    contract_number: load.contract || null,
+    trip_number: load.trip,
+    supervisors: load.supervisors,
+    total_stops: load.totalStops,
+    completed_stops: load.completedStops,
+    incomplete_stops: load.incompleteStops,
+    source_file: report.fileName,
+    source_period_start: report.periodStart,
+    source_period_end: report.periodEnd,
+    uploaded_by: user.id,
+    updated_at: new Date().toISOString(),
+  }));
+  for (let index = 0; index < records.length; index += 500) {
+    const { error: loadError } = await supabase.from("usps_loads")
+      .upsert(records.slice(index, index + 500), { onConflict: "load_number" });
+    if (loadError) throw new Error(`Load history stopped near row ${index + 1}: ${loadError.message}`);
+  }
 }
 
 export async function getMissedStopsHistory(): Promise<MissedStopsSnapshot[]> {

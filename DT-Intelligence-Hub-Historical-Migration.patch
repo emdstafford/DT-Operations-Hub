@@ -1,0 +1,798 @@
+diff --git a/app/completion-totals/page.tsx b/app/completion-totals/page.tsx
+index 92297ec..0af2ee1 100644
+--- a/app/completion-totals/page.tsx
++++ b/app/completion-totals/page.tsx
+@@ -1,296 +1,2 @@
+-import { supabase } from "@/lib/supabase";
+-
+-export default async function CompletionTotalsPage() {
+-  const { data: contractData } = await supabase
+-    .from("weekly_contract_summary")
+-    .select("*");
+-
+-  const { data: supervisorData } = await supabase
+-    .from("contract_supervisors")
+-    .select("*");
+-
+-  const rows = contractData ?? [];
+-  const supervisors = supervisorData ?? [];
+-
+-  const totalStops = rows.reduce(
+-    (sum, r) => sum + (r.total_stops || 0),
+-    0
+-  );
+-
+-  const completedStops = rows.reduce(
+-    (sum, r) => sum + (r.stops_completed || 0),
+-    0
+-  );
+-
+-  const incompleteStops = rows.reduce(
+-    (sum, r) => sum + (r.stops_incomplete || 0),
+-    0
+-  );
+-
+-  const completion =
+-    totalStops > 0
+-      ? ((completedStops / totalStops) * 100).toFixed(2)
+-      : "0.00";
+-
+-  
+-  const reportDate =
+-    rows[0]?.report_date ?? "";
+-
+-  const periodStart =
+-    rows[0]?.period_start ??
+-    reportDate;
+-
+-  const periodEnd =
+-    rows[0]?.period_end ??
+-    reportDate;
+-
+-  const contracts = [...rows].sort(
+-
+-    (a, b) =>
+-      a.completion_percent - b.completion_percent
+-  );
+-
+-  const contractsFound = contracts.length;
+-
+-  const contractsBelow90 = contracts.filter(
+-    (c) => c.completion_percent < 0.9
+-  ).length;
+-
+-  const supervisorMap = new Map();
+-
+-  contracts.forEach((contract) => {
+-    const supervisorRecord = supervisors.find(
+-      (s) =>
+-        s.contract_number ===
+-        contract.contract_number
+-    );
+-
+-    if (!supervisorRecord) return;
+-
+-    const supervisorNames = String(
+-      supervisorRecord.supervisor || ""
+-    )
+-      .split("/")
+-      .map((s) => s.trim())
+-      .filter(Boolean)
+-      .filter(
+-        (s) => s !== "Candi Tanner"
+-      );
+-
+-    supervisorNames.forEach((supervisor) => {
+-
+-      if (!supervisorMap.has(supervisor)) {
+-        supervisorMap.set(supervisor, {
+-          total: 0,
+-          completed: 0,
+-          contracts: 0,
+-        });
+-      }
+-
+-      const current =
+-        supervisorMap.get(supervisor);
+-
+-      current.total +=
+-        contract.total_stops || 0;
+-
+-      current.completed +=
+-        contract.stops_completed || 0;
+-
+-      current.contracts += 1;
+-
+-    });
+-  });
+-
+-  const supervisorRankings =
+-    Array.from(supervisorMap.entries())
+-      .map(([name, values]) => ({
+-        name,
+-        percent:
+-          values.total > 0
+-            ? values.completed /
+-              values.total
+-            : 0,
+-      }))
+-      .sort(
+-        (a, b) => b.percent - a.percent
+-      );
+-
+-  return (
+-    <main className="min-h-screen bg-slate-100 p-8">
+-      <div className="bg-white p-6 rounded shadow">
+-
+-        <h1 className="text-3xl font-bold mb-2">
+-          Completion Totals
+-        </h1>
+-
+-        <div className="text-slate-600 mb-6">
+-          Reporting Period:
+-          {" "}
+-          {String(periodStart)}
+-          {" "}
+-          -
+-          {" "}
+-          {String(periodEnd)}
+-        </div>
+-
+-        <div className="grid grid-cols-6 gap-4 mb-8">
+-
+-          <div className="bg-blue-100 p-4 rounded">
+-            <div>Overall Completion</div>
+-            <div className="text-3xl font-bold">
+-              {completion}%
+-            </div>
+-          </div>
+-
+-          <div className="bg-green-100 p-4 rounded">
+-            <div>Total Stops</div>
+-            <div className="text-3xl font-bold">
+-              {totalStops.toLocaleString()}
+-            </div>
+-          </div>
+-
+-          <div className="bg-yellow-100 p-4 rounded">
+-            <div>Completed</div>
+-            <div className="text-3xl font-bold">
+-              {completedStops.toLocaleString()}
+-            </div>
+-          </div>
+-
+-          <div className="bg-red-100 p-4 rounded">
+-            <div>Incomplete</div>
+-            <div className="text-3xl font-bold">
+-              {incompleteStops.toLocaleString()}
+-            </div>
+-          </div>
+-
+-          <div className="bg-purple-100 p-4 rounded">
+-            <div>Contracts Found</div>
+-            <div className="text-3xl font-bold">
+-              {contractsFound}
+-            </div>
+-          </div>
+-
+-          <div className="bg-orange-100 p-4 rounded">
+-            <div>Below 90%</div>
+-            <div className="text-3xl font-bold">
+-              {contractsBelow90}
+-            </div>
+-          </div>
+-
+-        </div>
+-
+-        <div className="grid grid-cols-2 gap-8">
+-
+-          <div>
+-
+-            <h2 className="text-2xl font-bold mb-4">
+-              Supervisor Rankings
+-            </h2>
+-
+-            <table className="w-full border">
+-
+-              <thead>
+-                <tr className="bg-slate-200">
+-                  <th className="border p-2">
+-                    Supervisor
+-                  </th>
+-
+-                  <th className="border p-2">
+-                    %
+-                  </th>
+-                </tr>
+-              </thead>
+-
+-              <tbody>
+-
+-                {supervisorRankings.map(
+-                  (s, i) => (
+-                    <tr
+-                      key={s.name}
+-                      className={
+-                        i < 5
+-                          ? "bg-green-100"
+-                          : ""
+-                      }
+-                    >
+-                      <td className="border p-2">
+-                        {s.name}
+-                      </td>
+-
+-                      <td className="border p-2">
+-                        {(s.percent * 100).toFixed(
+-                          2
+-                        )}
+-                        %
+-                      </td>
+-                    </tr>
+-                  )
+-                )}
+-
+-              </tbody>
+-
+-            </table>
+-
+-          </div>
+-
+-          <div>
+-
+-            <h2 className="text-2xl font-bold mb-4">
+-              Contract Rankings
+-            </h2>
+-
+-            <table className="w-full border">
+-
+-              <thead>
+-                <tr className="bg-slate-200">
+-                  <th className="border p-2">
+-                    Contract
+-                  </th>
+-
+-                  <th className="border p-2">
+-                    %
+-                  </th>
+-
+-                  <th className="border p-2">
+-                    Incomplete
+-                  </th>
+-                </tr>
+-              </thead>
+-
+-              <tbody>
+-
+-                {contracts.map((c, i) => (
+-                  <tr
+-                    key={c.contract_number}
+-                    className={
+-                      i < 10
+-                        ? "bg-red-100"
+-                        : ""
+-                    }
+-                  >
+-                    <td className="border p-2">
+-                      {c.contract_number}
+-                    </td>
+-
+-                    <td className="border p-2">
+-                      {(c.completion_percent * 100).toFixed(2)}%
+-                    </td>
+-
+-                    <td className="border p-2">
+-                      {c.stops_incomplete}
+-                    </td>
+-                  </tr>
+-                ))}
+-
+-              </tbody>
+-
+-            </table>
+-
+-          </div>
+-
+-        </div>
+-
+-      </div>
+-    </main>
+-  );
+-}
++import PerformanceExplorer from "@/components/PerformanceExplorer";
++export default function Page(){return <main className="page-shell"><header className="page-intro"><div><p className="eyebrow">Shared USPS history</p><h1>Completion performance</h1><p>Select any date range and group results by day, Saturday–Friday week, month, or year.</p></div></header><PerformanceExplorer/></main>}
+diff --git a/app/contracts/[contract]/page.tsx b/app/contracts/[contract]/page.tsx
+index c07864a..cc3c73c 100644
+--- a/app/contracts/[contract]/page.tsx
++++ b/app/contracts/[contract]/page.tsx
+@@ -1,73 +1,2 @@
+-import { supabase } from "@/lib/supabase";
+-
+-export default async function ContractPage({
+-  params,
+-}: {
+-  params: Promise<{ contract: string }>;
+-}) {
+-  const { contract } = await params;
+-
+-  const { data } = await supabase
+-    .from("weekly_contract_summary")
+-    .select("*")
+-    .eq("contract_number", contract)
+-    .single();
+-
+-  if (!data) {
+-    return (
+-      <main className="p-8">
+-        <h1>Contract not found</h1>
+-      </main>
+-    );
+-  }
+-
+-  return (
+-    <main className="min-h-screen bg-slate-100 p-8">
+-      <div className="bg-white rounded-lg shadow p-6">
+-
+-        <h1 className="text-3xl font-bold mb-2">
+-          Contract {contract}
+-        </h1>
+-
+-        <div className="grid grid-cols-4 gap-4 mt-6">
+-
+-          <div className="bg-blue-100 p-4 rounded">
+-            <div>Stops</div>
+-            <div className="text-2xl font-bold">
+-              {data.total_stops}
+-            </div>
+-          </div>
+-
+-          <div className="bg-green-100 p-4 rounded">
+-            <div>Completed</div>
+-            <div className="text-2xl font-bold">
+-              {data.stops_completed}
+-            </div>
+-          </div>
+-
+-          <div className="bg-red-100 p-4 rounded">
+-            <div>Missed</div>
+-            <div className="text-2xl font-bold">
+-              {data.stops_incomplete}
+-            </div>
+-          </div>
+-
+-          <div className="bg-yellow-100 p-4 rounded">
+-            <div>Completion</div>
+-            <div className="text-2xl font-bold">
+-              {(data.completion_percent * 100).toFixed(2)}%
+-            </div>
+-          </div>
+-
+-        </div>
+-
+-        <div className="mt-8 p-4 bg-yellow-50 rounded border">
+-          Next Step:
+-          This page will show all missed loads,
+-          tracking issues, and root causes for this contract.
+-        </div>
+-
+-      </div>
+-    </main>
+-  );
+-}
++import PerformanceExplorer from "@/components/PerformanceExplorer";
++export default async function Page({params}:{params:Promise<{contract:string}>}){const {contract}=await params;const value=decodeURIComponent(contract);return <main className="page-shell"><header className="page-intro"><div><p className="eyebrow">Contract drilldown</p><h1>Contract {value}</h1><p>Daily, Saturday–Friday weekly, monthly, and yearly performance trends.</p></div></header><PerformanceExplorer fixedContract={value}/></main>}
+diff --git a/app/contracts/page.tsx b/app/contracts/page.tsx
+index 412de37..81a4d45 100644
+--- a/app/contracts/page.tsx
++++ b/app/contracts/page.tsx
+@@ -1,13 +1,2 @@
+-export default function ContractsPage() {
+-  return (
+-    <main className="p-8">
+-      <h1 className="text-3xl font-bold">
+-        Contracts
+-      </h1>
+-
+-      <p>
+-        Contract dashboard coming soon.
+-      </p>
+-    </main>
+-  );
+-}
+\ No newline at end of file
++import PerformanceExplorer from "@/components/PerformanceExplorer";
++export default function Page(){return <main className="page-shell"><header className="page-intro"><div><p className="eyebrow">Contract intelligence</p><h1>Contracts</h1><p>Select a date range, then open any contract for its trend details.</p></div></header><PerformanceExplorer contractsOnly/></main>}
+diff --git a/app/globals.css b/app/globals.css
+index 46939f1..50b62ac 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -122,6 +122,9 @@ button, input { font: inherit; }
+ .login-form label { color: var(--navy); font-weight: 800; }
+ .login-form input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font: inherit; }
+ .login-secondary { color: var(--navy); border-color: var(--line); }
++.filter-bar { display:flex; flex-wrap:wrap; gap:16px; padding:18px 20px; }
++.filter-bar label { min-width:190px; display:grid; gap:7px; color:var(--navy); font-size:.8rem; font-weight:800; }
++.filter-bar input, .filter-bar select { border:1px solid var(--line); border-radius:8px; background:white; padding:10px 12px; color:var(--ink); font:inherit; }
+ 
+ @media (max-width: 980px) {
+   .feature-grid, .metric-grid { grid-template-columns: repeat(2, 1fr); }
+diff --git a/app/supervisors/page.tsx b/app/supervisors/page.tsx
+index 8f06684..395fb94 100644
+--- a/app/supervisors/page.tsx
++++ b/app/supervisors/page.tsx
+@@ -1,77 +1,2 @@
+-"use client";
+-
+-import Link from "next/link";
+-import { useEffect, useState } from "react";
+-import type { SummaryRow } from "@/lib/processors/reportProcessor";
+-
+-type SavedSupervisorReport = {
+-  fileName: string;
+-  periodStart: string;
+-  periodEnd: string;
+-  supervisors: SummaryRow[];
+-};
+-
+-function displayDate(value: string) {
+-  if (!value) return "Unknown";
+-  return new Intl.DateTimeFormat("en-US", {
+-    month: "long",
+-    day: "numeric",
+-    year: "numeric",
+-    timeZone: "UTC",
+-  }).format(new Date(`${value}T12:00:00Z`));
+-}
+-
+-export default function SupervisorsPage() {
+-  const [report, setReport] = useState<SavedSupervisorReport | null>(null);
+-
+-  useEffect(() => {
+-    const saved = window.localStorage.getItem("dt-latest-supervisor-report");
+-    if (saved) setReport(JSON.parse(saved) as SavedSupervisorReport);
+-  }, []);
+-
+-  const rows = report?.supervisors ?? [];
+-
+-  return (
+-    <main className="page-shell">
+-      <header className="page-intro">
+-        <div>
+-          <p className="eyebrow">USPS performance</p>
+-          <h1>Supervisor performance</h1>
+-          <p>Trip-level supervisor totals from the most recently uploaded USPS load-details file.</p>
+-        </div>
+-        <Link className="upload-button" href="/upload">Upload a report</Link>
+-      </header>
+-
+-      {!report ? (
+-        <section className="empty-state">
+-          <div className="empty-icon">SP</div>
+-          <h2>Upload a USPS report first</h2>
+-          <p>The supervisor page will use its filename dates and split Tonya Capps-Owen’s 296B8 and 296C2 trips before calculating results.</p>
+-        </section>
+-      ) : (
+-        <div className="report-stack">
+-          <section className="report-banner">
+-            <div>
+-              <p className="eyebrow eyebrow-light">Reporting period from filename</p>
+-              <h2>{displayDate(report.periodStart)} - {displayDate(report.periodEnd)}</h2>
+-              <p>{report.fileName}</p>
+-            </div>
+-          </section>
+-          <section className="panel overflow-hidden">
+-            <div className="panel-heading"><h2>Supervisor rankings</h2><span>{rows.length} results</span></div>
+-            <div className="table-scroll">
+-              <table className="data-table">
+-                <thead><tr><th>Rank</th><th>Supervisor</th><th>Loads</th><th>Total stops</th><th>Completed</th><th>Incomplete</th><th>Completion</th></tr></thead>
+-                <tbody>{rows.map((row, index) => (
+-                  <tr key={row.key} className={row.key === "Unassigned" ? "attention-row" : ""}>
+-                    <td>#{index + 1}</td><td className="font-semibold text-navy">{row.label}</td><td>{row.loadCount.toLocaleString()}</td><td>{row.totalStops.toLocaleString()}</td><td>{row.completedStops.toLocaleString()}</td><td>{row.incompleteStops.toLocaleString()}</td><td className="font-semibold">{(row.percentComplete * 100).toFixed(2)}%</td>
+-                  </tr>
+-                ))}</tbody>
+-              </table>
+-            </div>
+-          </section>
+-        </div>
+-      )}
+-    </main>
+-  );
+-}
++import PerformanceExplorer from "@/components/PerformanceExplorer";
++export default function Page(){return <main className="page-shell"><header className="page-intro"><div><p className="eyebrow">Supervisor intelligence</p><h1>Supervisor performance</h1><p>Select a supervisor, date range, and daily, Saturday–Friday weekly, monthly, or yearly grouping.</p></div></header><PerformanceExplorer/></main>}
+diff --git a/components/PerformanceExplorer.tsx b/components/PerformanceExplorer.tsx
+new file mode 100644
+index 0000000..f1f362c
+--- /dev/null
++++ b/components/PerformanceExplorer.tsx
+@@ -0,0 +1,57 @@
++"use client";
++import Link from "next/link";
++import { useEffect, useState } from "react";
++import { supabase } from "@/lib/supabase";
++
++type Row = { period_start?: string; contract_number?: string; supervisor?: string; load_count: number; total_stops: number; completed_stops: number; incomplete_stops: number; completion_percent: number };
++const number = (value: number) => Number(value || 0).toLocaleString("en-US");
++const percent = (value: number) => `${(Number(value || 0) * 100).toFixed(2)}%`;
++
++export default function PerformanceExplorer({ fixedContract, contractsOnly = false }: { fixedContract?: string; contractsOnly?: boolean }) {
++  const today = new Date().toISOString().slice(0, 10);
++  const [start, setStart] = useState(`${today.slice(0, 4)}-01-01`);
++  const [end, setEnd] = useState(today);
++  const [grain, setGrain] = useState("week");
++  const [selectedSupervisor, setSelectedSupervisor] = useState("");
++  const [trend, setTrend] = useState<Row[]>([]);
++  const [contracts, setContracts] = useState<Row[]>([]);
++  const [supervisors, setSupervisors] = useState<Row[]>([]);
++  const [error, setError] = useState("");
++  const [loading, setLoading] = useState(true);
++
++  useEffect(() => { void (async () => {
++    setLoading(true); setError("");
++    const [trendResult, contractResult, supervisorResult] = await Promise.all([
++      supabase.rpc("performance_trend", { p_start: start, p_end: end, p_grain: grain, p_contract: fixedContract ?? null, p_supervisor: selectedSupervisor || null }),
++      supabase.rpc("contract_performance", { p_start: start, p_end: end }),
++      supabase.rpc("supervisor_performance", { p_start: start, p_end: end }),
++    ]);
++    const failure = trendResult.error || contractResult.error || supervisorResult.error;
++    if (failure) setError(failure.message);
++    setTrend((trendResult.data ?? []) as Row[]);
++    setContracts(((contractResult.data ?? []) as Row[]).filter((row) => !fixedContract || row.contract_number === fixedContract));
++    setSupervisors((supervisorResult.data ?? []) as Row[]);
++    setLoading(false);
++  })(); }, [start, end, grain, fixedContract, selectedSupervisor]);
++
++  const totals = trend.reduce((sum, row) => ({ loads: sum.loads + Number(row.load_count), total: sum.total + Number(row.total_stops), completed: sum.completed + Number(row.completed_stops), incomplete: sum.incomplete + Number(row.incomplete_stops) }), { loads: 0, total: 0, completed: 0, incomplete: 0 });
++  return <div className="report-stack">
++    <section className="panel filter-bar">
++      <label>Start date<input type="date" value={start} onChange={(event) => setStart(event.target.value)} /></label>
++      <label>End date<input type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
++      <label>Trend grouping<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Daily</option><option value="week">Weekly (Sat–Fri)</option><option value="month">Monthly</option><option value="year">Yearly</option></select></label>
++      {!contractsOnly && !fixedContract && <label>Supervisor<select value={selectedSupervisor} onChange={(event) => setSelectedSupervisor(event.target.value)}><option value="">All supervisors</option>{supervisors.filter((row) => row.supervisor && row.supervisor !== "Unassigned").map((row) => <option key={row.supervisor} value={row.supervisor}>{row.supervisor}</option>)}</select></label>}
++    </section>
++    {error && <div className="alert alert-error">{error}</div>}
++    {loading ? <section className="empty-state"><h2>Loading shared history…</h2></section> : <>
++      <section className="metric-grid"><article className="metric-card metric-primary"><span>Completion</span><strong>{percent(totals.total ? totals.completed / totals.total : 0)}</strong></article><article className="metric-card"><span>Unique loads</span><strong>{number(totals.loads)}</strong></article><article className="metric-card"><span>Total stops</span><strong>{number(totals.total)}</strong></article><article className="metric-card"><span>Incomplete</span><strong>{number(totals.incomplete)}</strong></article></section>
++      {!contractsOnly && <ResultsTable title={`${grain[0].toUpperCase() + grain.slice(1)} trend`} rows={trend} kind="trend" />}
++      {!fixedContract && <ResultsTable title="Contracts" rows={contracts} kind="contract" />}
++      {!contractsOnly && !fixedContract && <ResultsTable title="Supervisors" rows={supervisors} kind="supervisor" />}
++    </>}
++  </div>;
++}
++
++function ResultsTable({ title, rows, kind }: { title: string; rows: Row[]; kind: "trend" | "contract" | "supervisor" }) {
++  return <section className="panel overflow-hidden"><div className="panel-heading"><h2>{title}</h2><span>{kind === "contract" ? "Click a contract to drill down" : `${rows.length} results`}</span></div><div className="table-scroll"><table className="data-table"><thead><tr><th>{kind === "trend" ? "Period starting" : kind === "contract" ? "Contract" : "Supervisor"}</th><th>Loads</th><th>Total</th><th>Completed</th><th>Incomplete</th><th>Completion</th></tr></thead><tbody>{rows.map((row, index) => { const key = row.period_start || row.contract_number || row.supervisor || String(index); return <tr key={key} className={kind === "contract" && index < 10 ? "bottom-contract-row" : kind === "supervisor" && index < 5 ? "top-performer-row" : ""}><td className="font-semibold text-navy">{kind === "contract" ? <Link className="day-button" href={`/contracts/${encodeURIComponent(row.contract_number || "Unmapped")}`}>{row.contract_number}</Link> : key}</td><td>{number(row.load_count)}</td><td>{number(row.total_stops)}</td><td>{number(row.completed_stops)}</td><td>{number(row.incomplete_stops)}</td><td>{percent(row.completion_percent)}</td></tr> })}</tbody></table></div></section>;
++}
+diff --git a/lib/processors/reportProcessor.ts b/lib/processors/reportProcessor.ts
+index 8a599a0..10dffb4 100644
+--- a/lib/processors/reportProcessor.ts
++++ b/lib/processors/reportProcessor.ts
+@@ -17,6 +17,7 @@ export type ProcessedLoad = {
+   totalStops: number;
+   completedStops: number;
+   incompleteStops: number;
++  supervisors: string[];
+   tags: string;
+ };
+ 
+@@ -149,17 +150,19 @@ function supervisorNames(value: string | null | undefined) {
+     .filter((name) => name !== "Candi Tanner");
+ }
+ 
++function resolveSupervisors(row: Pick<ProcessedLoad, "contract" | "trip">, assignments: ContractAssignment[]) {
++  if (isTonyaTrip(row.contract, row.trip)) return ["Tonya Capps-Owen"];
++  const assignment = assignments.find(
++    (item) => String(item.contract_number ?? "").trim().toUpperCase() === row.contract,
++  );
++  return supervisorNames(assignment?.supervisor)
++    .filter((name) => name !== "Tonya Capps-Owen" && name !== "Tonya Owens");
++}
++
+ function buildSupervisorSummary(rows: ProcessedLoad[], assignments: ContractAssignment[]) {
+   const assignedRows: Array<ProcessedLoad & { supervisor: string }> = [];
+   rows.forEach((row) => {
+-    const assignment = assignments.find(
+-      (item) => String(item.contract_number ?? "").trim().toUpperCase() === row.contract,
+-    );
+-    const names = supervisorNames(assignment?.supervisor);
+-    const tonya = isTonyaTrip(row.contract, row.trip);
+-    const resolved = tonya
+-      ? ["Tonya Capps-Owen"]
+-      : names.filter((name) => name !== "Tonya Capps-Owen" && name !== "Tonya Owens");
++    const resolved = row.supervisors;
+     (resolved.length ? resolved : ["Unassigned"]).forEach((supervisor) => {
+       assignedRows.push({ ...row, supervisor });
+     });
+@@ -201,7 +204,7 @@ export async function processReport(file: File): Promise<ProcessedReport> {
+     seen.add(loadNumber);
+     const tags = String(row.Tags ?? "");
+     const { contract, trip } = findContract(tags, assignments);
+-    historicalLoads.push({
++    const baseLoad = {
+       loadNumber,
+       operatingDate: getOperatingDate(tags),
+       contract,
+@@ -210,7 +213,8 @@ export async function processReport(file: File): Promise<ProcessedReport> {
+       completedStops: Number(row["Stops With Timestamp"] || 0),
+       incompleteStops: Number(row["Incomplete Stops"] || 0),
+       tags,
+-    });
++    };
++    historicalLoads.push({ ...baseLoad, supervisors: resolveSupervisors(baseLoad, assignments) });
+   });
+ 
+   const reportLoads = historicalLoads.filter((row) =>
+diff --git a/lib/reportHistory.ts b/lib/reportHistory.ts
+index 7ee4a89..05f1526 100644
+--- a/lib/reportHistory.ts
++++ b/lib/reportHistory.ts
+@@ -54,6 +54,27 @@ export async function saveReportSnapshot(report: ProcessedReport) {
+   if (!user) throw new Error("Sign in with an approved DT Express account before uploading.");
+   const { error } = await supabase.from("report_history").upsert({ report_type: "usps_loads", period_start: report.periodStart, period_end: report.periodEnd, source_file: report.fileName, data: snapshot, uploaded_by: user.id, updated_at: new Date().toISOString() }, { onConflict: "report_type,period_start,period_end" });
+   if (error) throw error;
++
++  const records = report.historicalLoads.filter((load) => load.operatingDate).map((load) => ({
++    load_number: load.loadNumber,
++    operating_date: load.operatingDate,
++    contract_number: load.contract || null,
++    trip_number: load.trip,
++    supervisors: load.supervisors,
++    total_stops: load.totalStops,
++    completed_stops: load.completedStops,
++    incomplete_stops: load.incompleteStops,
++    source_file: report.fileName,
++    source_period_start: report.periodStart,
++    source_period_end: report.periodEnd,
++    uploaded_by: user.id,
++    updated_at: new Date().toISOString(),
++  }));
++  for (let index = 0; index < records.length; index += 500) {
++    const { error: loadError } = await supabase.from("usps_loads")
++      .upsert(records.slice(index, index + 500), { onConflict: "load_number" });
++    if (loadError) throw new Error(`Load history stopped near row ${index + 1}: ${loadError.message}`);
++  }
+ }
+ 
+ export async function getMissedStopsHistory(): Promise<MissedStopsSnapshot[]> {
+diff --git a/supabase/load_level_history.sql b/supabase/load_level_history.sql
+new file mode 100644
+index 0000000..c5a7111
+--- /dev/null
++++ b/supabase/load_level_history.sql
+@@ -0,0 +1,136 @@
++-- DT Intelligence Hub load-level historical reporting
++-- Run after secure_report_history.sql.
++
++create table if not exists public.usps_loads (
++  load_number text primary key,
++  operating_date date not null,
++  contract_number text,
++  trip_number text,
++  supervisors text[] not null default '{}',
++  total_stops integer not null default 0 check (total_stops >= 0),
++  completed_stops integer not null default 0 check (completed_stops >= 0),
++  incomplete_stops integer not null default 0 check (incomplete_stops >= 0),
++  source_file text not null,
++  source_period_start date not null,
++  source_period_end date not null,
++  uploaded_by uuid not null references auth.users(id),
++  updated_at timestamptz not null default now()
++);
++
++create index if not exists usps_loads_operating_date_idx on public.usps_loads (operating_date);
++create index if not exists usps_loads_contract_date_idx on public.usps_loads (contract_number, operating_date);
++create index if not exists usps_loads_supervisors_idx on public.usps_loads using gin (supervisors);
++
++create table if not exists public.report_annotations (
++  id uuid primary key default gen_random_uuid(),
++  period_start date not null,
++  period_end date not null,
++  title text not null,
++  note text not null,
++  created_by uuid references auth.users(id),
++  created_at timestamptz not null default now()
++);
++
++insert into public.report_annotations (period_start, period_end, title, note)
++select '2026-08-01', '2026-08-31', 'FourKites tracking issue',
++       'FourKites tracking problems affected results for approximately two weeks during August 2026.'
++where not exists (
++  select 1 from public.report_annotations
++  where period_start = '2026-08-01' and title = 'FourKites tracking issue'
++);
++
++alter table public.usps_loads enable row level security;
++alter table public.report_annotations enable row level security;
++
++drop policy if exists "approved employees read loads" on public.usps_loads;
++create policy "approved employees read loads" on public.usps_loads
++for select to authenticated using (public.is_approved());
++
++drop policy if exists "approved uploaders insert loads" on public.usps_loads;
++create policy "approved uploaders insert loads" on public.usps_loads
++for insert to authenticated
++with check (uploaded_by = auth.uid() and public.is_approved(array['admin', 'uploader']));
++
++drop policy if exists "approved uploaders update loads" on public.usps_loads;
++create policy "approved uploaders update loads" on public.usps_loads
++for update to authenticated
++using (public.is_approved(array['admin', 'uploader']))
++with check (uploaded_by = auth.uid() and public.is_approved(array['admin', 'uploader']));
++
++drop policy if exists "approved employees read annotations" on public.report_annotations;
++create policy "approved employees read annotations" on public.report_annotations
++for select to authenticated using (public.is_approved());
++
++drop policy if exists "admins manage annotations" on public.report_annotations;
++create policy "admins manage annotations" on public.report_annotations
++for all to authenticated using (public.is_approved(array['admin']))
++with check (public.is_approved(array['admin']));
++
++revoke all on public.usps_loads from anon;
++revoke all on public.report_annotations from anon;
++grant select, insert, update on public.usps_loads to authenticated;
++grant select, insert, update, delete on public.report_annotations to authenticated;
++
++create or replace function public.performance_trend(
++  p_start date,
++  p_end date,
++  p_grain text default 'week',
++  p_contract text default null,
++  p_supervisor text default null
++)
++returns table (
++  period_start date,
++  load_count bigint,
++  total_stops bigint,
++  completed_stops bigint,
++  incomplete_stops bigint,
++  completion_percent numeric
++)
++language sql stable security invoker set search_path = public
++as $$
++  select
++    case p_grain
++      when 'day' then l.operating_date
++      when 'month' then date_trunc('month', l.operating_date)::date
++      when 'year' then date_trunc('year', l.operating_date)::date
++      else (date_trunc('week', l.operating_date + interval '2 days') - interval '2 days')::date
++    end,
++    count(*), sum(l.total_stops), sum(l.completed_stops), sum(l.incomplete_stops),
++    case when sum(l.total_stops) = 0 then 0
++      else round(sum(l.completed_stops)::numeric / sum(l.total_stops), 6) end
++  from public.usps_loads l
++  where l.operating_date between p_start and p_end
++    and (p_contract is null or l.contract_number = p_contract)
++    and (p_supervisor is null or p_supervisor = any(l.supervisors))
++  group by 1 order by 1;
++$$;
++
++create or replace function public.contract_performance(p_start date, p_end date)
++returns table (contract_number text, load_count bigint, total_stops bigint,
++  completed_stops bigint, incomplete_stops bigint, completion_percent numeric)
++language sql stable security invoker set search_path = public
++as $$
++  select coalesce(l.contract_number, 'Unmapped'), count(*), sum(l.total_stops),
++    sum(l.completed_stops), sum(l.incomplete_stops),
++    case when sum(l.total_stops)=0 then 0 else round(sum(l.completed_stops)::numeric/sum(l.total_stops),6) end
++  from public.usps_loads l where l.operating_date between p_start and p_end
++  group by 1 order by completion_percent asc;
++$$;
++
++create or replace function public.supervisor_performance(p_start date, p_end date)
++returns table (supervisor text, load_count bigint, total_stops bigint,
++  completed_stops bigint, incomplete_stops bigint, completion_percent numeric)
++language sql stable security invoker set search_path = public
++as $$
++  select s, count(*), sum(l.total_stops), sum(l.completed_stops), sum(l.incomplete_stops),
++    case when sum(l.total_stops)=0 then 0 else round(sum(l.completed_stops)::numeric/sum(l.total_stops),6) end
++  from public.usps_loads l cross join lateral unnest(
++    case when cardinality(l.supervisors)=0 then array['Unassigned']::text[] else l.supervisors end
++  ) s
++  where l.operating_date between p_start and p_end
++  group by s order by completion_percent desc;
++$$;
++
++grant execute on function public.performance_trend(date,date,text,text,text) to authenticated;
++grant execute on function public.contract_performance(date,date) to authenticated;
++grant execute on function public.supervisor_performance(date,date) to authenticated;

@@ -1,0 +1,215 @@
+diff --git a/app/contracts/page.tsx b/app/contracts/page.tsx
+index 81a4d45..e086958 100644
+--- a/app/contracts/page.tsx
++++ b/app/contracts/page.tsx
+@@ -1,2 +1,12 @@
+-import PerformanceExplorer from "@/components/PerformanceExplorer";
+-export default function Page(){return <main className="page-shell"><header className="page-intro"><div><p className="eyebrow">Contract intelligence</p><h1>Contracts</h1><p>Select a date range, then open any contract for its trend details.</p></div></header><PerformanceExplorer contractsOnly/></main>}
++import ContractSelector from "@/components/ContractSelector";
++
++export default function Page() {
++  return <main className="page-shell">
++    <header className="page-intro"><div>
++      <p className="eyebrow">Contract intelligence</p>
++      <h1>Contracts</h1>
++      <p>Choose a contract to drill into its performance over any date range.</p>
++    </div></header>
++    <ContractSelector />
++  </main>;
++}
+diff --git a/components/ContractSelector.tsx b/components/ContractSelector.tsx
+new file mode 100644
+index 0000000..e8c67dc
+--- /dev/null
++++ b/components/ContractSelector.tsx
+@@ -0,0 +1,45 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { useRouter } from "next/navigation";
++import { supabase } from "@/lib/supabase";
++
++export default function ContractSelector() {
++  const router = useRouter();
++  const [contracts, setContracts] = useState<string[]>([]);
++  const [selected, setSelected] = useState("");
++  const [loading, setLoading] = useState(true);
++  const [error, setError] = useState("");
++
++  useEffect(() => {
++    void (async () => {
++      const result = await supabase.rpc("contract_options");
++      if (result.error) setError(result.error.message);
++      else setContracts((result.data ?? []).map((row: { contract_number: string }) => row.contract_number));
++      setLoading(false);
++    })();
++  }, []);
++
++  return <section className="panel">
++    <div className="panel-heading">
++      <div><h2>Choose a contract</h2><span>Open its daily, weekly, monthly, and yearly results.</span></div>
++    </div>
++    {error && <div className="alert alert-error">{error}</div>}
++    <div className="filter-bar">
++      <label>Contract
++        <select
++          value={selected}
++          disabled={loading}
++          onChange={(event) => {
++            const contract = event.target.value;
++            setSelected(contract);
++            if (contract) router.push(`/contracts/${encodeURIComponent(contract)}`);
++          }}
++        >
++          <option value="">{loading ? "Loading contracts…" : "Select a contract"}</option>
++          {contracts.map((contract) => <option key={contract} value={contract}>{contract}</option>)}
++        </select>
++      </label>
++    </div>
++  </section>;
++}
+diff --git a/supabase/reporting_performance_hotfix.sql b/supabase/reporting_performance_hotfix.sql
+new file mode 100644
+index 0000000..558b4f0
+--- /dev/null
++++ b/supabase/reporting_performance_hotfix.sql
+@@ -0,0 +1,139 @@
++-- Speed up historical reporting while preserving approved-employee access.
++-- Run in Supabase SQL Editor as the postgres role.
++
++create or replace function public.performance_trend(
++  p_start date,
++  p_end date,
++  p_grain text default 'week',
++  p_contract text default null,
++  p_supervisor text default null
++)
++returns table (
++  period_start date,
++  load_count bigint,
++  total_stops bigint,
++  completed_stops bigint,
++  incomplete_stops bigint,
++  completion_percent numeric
++)
++language plpgsql stable security definer set search_path = public
++as $$
++begin
++  if not public.is_approved() then
++    raise exception 'Approved DT Express account required' using errcode = '42501';
++  end if;
++
++  return query
++  select
++    case p_grain
++      when 'day' then l.operating_date
++      when 'month' then date_trunc('month', l.operating_date)::date
++      when 'year' then date_trunc('year', l.operating_date)::date
++      else (date_trunc('week', l.operating_date + interval '2 days') - interval '2 days')::date
++    end,
++    count(*), sum(l.total_stops)::bigint, sum(l.completed_stops)::bigint,
++    sum(l.incomplete_stops)::bigint,
++    case when sum(l.total_stops) = 0 then 0
++      else round(sum(l.completed_stops)::numeric / sum(l.total_stops), 6) end
++  from public.usps_loads l
++  where l.operating_date between p_start and p_end
++    and (p_contract is null or l.contract_number = p_contract)
++    and (p_supervisor is null or p_supervisor = any(l.supervisors))
++  group by 1
++  order by 1;
++end;
++$$;
++
++create or replace function public.contract_performance(p_start date, p_end date)
++returns table (contract_number text, load_count bigint, total_stops bigint,
++  completed_stops bigint, incomplete_stops bigint, completion_percent numeric)
++language plpgsql stable security definer set search_path = public
++as $$
++begin
++  if not public.is_approved() then
++    raise exception 'Approved DT Express account required' using errcode = '42501';
++  end if;
++
++  return query
++  select coalesce(l.contract_number, 'Unmapped'), count(*), sum(l.total_stops)::bigint,
++    sum(l.completed_stops)::bigint, sum(l.incomplete_stops)::bigint,
++    case when sum(l.total_stops)=0 then 0
++      else round(sum(l.completed_stops)::numeric/sum(l.total_stops),6) end
++  from public.usps_loads l
++  where l.operating_date between p_start and p_end
++  group by 1
++  order by 6 asc;
++end;
++$$;
++
++create or replace function public.supervisor_performance(p_start date, p_end date)
++returns table (supervisor text, load_count bigint, total_stops bigint,
++  completed_stops bigint, incomplete_stops bigint, completion_percent numeric)
++language plpgsql stable security definer set search_path = public
++as $$
++begin
++  if not public.is_approved() then
++    raise exception 'Approved DT Express account required' using errcode = '42501';
++  end if;
++
++  return query
++  select supervisor_name, count(*), sum(l.total_stops)::bigint,
++    sum(l.completed_stops)::bigint, sum(l.incomplete_stops)::bigint,
++    case when sum(l.total_stops)=0 then 0
++      else round(sum(l.completed_stops)::numeric/sum(l.total_stops),6) end
++  from public.usps_loads l
++  cross join lateral unnest(
++    case when cardinality(l.supervisors)=0
++      then array['Unassigned']::text[] else l.supervisors end
++  ) as supervisor_rows(supervisor_name)
++  where l.operating_date between p_start and p_end
++  group by supervisor_name
++  order by 6 desc;
++end;
++$$;
++
++create or replace function public.contract_options()
++returns table (contract_number text)
++language plpgsql stable security definer set search_path = public
++as $$
++begin
++  if not public.is_approved() then
++    raise exception 'Approved DT Express account required' using errcode = '42501';
++  end if;
++  return query
++  select distinct l.contract_number
++  from public.usps_loads l
++  where l.contract_number is not null and l.contract_number <> ''
++  order by l.contract_number;
++end;
++$$;
++
++create or replace function public.supervisor_options()
++returns table (supervisor text)
++language plpgsql stable security definer set search_path = public
++as $$
++begin
++  if not public.is_approved() then
++    raise exception 'Approved DT Express account required' using errcode = '42501';
++  end if;
++  return query
++  select distinct supervisor_name
++  from public.usps_loads l
++  cross join lateral unnest(l.supervisors) as supervisor_rows(supervisor_name)
++  where supervisor_name <> ''
++  order by supervisor_name;
++end;
++$$;
++
++revoke all on function public.performance_trend(date,date,text,text,text) from public;
++revoke all on function public.contract_performance(date,date) from public;
++revoke all on function public.supervisor_performance(date,date) from public;
++revoke all on function public.contract_options() from public;
++revoke all on function public.supervisor_options() from public;
++grant execute on function public.performance_trend(date,date,text,text,text) to authenticated;
++grant execute on function public.contract_performance(date,date) to authenticated;
++grant execute on function public.supervisor_performance(date,date) to authenticated;
++grant execute on function public.contract_options() to authenticated;
++grant execute on function public.supervisor_options() to authenticated;
++
++notify pgrst, 'reload schema';

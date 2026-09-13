@@ -17,6 +17,7 @@ export type ProcessedLoad = {
   totalStops: number;
   completedStops: number;
   incompleteStops: number;
+  supervisors: string[];
   tags: string;
 };
 
@@ -149,17 +150,19 @@ function supervisorNames(value: string | null | undefined) {
     .filter((name) => name !== "Candi Tanner");
 }
 
+function resolveSupervisors(row: Pick<ProcessedLoad, "contract" | "trip">, assignments: ContractAssignment[]) {
+  if (isTonyaTrip(row.contract, row.trip)) return ["Tonya Capps-Owen"];
+  const assignment = assignments.find(
+    (item) => String(item.contract_number ?? "").trim().toUpperCase() === row.contract,
+  );
+  return supervisorNames(assignment?.supervisor)
+    .filter((name) => name !== "Tonya Capps-Owen" && name !== "Tonya Owens");
+}
+
 function buildSupervisorSummary(rows: ProcessedLoad[], assignments: ContractAssignment[]) {
   const assignedRows: Array<ProcessedLoad & { supervisor: string }> = [];
   rows.forEach((row) => {
-    const assignment = assignments.find(
-      (item) => String(item.contract_number ?? "").trim().toUpperCase() === row.contract,
-    );
-    const names = supervisorNames(assignment?.supervisor);
-    const tonya = isTonyaTrip(row.contract, row.trip);
-    const resolved = tonya
-      ? ["Tonya Capps-Owen"]
-      : names.filter((name) => name !== "Tonya Capps-Owen" && name !== "Tonya Owens");
+    const resolved = row.supervisors;
     (resolved.length ? resolved : ["Unassigned"]).forEach((supervisor) => {
       assignedRows.push({ ...row, supervisor });
     });
@@ -201,7 +204,7 @@ export async function processReport(file: File): Promise<ProcessedReport> {
     seen.add(loadNumber);
     const tags = String(row.Tags ?? "");
     const { contract, trip } = findContract(tags, assignments);
-    historicalLoads.push({
+    const baseLoad = {
       loadNumber,
       operatingDate: getOperatingDate(tags),
       contract,
@@ -210,7 +213,8 @@ export async function processReport(file: File): Promise<ProcessedReport> {
       completedStops: Number(row["Stops With Timestamp"] || 0),
       incompleteStops: Number(row["Incomplete Stops"] || 0),
       tags,
-    });
+    };
+    historicalLoads.push({ ...baseLoad, supervisors: resolveSupervisors(baseLoad, assignments) });
   });
 
   const reportLoads = historicalLoads.filter((row) =>
