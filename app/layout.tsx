@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import NavBar from "@/components/NavBar";
 
 export const metadata: Metadata = {
-  title: "DT Operations Hub",
+  title: "DT Intelligence Hub",
   description: "Davenport Transportation operations reporting and performance intelligence",
 };
 

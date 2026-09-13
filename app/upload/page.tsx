@@ -11,7 +11,7 @@ import {
   processOperationalExceptions,
   type MissedStopSummary,
 } from "@/lib/processOperationalExceptions";
-import { saveReportSnapshot } from "@/lib/reportHistory";
+import { saveMissedStopsSnapshot, saveReportSnapshot } from "@/lib/reportHistory";
 
 function number(value: number) {
   return value.toLocaleString("en-US");
@@ -117,7 +117,7 @@ function buildEmailHtml(report: ProcessedReport) {
   const nameCell = `${cell};text-align:left;font-weight:600`;
   const supervisorRows = supervisors.map((row, index) => `<tr style="${index < 5 ? "background:#e8f5ea" : ""}"><td style="${nameCell}">${escapeHtml(row.label)}</td><td style="${cell}">${percent(row.percentComplete)}</td></tr>`).join("");
   const contractRows = report.contracts.map((row, index) => `<tr style="${index < 10 ? "background:#f9e8ea" : ""}"><td style="${nameCell}">${escapeHtml(row.label)}</td><td style="${cell}">${number(row.totalStops)}</td><td style="${cell}">${number(row.completedStops)}</td><td style="${cell}">${number(row.incompleteStops)}</td><td style="${cell}">${percent(row.percentComplete)}</td></tr>`).join("");
-  return `<div style="font-family:Arial,sans-serif;color:#243746"><h2 style="color:#123b61">Completion Totals for ${displayDate(report.periodStart)} - ${displayDate(report.periodEnd)}</h2><p><strong>Total Overall: ${percent(report.totals.percentComplete)}</strong></p>${supervisors[0] ? `<p>Congratulations to <strong>${escapeHtml(supervisors[0].label)}</strong> for the highest percentage for the week!</p>` : ""}<h3 style="color:#123b61">Supervisor Performance</h3><table style="border-collapse:collapse"><thead><tr><th style="${header}">Supervisor</th><th style="${header}">% Complete</th></tr></thead><tbody>${supervisorRows}</tbody></table><h3 style="color:#123b61">Contract Performance</h3><table style="border-collapse:collapse"><thead><tr><th style="${header}">Contract</th><th style="${header}">Total Stops</th><th style="${header}">Completed</th><th style="${header}">Incomplete</th><th style="${header}">% Complete</th></tr></thead><tbody>${contractRows}</tbody></table></div>`;
+  return `<div style="max-width:900px;margin:0 auto;background:#ffffff;font-family:Arial,sans-serif;color:#243746"><div style="background:#123b61;color:#ffffff;padding:24px 28px"><div style="font-size:12px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;color:#d7e2ec">Davenport Transportation</div><h2 style="margin:7px 0 5px;color:#ffffff">USPS Completion Report</h2><div>${displayDate(report.periodStart)} - ${displayDate(report.periodEnd)}</div></div><div style="padding:24px 28px"><div style="display:inline-block;background:#eef2f5;border-left:5px solid #123b61;padding:12px 18px;margin-bottom:12px"><span style="font-size:13px;color:#5b6b79">Total Overall</span><br><strong style="font-size:26px;color:#123b61">${percent(report.totals.percentComplete)}</strong></div>${supervisors[0] ? `<p>Congratulations to <strong>${escapeHtml(supervisors[0].label)}</strong> for the highest percentage for the week!</p>` : ""}<h3 style="margin:24px 0 8px;color:#123b61">Supervisor Performance</h3><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Supervisor</th><th style="${header}">% Complete</th></tr></thead><tbody>${supervisorRows}</tbody></table><h3 style="margin:26px 0 8px;color:#123b61">Contract Performance</h3><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Contract</th><th style="${header}">Total Stops</th><th style="${header}">Completed</th><th style="${header}">Incomplete</th><th style="${header}">% Complete</th></tr></thead><tbody>${contractRows}</tbody></table><p style="margin-top:22px;color:#6b7c8c;font-size:12px">Prepared in DT Operations Hub</p></div></div>`;
 }
 
 export default function UploadPage() {
@@ -130,6 +130,7 @@ export default function UploadPage() {
   const [copied, setCopied] = useState(false);
   const [selectedDay, setSelectedDay] = useState("");
   const email = useMemo(() => report ? buildEmail(report) : "", [report]);
+  const emailHtml = useMemo(() => report ? buildEmailHtml(report) : "", [report]);
   const selectedDayContracts = useMemo(() => {
     if (!report || !selectedDay) return [];
     const groups = new Map<string, typeof report.reportLoads>();
@@ -158,12 +159,14 @@ export default function UploadPage() {
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { bookSheets: true });
       if (workbook.SheetNames.includes("Non-Compliant Loads")) {
-        setMissedStops(await processOperationalExceptions(file));
+        const processed = await processOperationalExceptions(file);
+        setMissedStops(processed);
+        await saveMissedStopsSnapshot(file.name, processed);
         setReportType("missed");
       } else if (workbook.SheetNames.includes("Load Details")) {
         const processed = await processReport(file);
         setReport(processed);
-        saveReportSnapshot(processed);
+        await saveReportSnapshot(processed);
         window.localStorage.setItem("dt-latest-supervisor-report", JSON.stringify({
           fileName: processed.fileName,
           periodStart: processed.periodStart,
@@ -237,7 +240,7 @@ export default function UploadPage() {
           </section>
           <div className="two-column">
             <section className="panel overflow-hidden"><div className="panel-heading"><h2>Missing stops by day</h2></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Date</th><th>Loads</th><th>Missing stops</th></tr></thead><tbody>{missedStops.byDate.map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.loads)}</td><td>{number(row.missingStops)}</td></tr>)}</tbody></table></div></section>
-            <section className="panel overflow-hidden"><div className="panel-heading"><h2>Contracts with most missing stops</h2></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Loads</th><th>Missing stops</th></tr></thead><tbody>{missedStops.byContract.slice(0, 20).map((row) => <tr key={row.key} className={row.key === "Others" || row.key === "Unmapped" ? "attention-row" : ""}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.loads)}</td><td>{number(row.missingStops)}</td></tr>)}</tbody></table></div></section>
+            <section className="panel overflow-hidden"><div className="panel-heading"><h2>Contracts with most missing stops</h2><span>Top 25</span></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Loads</th><th>Missing stops</th></tr></thead><tbody>{missedStops.byContract.slice(0, 25).map((row) => <tr key={row.key} className={row.key === "Others" || row.key === "Unmapped" ? "attention-row" : ""}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.loads)}</td><td>{number(row.missingStops)}</td></tr>)}</tbody></table></div></section>
           </div>
           <section className="panel overflow-hidden"><div className="panel-heading"><h2>Most frequently missed locations</h2><span>Top 25</span></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Location</th><th>Occurrences</th></tr></thead><tbody>{missedStops.byLocation.slice(0, 25).map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.occurrences)}</td></tr>)}</tbody></table></div></section>
         </div>
@@ -279,7 +282,7 @@ export default function UploadPage() {
           </div>
           <section className="panel email-panel">
             <div className="panel-heading"><h2>Email preview</h2><button className="text-button" onClick={copyEmail}>{copied ? "Copied" : "Copy"}</button></div>
-            <pre>{email}</pre>
+            <div className="email-preview" dangerouslySetInnerHTML={{ __html: emailHtml }} />
           </section>
         </div>
       )}

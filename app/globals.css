@@ -31,6 +31,8 @@ button, input { font: inherit; }
 .main-nav { border-top: 1px solid rgb(255 255 255 / 10%); max-width: none; padding: 0 max(34px, calc((100vw - 1372px) / 2)); display: flex; overflow-x: auto; }
 .main-nav a { padding: 13px 17px; color: #dce6ef; font-size: .9rem; white-space: nowrap; border-bottom: 3px solid transparent; }
 .main-nav a:hover { color: white; background: rgb(255 255 255 / 6%); border-bottom-color: white; }
+.nav-button { border: 0; padding: 13px 17px; color: #dce6ef; background: transparent; font: inherit; font-size: .9rem; white-space: nowrap; cursor: pointer; }
+.nav-button:hover { color: white; background: rgb(255 255 255 / 6%); }
 
 .page-shell { width: min(1372px, calc(100% - 48px)); margin: 0 auto; padding: 38px 0 64px; }
 .page-intro, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
@@ -108,10 +110,17 @@ button, input { font: inherit; }
 .text-navy { color: var(--navy); }
 .two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
 .email-panel pre { max-height: 520px; overflow: auto; margin: 0; padding: 22px; color: #293a4a; background: #f8fafb; font: 13px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+.email-preview { max-height: 720px; overflow: auto; padding: 24px; background: #eef2f5; }
+.email-preview > div { border: 1px solid var(--line); box-shadow: 0 8px 26px rgb(20 45 70 / 8%); }
 .history-picker { display: grid; grid-template-columns: auto minmax(240px, 420px) 1fr; align-items: center; gap: 16px; padding: 18px 20px; }
 .history-picker label { color: var(--navy); font-weight: 800; }
 .history-picker select { border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--navy); font: inherit; font-weight: 700; padding: 11px 38px 11px 12px; }
 .history-picker span { color: var(--muted); font-size: .84rem; overflow-wrap: anywhere; }
+.history-section { margin-top: 42px; }
+.history-section .section-heading { margin: 0; }
+.login-form { width: min(100%, 460px); display: grid; gap: 10px; text-align: left; }
+.login-form label { color: var(--navy); font-weight: 800; }
+.login-form input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font: inherit; }
 
 @media (max-width: 980px) {
   .feature-grid, .metric-grid { grid-template-columns: repeat(2, 1fr); }
