@@ -4,12 +4,10 @@ import { useState } from "react";
 import { processReport } from "@/lib/processors/reportProcessor";
 import { saveContractsToDatabase } from "@/lib/saveContracts";
 import { updateContractMaster } from "@/lib/updateContractMaster";
-import { saveRawContractLoads } from "@/lib/saveRawContractLoads";
 
 export default function UploadPage() {
   const [fileName, setFileName] = useState("");
   const [contracts, setContracts] = useState<any[]>([]);
-  const [rawRows, setRawRows] = useState<any[]>([]);
 
   async function handleFileSelect(
     e: React.ChangeEvent<HTMLInputElement>
@@ -25,20 +23,13 @@ export default function UploadPage() {
     console.log(result);
 
     setContracts(result.contracts);
-    setRawRows(result.rows || []);
   }
 
   async function handleSave() {
     try {
-      await saveRawContractLoads(rawRows);
+      await updateContractMaster(contracts);
 
-      await updateContractMaster(
-        contracts
-      );
-
-      await saveContractsToDatabase(
-        contracts
-      );
+      await saveContractsToDatabase(contracts);
 
       alert(
         `${contracts.length} contracts saved successfully!`
@@ -48,7 +39,7 @@ export default function UploadPage() {
 
       alert(
         error?.message ||
-          "Failed to save contracts."
+        "Failed to save contracts."
       );
     }
   }
@@ -84,24 +75,12 @@ export default function UploadPage() {
               </button>
             </div>
 
-            <div className="mb-4 p-4 bg-blue-100 rounded">
-              <div>
-                Rows Processed:{" "}
-                {rawRows.length}
-              </div>
-
-              <div>
-                Contracts Found:{" "}
-                {contracts.length}
-              </div>
-            </div>
-
             <h2 className="text-2xl font-bold mb-4">
-              Contract Summary (
-              {contracts.length} contracts)
+              Contract Summary ({contracts.length} contracts)
             </h2>
 
             <table className="w-full border border-slate-300">
+
               <thead>
                 <tr className="bg-slate-200">
                   <th className="border p-2">
@@ -127,51 +106,35 @@ export default function UploadPage() {
               </thead>
 
               <tbody>
-                {contracts.map(
-                  (contract) => (
-                    <tr
-                      key={
-                        contract.contract
-                      }
-                    >
-                      <td className="border p-2">
-                        {
-                          contract.contract
-                        }
-                      </td>
 
-                      <td className="border p-2">
-                        {
-                          contract.totalStops
-                        }
-                      </td>
+                {contracts.map((contract) => (
+                  <tr key={contract.contract}>
+                    <td className="border p-2">
+                      {contract.contract}
+                    </td>
 
-                      <td className="border p-2">
-                        {
-                          contract.completedStops
-                        }
-                      </td>
+                    <td className="border p-2">
+                      {contract.totalStops}
+                    </td>
 
-                      <td className="border p-2">
-                        {
-                          contract.incompleteStops
-                        }
-                      </td>
+                    <td className="border p-2">
+                      {contract.completedStops}
+                    </td>
 
-                      <td className="border p-2">
-                        {(
-                          contract.percentComplete *
-                          100
-                        ).toFixed(2)}
-                        %
-                      </td>
-                    </tr>
-                  )
-                )}
+                    <td className="border p-2">
+                      {contract.incompleteStops}
+                    </td>
+
+                    <td className="border p-2">
+                      {(contract.percentComplete * 100).toFixed(2)}%
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
 
-          </>
+          </div>
+        </>
         )}
       </div>
     </main>

@@ -1,9 +1,11 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import NavBar from "@/components/NavBar";
 
 export const metadata: Metadata = {
   title: "DT Operations Hub",
-  description: "Davenport Transportation Intelligence Platform",
+  description:
+    "Davenport Transportation Intelligence Platform",
 };
 
 export default function RootLayout({
@@ -14,7 +16,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-slate-100 text-slate-900">
+
+        <NavBar />
+
         {children}
+
       </body>
     </html>
   );

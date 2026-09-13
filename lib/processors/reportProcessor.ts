@@ -36,8 +36,12 @@ export async function processReport(file: File) {
   const tags = String(
     row["Tags"] || ""
   ).toUpperCase();
-
+if (
+  tags.includes("296B8") ||
+  tags.includes("296C2")
+) {
   console.log(tags);
+}
 
   contractList.forEach((record: any) => {
       const contract = String(
