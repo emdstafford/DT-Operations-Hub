@@ -17,7 +17,9 @@ export async function processReport(file: File) {
   }
 
   const rows: any[] =
-    XLSX.utils.sheet_to_json(loadDetailsSheet);
+  XLSX.utils.sheet_to_json(loadDetailsSheet, {
+    range: 4,
+  });
 
   const contractList = await getContracts();
 
@@ -31,11 +33,13 @@ export async function processReport(file: File) {
   > = {};
 
   rows.forEach((row) => {
-    const tags = String(
-      row["Tags"] || ""
-    ).toUpperCase();
+  const tags = String(
+    row["Tags"] || ""
+  ).toUpperCase();
 
-    contractList.forEach((record: any) => {
+  console.log(tags);
+
+  contractList.forEach((record: any) => {
       const contract = String(
         record.contract_number || ""
       ).trim();
