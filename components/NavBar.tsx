@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 
 const links = [
   ["Dashboard", "/"],
+  ["Schedule Builder", "/schedule-builder"],
   ["Upload", "/upload"],
   ["History", "/history"],
 ];
