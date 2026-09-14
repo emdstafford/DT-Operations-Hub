@@ -179,8 +179,8 @@ export default function ScheduleBuilder() {
       {originalError && <p className="analysis-error">{originalError}</p>}
       {originalAnalysis && <div className="analysis-results">
         <div className="analysis-result-heading"><div><p className="eyebrow">Original schedule OCR</p><h3>{originalAnalysis.lowConfidence ? "Manual verification required" : "Pages recognized"}</h3></div><span className={originalAnalysis.lowConfidence ? "review-waiting" : "review-ready"}>{originalAnalysis.averageConfidence.toFixed(1)}% OCR confidence</span></div>
-        <div className="analysis-metrics"><div><span>Pages read</span><strong>{originalAnalysis.pagesProcessed.length}</strong></div><div><span>Trips found</span><strong>{originalAnalysis.tripIds.length}</strong></div><div><span>Frequency codes</span><strong>{originalAnalysis.frequencyCodes.length}</strong></div><div><span>Contract</span><strong>{originalAnalysis.contractNumber || "?"}</strong></div></div>
-        {comparison && <div className="schedule-difference-grid">
+        <div className="analysis-metrics"><div><span>Pages read</span><strong>{originalAnalysis.pagesProcessed.length}</strong></div><div><span>Trip candidates</span><strong>{originalAnalysis.tripIds.length}</strong></div><div><span>Frequency codes</span><strong>{originalAnalysis.frequencyCodes.length}</strong></div><div><span>Contract</span><strong>{originalAnalysis.contractNumber || "?"}</strong></div></div>
+        {comparison && !originalAnalysis.lowConfidence && <div className="schedule-difference-grid">
           <div className={comparison.contractMismatch ? "difference-alert" : ""}><span>Contract check</span><strong>{comparison.contractMismatch ? `Mismatch: ${originalAnalysis.contractNumber} / ${analysis?.contractNumber}` : "Matches"}</strong></div>
           <div><span>Trips added</span><strong>{comparison.addedTrips.join(", ") || "None detected"}</strong></div>
           <div><span>Trips removed</span><strong>{comparison.removedTrips.join(", ") || "None detected"}</strong></div>
@@ -188,7 +188,7 @@ export default function ScheduleBuilder() {
           <div><span>Annual miles change</span><strong>{comparison.milesDelta == null ? "Not confirmed" : comparison.milesDelta.toLocaleString(undefined, { maximumFractionDigits: 2, signDisplay: "always" })}</strong></div>
           <div><span>Annual hours change</span><strong>{comparison.hoursDelta == null ? "Not confirmed" : comparison.hoursDelta.toLocaleString(undefined, { maximumFractionDigits: 2, signDisplay: "always" })}</strong></div>
         </div>}
-        {originalAnalysis.warnings.map((warning) => <p className="analysis-warning" key={warning}>⚠ {warning}</p>)}
+        {originalAnalysis.lowConfidence && <p className="analysis-error"><strong>No trip, frequency, mileage, or hour differences are accepted from this run.</strong> Numeric OCR candidates may be miles, times, or NASS values rather than trip numbers.</p>}\n        {originalAnalysis.warnings.map((warning) => <p className="analysis-warning" key={warning}>⚠ {warning}</p>)}
         <p className="approval-blocker"><strong>Approval remains blocked.</strong> The next reconciliation stage must verify each stop’s name, address, NASS code, arrival/departure time, frequency, mileage, and vehicle requirement.</p>
       </div>}
     </section>
