@@ -28,9 +28,10 @@ function pageLines(items: TextItem[]) {
 
 export async function parseUspsSchedule(file: File): Promise<ScheduleAnalysis> {
   const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = typeof window === "undefined"
-    ? new URL("../node_modules/pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString()
-    : "/pdf.worker.min.mjs";
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.min.mjs",
+    import.meta.url,
+  ).toString();
   const document = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
   const lines: string[] = [];
   for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
