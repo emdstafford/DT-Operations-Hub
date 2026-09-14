@@ -70,7 +70,7 @@ export default function CompletionExplorer() {
       <label>End date<input type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
       <label>Trend grouping<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Daily</option><option value="week">Weekly (Sat–Fri)</option><option value="month">Monthly</option><option value="year">Yearly</option></select></label>
       <label>Supervisor<select value={supervisor} onChange={(event) => setSupervisor(event.target.value)}><option value="">Overall company</option>{supervisorOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
-      <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude August 2026</label>
+      <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20</label>
     </section>
 
     <PeriodAnnotations start={start} end={end} />
