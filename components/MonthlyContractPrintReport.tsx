@@ -159,7 +159,7 @@ export default function MonthlyContractPrintReport() {
     incomplete: sum.incomplete + row.incomplete_stops,
   }), { loads: 0, total: 0, completed: 0, incomplete: 0 }), [rows]);
 
-  return <section className="panel monthly-contract-report">
+  return <section className="panel monthly-contract-report" id="monthly-report">
     <div className="monthly-report-controls no-print">
       <div>
         <p className="eyebrow">Monthly printable report</p>
@@ -169,7 +169,7 @@ export default function MonthlyContractPrintReport() {
       <div className="monthly-report-actions">
         <label>Month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
         <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20</label>
-        <button className="primary-link" type="button" disabled={loading || !rows.length} onClick={() => window.print()}>Print all contracts</button>
+        <button className="primary-link" type="button" disabled={loading || !rows.length} onClick={() => window.print()}>Print All Contracts</button>
       </div>
     </div>
 
