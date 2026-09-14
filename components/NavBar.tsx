@@ -9,10 +9,6 @@ const links = [
   ["Dashboard", "/"],
   ["Upload", "/upload"],
   ["History", "/history"],
-  ["Completion", "/completion-totals"],
-  ["Supervisors", "/supervisors"],
-  ["Contracts", "/contracts"],
-  ["Sign In", "/login"],
 ];
 
 export default function NavBar() {
@@ -34,7 +30,7 @@ export default function NavBar() {
         <div className="header-status"><span className="status-dot" />{employee || "Operations reporting"}</div>
       </div>
       <nav className="main-nav" aria-label="Primary navigation">
-        {links.filter(([label]) => label !== "Sign In" || !employee).map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}
+        {links.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}
         {employee && <button className="nav-button" onClick={signOut}>Sign Out</button>}
       </nav>
     </header>
