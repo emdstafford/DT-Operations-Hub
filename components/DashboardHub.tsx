@@ -48,6 +48,7 @@ export default function DashboardHub() {
   const [missedReportCount, setMissedReportCount] = useState(0);
   const [data, setData] = useState<HubData>(empty);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -59,22 +60,37 @@ export default function DashboardHub() {
     if (latest.data) { setStart(latest.data.period_start); setEnd(latest.data.period_end); }
     setContractOptions((contracts.data ?? []).map((row: { contract_number: string }) => row.contract_number));
     setSupervisorOptions(["Unassigned", ...(supervisors.data ?? []).map((row: { supervisor: string }) => row.supervisor).filter((name: string) => name && name !== "Unassigned")]);
+    setInitialized(true);
   })(); }, []);
 
-  useEffect(() => { void (async () => {
-    setLoading(true); setError("");
-    const result = await supabase.rpc("dashboard_hub_filtered", {
-      p_start: start, p_end: end, p_grain: grain,
-      p_contracts: selectedContracts.length ? selectedContracts : null,
-      p_supervisors: selectedSupervisors.length ? selectedSupervisors : null,
-      p_exclude_august_2026: excludeAugust,
-      p_max_completion: maxCompletion === "" ? null : Number(maxCompletion) / 100,
-      p_min_missed_stops: minMissedStops === "" ? null : Number(minMissedStops),
-    });
-    if (result.error) { setError(result.error.message); setData(empty); }
-    else setData((result.data ?? empty) as HubData);
-    setLoading(false);
-  })(); }, [start, end, grain, selectedContracts, selectedSupervisors, excludeAugust, maxCompletion, minMissedStops]);
+  useEffect(() => {
+    if (!initialized) return;
+    let active = true;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20000);
+    void (async () => {
+      setLoading(true); setError("");
+      try {
+        const result = await supabase.rpc("dashboard_hub_filtered", {
+          p_start: start, p_end: end, p_grain: grain,
+          p_contracts: selectedContracts.length ? selectedContracts : null,
+          p_supervisors: selectedSupervisors.length ? selectedSupervisors : null,
+          p_exclude_august_2026: excludeAugust,
+          p_max_completion: maxCompletion === "" ? null : Number(maxCompletion) / 100,
+          p_min_missed_stops: minMissedStops === "" ? null : Number(minMissedStops),
+        }).abortSignal(controller.signal);
+        if (!active) return;
+        if (result.error) { setError(result.error.message); setData(empty); }
+        else setData((result.data ?? empty) as HubData);
+      } catch {
+        if (active) { setError("The Dashboard took too long to load. Try a shorter date range."); setData(empty); }
+      } finally {
+        window.clearTimeout(timeout);
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; window.clearTimeout(timeout); controller.abort(); };
+  }, [initialized, start, end, grain, selectedContracts, selectedSupervisors, excludeAugust, maxCompletion, minMissedStops]);
 
   useEffect(() => { void (async () => {
     const result = await supabase.from("report_history").select("data,period_start,period_end")
