@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
+import { parseUspsSchedule, type ScheduleAnalysis } from "@/lib/parseUspsSchedule";
 
 type IntakeKind = "source" | "simplified" | "driver" | "rates";
-type Intake = { name: string; size: number; sheets?: string[] };
+type Intake = { name: string; size: number; file: File; sheets?: string[]; truckSheets?: number; tripRows?: number; parkingLocations?: string[] };
 
 const slots: Array<{ kind: IntakeKind; title: string; help: string; accept: string; sensitive?: boolean }> = [
   { kind: "source", title: "Official USPS schedule", help: "Trip, stop, frequency, mileage, hours, and effective-date source", accept: ".pdf" },
@@ -21,22 +22,52 @@ export default function ScheduleBuilder() {
   const [files, setFiles] = useState<Partial<Record<IntakeKind, Intake>>>({});
   const [contract, setContract] = useState("");
   const [effectiveDate, setEffectiveDate] = useState("");
+  const [analysis, setAnalysis] = useState<ScheduleAnalysis | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
   const ready = Boolean(files.source && contract && effectiveDate);
   const workbookSheets = useMemo(() => Object.values(files).flatMap((file) => file?.sheets || []), [files]);
 
   async function choose(kind: IntakeKind, file?: File) {
     if (!file) return;
     let sheets: string[] | undefined;
+    let truckSheets: number | undefined;
+    let tripRows: number | undefined;
+    let parkingLocations: string[] | undefined;
     if (/\.(xlsx|xlsm|xls)$/i.test(file.name)) {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
       sheets = workbook.SheetNames;
+      truckSheets = sheets.filter((name) => /^TRUCK\s+\d+/i.test(name.trim())).length;
+      if (kind === "driver") {
+        const sheet = workbook.Sheets[sheets[0]];
+        const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(sheet, { header: 1, raw: false });
+        tripRows = rows.filter((row) => /^\d+$/.test(String(row[1] || "").trim())).length;
+        parkingLocations = [...new Set(rows.map((row) => String(row[0] || "").trim()).filter((value) => /parking/i.test(value)))];
+      }
     }
-    setFiles((current) => ({ ...current, [kind]: { name: file.name, size: file.size, sheets } }));
+    setFiles((current) => ({ ...current, [kind]: { name: file.name, size: file.size, file, sheets, truckSheets, tripRows, parkingLocations } }));
+    setAnalysis(null);
     if (kind === "source") {
       const match = file.name.match(/\b(\d{4}[A-Z])\b/i);
       if (match) setContract(match[1].toUpperCase());
       const date = file.name.match(/(?:eff(?:ective)?\s*)?(\d{1,2})[\s/_-]+([A-Za-z]{3}|\d{1,2})[\s/_-]+(20\d{2})/i);
       if (date && /^\d+$/.test(date[2])) setEffectiveDate(`${date[3]}-${date[1].padStart(2, "0")}-${date[2].padStart(2, "0")}`);
+    }
+  }
+
+  async function analyze() {
+    const source = files.source?.file;
+    if (!source) return;
+    setAnalyzing(true);
+    setAnalysisError("");
+    try {
+      const result = await parseUspsSchedule(source);
+      setAnalysis(result);
+      if (result.contractNumber) setContract(result.contractNumber);
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "The PDF could not be analyzed.");
+    } finally {
+      setAnalyzing(false);
     }
   }
 
@@ -74,8 +105,16 @@ export default function ScheduleBuilder() {
         <div><strong>Human approval</strong><span>An authorized schedule reviewer checks the generated truck sheets before a schedule can become Approved or be used for dispatch-system entry.</span></div>
       </div>
       {workbookSheets.length > 0 && <div className="detected-sheets"><strong>Workbook tabs detected</strong><span>{workbookSheets.join(" · ")}</span></div>}
-      <button className="primary-link schedule-action" type="button" disabled={!ready}>Analyze schedule for review</button>
-      <p className="coming-note">The analyzer button will be enabled for full PDF extraction after DT’s secure storage policies and review tables are installed.</p>
+      <button className="primary-link schedule-action" type="button" disabled={!ready || analyzing} onClick={() => void analyze()}>{analyzing ? "Analyzing on this device…" : "Analyze schedule for review"}</button>
+      {analysisError && <p className="analysis-error">{analysisError}</p>}
+      {analysis && <div className="analysis-results">
+        <div className="analysis-result-heading"><div><p className="eyebrow">Initial reconciliation</p><h3>{analysis.warnings.length ? "Review required" : "Source recognized"}</h3></div><span className={analysis.warnings.length ? "review-waiting" : "review-ready"}>{analysis.warnings.length ? `${analysis.warnings.length} warning${analysis.warnings.length === 1 ? "" : "s"}` : "Checks passed"}</span></div>
+        <div className="analysis-metrics"><div><span>PDF pages</span><strong>{analysis.pageCount}</strong></div><div><span>Trips found</span><strong>{analysis.tripIds.length}</strong></div><div><span>Frequency codes</span><strong>{analysis.frequencyCodes.length}</strong></div><div><span>Effective dates</span><strong>{analysis.effectiveDates.length}</strong></div></div>
+        <dl className="analysis-details"><div><dt>Contract</dt><dd>{analysis.contractNumber || "Not confirmed"}</dd></div><div><dt>Trips</dt><dd>{analysis.tripIds.join(", ") || "None confirmed"}</dd></div><div><dt>Frequencies</dt><dd>{analysis.frequencyCodes.map((item) => `${item.code} (${item.description})`).join(" · ") || "None confirmed"}</dd></div><div><dt>Dates found</dt><dd>{analysis.effectiveDates.join(" · ") || "None confirmed"}</dd></div><div><dt>Annual schedule</dt><dd>{analysis.annualMiles == null ? "Miles not confirmed" : `${analysis.annualMiles.toLocaleString()} miles`} · {analysis.annualHours == null ? "Hours not confirmed" : `${analysis.annualHours.toLocaleString()} hours`}</dd></div><div><dt>Change summary</dt><dd>{analysis.changeSummaryFound ? "Found" : "Not found"}</dd></div></dl>
+        {(files.simplified || files.driver) && <div className="comparison-summary"><strong>Comparison files</strong><span>{files.simplified?.truckSheets ?? 0} simplified truck tabs · {files.driver?.tripRows ?? 0} driver-schedule trip rows · {files.driver?.parkingLocations?.length ?? 0} named parking groups</span></div>}
+        {analysis.warnings.map((warning) => <p className="analysis-warning" key={warning}>⚠ {warning}</p>)}
+        <p className="coming-note">This is an intake check, not an approved schedule. Full stop-by-stop and cost reconciliation is required before approval.</p>
+      </div>}
     </section>
 
     <aside className="panel schedule-output">

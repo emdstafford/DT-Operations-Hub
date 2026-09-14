@@ -84,12 +84,18 @@ function getOperatingDate(tags: string) {
   return tags.match(/(?:^|,)(\d{4}-\d{2}-\d{2})(?:,|$)/)?.[1] ?? "";
 }
 
-function getTripInfo(tags: string) {
-  const match = tags.match(/LDT-([A-Z0-9]+)-(\d+)/i)
-    ?? tags.match(/(?:^|,)\s*([A-Z0-9]+)-(\d+)(?=,|$)/i);
-  return match
-    ? { contract: match[1].toUpperCase(), trip: String(Number(match[2])) }
-    : { contract: "", trip: null };
+function normalizeTrip(value: string) {
+  const extra = value.match(/FEV[\s#-]*(\d+)/i);
+  if (extra) return `FEV${Number(extra[1])}`;
+  return /^\d+$/.test(value.trim()) ? String(Number(value)) : value.trim().toUpperCase();
+}
+
+export function getTripInfo(tags: string) {
+  const scheduled = tags.match(/LDT-([A-Z0-9]+)-((?:FEV[\s#-]*\d+)|\d+)/i)
+    ?? tags.match(/(?:^|,)\s*([A-Z0-9]+)-((?:FEV[\s#-]*\d+)|\d+)(?=,|$)/i);
+  if (scheduled) return { contract: scheduled[1].toUpperCase(), trip: normalizeTrip(scheduled[2]) };
+  const extra = tags.match(/(?:^|[,\s])FEV[\s#-]*(\d+)(?=,|\s|$)/i);
+  return { contract: "", trip: extra ? `FEV${Number(extra[1])}` : null };
 }
 
 function findContract(tags: string, assignments: ContractAssignment[]) {
@@ -102,7 +108,7 @@ function findContract(tags: string, assignments: ContractAssignment[]) {
   });
   return {
     contract: String(assignment?.contract_number ?? "").trim().toUpperCase(),
-    trip: null,
+    trip: tripInfo.trip,
   };
 }
 
