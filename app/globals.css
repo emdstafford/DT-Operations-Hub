@@ -372,3 +372,34 @@ button, input { font: inherit; }
   .contract-health{font-size:6.5pt}
   .bottom-contract-row,.top-performer-row{background:transparent!important}
 }
+
+
+/* One-contract-per-page monthly packet */
+.monthly-report-actions input[type="number"]{width:105px;min-height:42px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff}
+.contract-packet{display:grid;gap:18px;padding:18px;background:#eef2f5}
+.contract-print-page{padding:22px;border:1px solid var(--line);border-radius:10px;background:#fff;box-shadow:0 6px 20px rgb(7 35 63 / 6%)}
+.contract-page-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding-bottom:14px;border-bottom:3px solid var(--navy-deep)}
+.contract-page-heading p{margin:0;color:var(--navy);font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em}
+.contract-page-heading h1{margin:4px 0;color:var(--navy-deep);font-size:1.8rem}
+.contract-page-heading strong{color:#46586a}
+.contract-page-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+.contract-page-summary>div{display:grid;gap:3px;padding:10px;border-radius:8px;background:#edf2f6}
+.contract-page-summary span{color:var(--muted);font-size:.68rem;font-weight:800;text-transform:uppercase}
+.contract-page-summary strong{color:var(--navy-deep);font-size:1.15rem}
+.contract-month-table th,.contract-month-table td{padding:8px 9px}
+.contract-month-table tbody .health-good{background:#dceee0;color:inherit}
+.contract-month-table tbody .health-help{background:#f7edcf;color:inherit}
+.contract-month-table tbody .health-alert{background:#f7dfe2;color:inherit}
+.contract-month-table tfoot th{background:#dfe7ee;color:var(--navy-deep)}
+@media(max-width:700px){.contract-page-summary{grid-template-columns:1fr 1fr}.contract-packet{padding:10px}.contract-print-page{padding:14px}.contract-month-table{min-width:760px}}
+@media print{
+  .contract-packet{display:block;padding:0;background:#fff}
+  .contract-print-page{min-height:9.75in;margin:0;padding:0;border:0;border-radius:0;box-shadow:none;break-after:page;page-break-after:always}
+  .contract-print-page:last-child{break-after:auto;page-break-after:auto}
+  .contract-page-heading{padding-bottom:10px}
+  .contract-page-heading h1{font-size:20pt}
+  .contract-page-summary{grid-template-columns:repeat(4,1fr);margin:10px 0}
+  .contract-page-summary>div{padding:8px}
+  .contract-month-table{min-width:0!important;font-size:8.5pt}
+  .contract-month-table th,.contract-month-table td{padding:6px!important}
+}
