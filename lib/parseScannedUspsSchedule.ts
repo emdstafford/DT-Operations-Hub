@@ -27,9 +27,9 @@ export async function parseScannedUspsSchedule(
     import.meta.url,
   ).toString();
 
-  const document = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
-  if (!Number.isInteger(firstPage) || !Number.isInteger(lastPage) || firstPage < 1 || lastPage < firstPage || lastPage > document.numPages) {
-    throw new Error(`Choose a page range between 1 and ${document.numPages}.`);
+  const pdfDocument = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  if (!Number.isInteger(firstPage) || !Number.isInteger(lastPage) || firstPage < 1 || lastPage < firstPage || lastPage > pdfDocument.numPages) {
+    throw new Error(`Choose a page range between 1 and ${pdfDocument.numPages}.`);
   }
 
   let activePage = firstPage;
@@ -50,7 +50,7 @@ export async function parseScannedUspsSchedule(
     for (let pageNumber = firstPage; pageNumber <= lastPage; pageNumber += 1) {
       activePage = pageNumber;
       onProgress?.({ page: pageNumber, totalPages: lastPage - firstPage + 1, status: "Rendering page", progress: 0 });
-      const page = await document.getPage(pageNumber);
+      const page = await pdfDocument.getPage(pageNumber);
       const viewport = page.getViewport({ scale: 2 });
       const canvas = document.createElement("canvas");
       canvas.width = Math.ceil(viewport.width);
@@ -69,7 +69,7 @@ export async function parseScannedUspsSchedule(
   }
 
   const extractedText = pages.join("\n");
-  const summary = analyzeScheduleText(extractedText, document.numPages, file.name);
+  const summary = analyzeScheduleText(extractedText, pdfDocument.numPages, file.name);
   const averageConfidence = confidences.length
     ? confidences.reduce((total, value) => total + value, 0) / confidences.length
     : 0;
