@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 type Row = { period_start?: string; contract_number?: string; supervisor?: string; load_count: number; total_stops: number; completed_stops: number; incomplete_stops: number; completion_percent: number };
 type SupervisorContractRow = Row & { supervisor: string; contract_number: string };
 type HubData = { totals: Row; trend: Row[]; contracts: Row[]; supervisors: Row[]; supervisor_contracts: SupervisorContractRow[] };
-type LocationRow = { key: string; occurrences: number };
+type LocationRow = { key: string; occurrences: number };\ntype MissedContractRow = { key: string; loads: number; missingStops: number };\ntype MissedStoredRow = { loadNumber?: string; operatingDate?: string; contract?: string; missingStops?: number; missingLocations?: string };\ntype MissedHistoryData = { rows?: MissedStoredRow[]; byLocation?: LocationRow[]; byContract?: MissedContractRow[]; totalMissingStops?: number };
 type LoadDrillRow = { load_number: string; operating_date: string; contract_number: string | null; trip_number: string | null; supervisors: string[]; total_stops: number; completed_stops: number; incomplete_stops: number };
 type TripDrillRow = { operatingDate: string; contract: string; trip: string; loads: number; loadNumbers: string[]; totalStops: number; completedStops: number; incompleteStops: number };
 const empty: HubData = { totals: { load_count: 0, total_stops: 0, completed_stops: 0, incomplete_stops: 0, completion_percent: 0 }, trend: [], contracts: [], supervisors: [], supervisor_contracts: [] };
@@ -50,7 +50,7 @@ export default function DashboardHub() {
   const [maxCompletion, setMaxCompletion] = useState("");
   const [minMissedStops, setMinMissedStops] = useState("");
   const [locations, setLocations] = useState<LocationRow[]>([]);
-  const [missedReportCount, setMissedReportCount] = useState(0);
+  const [missedReportCount, setMissedReportCount] = useState(0);\n  const [missedContracts, setMissedContracts] = useState<MissedContractRow[]>([]);\n  const [latestAvailableEnd, setLatestAvailableEnd] = useState(today);\n  const [rangeMode, setRangeMode] = useState<"day" | "week" | "month" | "custom">("week");
   const [data, setData] = useState<HubData>(empty);
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
@@ -67,7 +67,7 @@ export default function DashboardHub() {
       supabase.from("report_history").select("period_start,period_end").eq("report_type","usps_loads").order("period_end",{ascending:false}).limit(1).maybeSingle(),
       supabase.rpc("contract_options"), supabase.rpc("supervisor_options"),
     ]);
-    if (latest.data) { setStart(latest.data.period_start); setEnd(latest.data.period_end); }
+    if (latest.data) { setStart(latest.data.period_start); setEnd(latest.data.period_end); setLatestAvailableEnd(latest.data.period_end); }
     setContractOptions((contracts.data ?? []).map((row: { contract_number: string }) => row.contract_number));
     setSupervisorOptions(["Unassigned", ...(supervisors.data ?? []).map((row: { supervisor: string }) => row.supervisor).filter((name: string) => name && name !== "Unassigned")]);
     setInitialized(true);
@@ -106,16 +106,59 @@ export default function DashboardHub() {
     const result = await supabase.from("report_history").select("data,period_start,period_end")
       .eq("report_type", "missed_stops").lte("period_start", end).gte("period_end", start);
     if (result.error) return;
-    const grouped = new Map<string, number>();
+    const locationGroups = new Map<string, number>();
+    const contractGroups = new Map<string, { loads: number; missingStops: number }>();
+    const visibleContracts = new Set(data.contracts.map((row) => row.contract_number || "Unmapped"));
+    let matchingReports = 0;
+
     (result.data ?? []).forEach((record) => {
-      const rows = ((record.data as { byLocation?: LocationRow[] })?.byLocation ?? []);
-      rows.forEach((row) => grouped.set(row.key, (grouped.get(row.key) ?? 0) + Number(row.occurrences || 0)));
+      const report = record.data as MissedHistoryData;
+      const rows = report.rows ?? [];
+      const datedRows = rows.filter((row) => {
+        const date = String(row.operatingDate || "");
+        const contract = String(row.contract || "Unmapped");
+        const inDateRange = Boolean(date && date >= start && date <= end);
+        const inDashboardView = visibleContracts.size === 0 || visibleContracts.has(contract);
+        return inDateRange && inDashboardView;
+      });
+      if (datedRows.length) matchingReports += 1;
+      datedRows.forEach((row) => {
+        const contract = String(row.contract || "Unmapped");
+        const group = contractGroups.get(contract) ?? { loads: 0, missingStops: 0 };
+        group.loads += 1;
+        group.missingStops += Number(row.missingStops || 0);
+        contractGroups.set(contract, group);
+        String(row.missingLocations || "").split(",").map((value) => value.trim()).filter(Boolean).forEach((location) => {
+          locationGroups.set(location, (locationGroups.get(location) ?? 0) + 1);
+        });
+      });
     });
-    setMissedReportCount(result.data?.length ?? 0);
-    setLocations(Array.from(grouped, ([key, occurrences]) => ({ key, occurrences })).sort((a,b) => b.occurrences-a.occurrences).slice(0,25));
-  })(); }, [start, end]);
+
+    setMissedReportCount(matchingReports);
+    setLocations(Array.from(locationGroups, ([key, occurrences]) => ({ key, occurrences })).sort((a,b) => b.occurrences-a.occurrences).slice(0,25));
+    setMissedContracts(Array.from(contractGroups, ([key, value]) => ({ key, ...value })).sort((a,b) => b.missingStops-a.missingStops).slice(0,25));
+  })(); }, [start, end, data.contracts]);
 
   const maxIncomplete = useMemo(() => Math.max(1, ...data.trend.map((row) => Number(row.incomplete_stops))), [data.trend]);
+
+  function chooseRange(mode: "day" | "week" | "month") {
+    const anchor = new Date(`${latestAvailableEnd}T12:00:00Z`);
+    let rangeStart = new Date(anchor);
+    let rangeEnd = new Date(anchor);
+    if (mode === "week") {
+      rangeStart.setUTCDate(anchor.getUTCDate() - ((anchor.getUTCDay() + 1) % 7));
+      rangeEnd = new Date(rangeStart);
+      rangeEnd.setUTCDate(rangeStart.getUTCDate() + 6);
+    } else if (mode === "month") {
+      rangeStart = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1, 12));
+      rangeEnd = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 0, 12));
+    }
+    setStart(rangeStart.toISOString().slice(0, 10));
+    setEnd(rangeEnd.toISOString().slice(0, 10));
+    setGrain(mode === "month" ? "week" : "day");
+    setRangeMode(mode);
+    setSelectedDay("");
+  }
   const isEntireReport = selectedSupervisors.length === 0 && selectedContracts.length === 0 && maxCompletion === "" && minMissedStops === "";
 
   async function copyEmail() {
@@ -210,16 +253,31 @@ export default function DashboardHub() {
     finally { setReviewLoading(false); }
   }
   return <div className="report-stack">
-    <section className="panel hub-filters">
-      <label>Start date<input type="date" value={start} onChange={(event) => setStart(event.target.value)} /></label>
-      <label>End date<input type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
-      <label>View by<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Day</option><option value="week">Week (Sat–Fri)</option><option value="month">Month</option><option value="year">Year</option></select></label>
-      <MultiSelect label="Supervisors" options={supervisorOptions} selected={selectedSupervisors} setSelected={setSelectedSupervisors} />
-      <MultiSelect label="Contracts" options={contractOptions} selected={selectedContracts} setSelected={setSelectedContracts} />
-      <label>Contract completion at or below (%)<input type="number" min="0" max="100" step="0.01" value={maxCompletion} onChange={(event) => setMaxCompletion(event.target.value)} placeholder="Example: 95" /></label>
-      <label>Contract missed stops at least<input type="number" min="0" step="1" value={minMissedStops} onChange={(event) => setMinMissedStops(event.target.value)} placeholder="Example: 25" /></label>
-      <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20</label>
-      {(selectedContracts.length > 0 || selectedSupervisors.length > 0 || maxCompletion || minMissedStops) && <button className="clear-filters" onClick={() => { setSelectedContracts([]); setSelectedSupervisors([]); setMaxCompletion(""); setMinMissedStops(""); }}>Clear selections</button>}
+    <section className="panel executive-period">
+      <div className="quick-period-heading"><div><p className="eyebrow">Reporting period</p><h2>{displayDate(start)} – {displayDate(end)}</h2></div><span>Latest saved data through {displayDate(latestAvailableEnd)}</span></div>
+      <div className="quick-period-controls">
+        <div className="period-buttons" role="group" aria-label="Quick reporting period">
+          <button className={rangeMode === "day" ? "active" : ""} onClick={() => chooseRange("day")}>Latest day</button>
+          <button className={rangeMode === "week" ? "active" : ""} onClick={() => chooseRange("week")}>Latest week</button>
+          <button className={rangeMode === "month" ? "active" : ""} onClick={() => chooseRange("month")}>Latest month</button>
+        </div>
+        <div className="executive-date-fields">
+          <label>From<input type="date" value={start} onChange={(event) => { setStart(event.target.value); setRangeMode("custom"); }} /></label>
+          <label>To<input type="date" value={end} onChange={(event) => { setEnd(event.target.value); setRangeMode("custom"); }} /></label>
+        </div>
+      </div>
+      <details className="advanced-dashboard-filters">
+        <summary>Filter by supervisor, contract, or performance</summary>
+        <div className="hub-filters-clean">
+          <label>Trend view<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Day</option><option value="week">Week (Sat–Fri)</option><option value="month">Month</option><option value="year">Year</option></select></label>
+          <MultiSelect label="Supervisors" options={supervisorOptions} selected={selectedSupervisors} setSelected={setSelectedSupervisors} />
+          <MultiSelect label="Contracts" options={contractOptions} selected={selectedContracts} setSelected={setSelectedContracts} />
+          <label>Completion at or below (%)<input type="number" min="0" max="100" step="0.01" value={maxCompletion} onChange={(event) => setMaxCompletion(event.target.value)} placeholder="Example: 95" /></label>
+          <label>Missed stops at least<input type="number" min="0" step="1" value={minMissedStops} onChange={(event) => setMinMissedStops(event.target.value)} placeholder="Example: 25" /></label>
+          <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20, 2026</label>
+          {(selectedContracts.length > 0 || selectedSupervisors.length > 0 || maxCompletion || minMissedStops) && <button className="clear-filters" onClick={() => { setSelectedContracts([]); setSelectedSupervisors([]); setMaxCompletion(""); setMinMissedStops(""); }}>Clear filters</button>}
+        </div>
+      </details>
     </section>
     <PeriodAnnotations start={start} end={end} />
     {error && <div className="alert alert-error">{error.includes("dashboard_hub_filtered") ? "The dashboard database update still needs to be installed in Supabase." : error}</div>}
@@ -253,10 +311,16 @@ export default function DashboardHub() {
         <p className="drill-note">These are official TQ incomplete-stop counts. Facility names come from the separate Sunday geofence report and may not match this total.</p>
       </section>}
       <section className="hub-grid">
-        <HubTable title="Supervisors" rows={data.supervisors} kind="supervisor" highlightRankings={isEntireReport} onSupervisorSelect={(name) => setSelectedSupervisors([name])} />
-        <HubTable title="Contracts" rows={data.contracts} kind="contract" highlightRankings={isEntireReport} />
+        <section className="panel overflow-hidden"><div className="panel-heading"><h2>Missed stops by contract</h2><span>{displayDate(start)} – {displayDate(end)}</span></div>{missedContracts.length ? <div className="table-scroll hub-table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Affected Loads</th><th>Missed Geofence Stops</th></tr></thead><tbody>{missedContracts.map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.loads)}</td><td>{number(row.missingStops)}</td></tr>)}</tbody></table></div> : <div className="location-empty">No Sunday missed-stop rows fall within the selected dates.</div>}</section>
+        <section className="panel overflow-hidden"><div className="panel-heading"><h2>Missed geofence locations</h2><span>{missedReportCount ? `${missedReportCount} report${missedReportCount === 1 ? "" : "s"} with matching dates` : "No matching Sunday report rows"}</span></div>{locations.length ? <div className="table-scroll hub-table-scroll"><table className="data-table"><thead><tr><th>Location</th><th>Occurrences</th></tr></thead><tbody>{locations.map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.occurrences)}</td></tr>)}</tbody></table></div> : <div className="location-empty">Upload the Sunday missed-stops report to add location details for this period.</div>}</section>
       </section>
-      <section className="panel overflow-hidden"><div className="panel-heading"><h2>Missed Geofence Locations</h2><span>{missedReportCount ? `${missedReportCount} overlapping report${missedReportCount === 1 ? "" : "s"}` : "No Sunday report for these dates"}</span></div>{locations.length ? <div className="table-scroll"><table className="data-table"><thead><tr><th>Location</th><th>Occurrences</th></tr></thead><tbody>{locations.map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.occurrences)}</td></tr>)}</tbody></table></div> : <div className="location-empty">Upload the Sunday missed-stops report to add location details for this period.</div>}</section>
+      <details className="dashboard-detail-tables panel">
+        <summary>View all supervisors and contracts</summary>
+        <div className="hub-grid">
+          <HubTable title="Supervisors" rows={data.supervisors} kind="supervisor" highlightRankings={isEntireReport} onSupervisorSelect={(name) => setSelectedSupervisors([name])} />
+          <HubTable title="Contracts" rows={data.contracts} kind="contract" highlightRankings={isEntireReport} />
+        </div>
+      </details>
     </>}
   </div>;
 }
