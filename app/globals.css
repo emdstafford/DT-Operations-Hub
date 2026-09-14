@@ -152,7 +152,7 @@ button, input { font: inherit; }
 .hub-secondary-link { min-height:44px; display:inline-flex; align-items:center; padding:0 18px; border:1px solid var(--line); border-radius:8px; color:var(--navy); background:white; font-weight:700; }
 .hub-filters { position:relative; z-index:10; display:grid; grid-template-columns:repeat(3,minmax(140px,1fr)) repeat(2,minmax(170px,1.2fr)); gap:14px; padding:18px 20px; align-items:end; }
 .hub-filters > label, .multi-filter { min-width:0; display:grid; gap:7px; color:var(--navy); font-size:.78rem; font-weight:800; }
-.hub-filters input[type="date"], .hub-filters select, .multi-filter summary { width:100%; min-height:43px; border:1px solid var(--line); border-radius:8px; padding:10px 12px; color:var(--ink); background:white; font:inherit; font-weight:600; }
+.hub-filters input[type="date"], .hub-filters input[type="number"], .hub-filters select, .multi-filter summary { width:100%; min-height:43px; border:1px solid var(--line); border-radius:8px; padding:10px 12px; color:var(--ink); background:white; font:inherit; font-weight:600; }
 .hub-filters .filter-checkbox { min-height:43px; display:flex; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:#f8fafb; }
 .hub-filters .filter-checkbox input { width:16px; height:16px; accent-color:var(--navy); }
 .multi-filter { position:relative; }
@@ -190,6 +190,7 @@ button, input { font: inherit; }
 .attention-list em { color:#7b2430; font-style:normal; font-weight:800; }
 .attention-list small { grid-column:2/4; color:var(--muted); font-size:.7rem; }
 .hub-table-scroll { max-height:510px; overflow:auto; }
+.location-empty { padding:30px 20px; color:var(--muted); text-align:center; }
 .future-operations { margin-top:20px; padding:24px; display:flex; align-items:center; justify-content:space-between; gap:28px; }
 .future-operations h2 { margin:6px 0 8px; color:var(--navy-deep); }
 .future-operations p:not(.eyebrow) { max-width:690px; margin:0; color:var(--muted); line-height:1.55; }
