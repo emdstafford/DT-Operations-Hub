@@ -66,6 +66,7 @@ export async function parseScannedUspsSchedule(
   file: File,
   firstPage: number,
   lastPage: number,
+  rotationDegrees = 0,
   onProgress?: (progress: OcrProgress) => void,
 ): Promise<OcrScheduleAnalysis> {
   const pdfjs = await import("pdfjs-dist");
@@ -104,7 +105,8 @@ export async function parseScannedUspsSchedule(
       activePage = pageNumber;
       onProgress?.({ page: pageNumber, totalPages: lastPage - firstPage + 1, status: "Preparing a high-resolution page", progress: 0 });
       const page = await pdfDocument.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: 3 });
+      const normalizedRotation = ((page.rotate + rotationDegrees) % 360 + 360) % 360;
+      const viewport = page.getViewport({ scale: 3, rotation: normalizedRotation });
       const canvas = document.createElement("canvas");
       canvas.width = Math.ceil(viewport.width);
       canvas.height = Math.ceil(viewport.height);
