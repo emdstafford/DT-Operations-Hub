@@ -39,7 +39,12 @@ export default function ScheduleBuilder() {
   const [ocrProgress, setOcrProgress] = useState<OcrProgress | null>(null);
   const [readingOriginal, setReadingOriginal] = useState(false);
   const [originalError, setOriginalError] = useState("");
+  const [verifiedOriginalMiles, setVerifiedOriginalMiles] = useState("");
+  const [verifiedOriginalHours, setVerifiedOriginalHours] = useState("");
+  const [totalsConfirmed, setTotalsConfirmed] = useState(false);
   const ready = Boolean(files.source && contract && effectiveDate);
+  const confirmedOriginalMiles = totalsConfirmed && verifiedOriginalMiles.trim() !== "" && Number.isFinite(Number(verifiedOriginalMiles.replaceAll(",", ""))) ? Number(verifiedOriginalMiles.replaceAll(",", "")) : null;
+  const confirmedOriginalHours = totalsConfirmed && verifiedOriginalHours.trim() !== "" && Number.isFinite(Number(verifiedOriginalHours.replaceAll(",", ""))) ? Number(verifiedOriginalHours.replaceAll(",", "")) : null;
   const workbookSheets = useMemo(() => Object.values(files).flatMap((file) => file?.sheets || []), [files]);
 
   const comparison = useMemo(() => {
@@ -79,6 +84,9 @@ export default function ScheduleBuilder() {
     if (kind === "rates") {
       setOriginalAnalysis(null);
       setPageRangeConfirmed(false);
+      setVerifiedOriginalMiles("");
+      setVerifiedOriginalHours("");
+      setTotalsConfirmed(false);
     }
     if (kind === "source") {
       const match = file.name.match(/\b(\d{4}[A-Z])\b/i);
@@ -182,16 +190,28 @@ export default function ScheduleBuilder() {
       {originalAnalysis && <div className="analysis-results">
         <div className="analysis-result-heading"><div><p className="eyebrow">Original schedule OCR</p><h3>{originalAnalysis.lowConfidence ? "Manual verification required" : "Pages recognized"}</h3></div><span className={originalAnalysis.lowConfidence ? "review-waiting" : "review-ready"}>{originalAnalysis.averageConfidence.toFixed(1)}% OCR confidence</span></div>
         <div className="analysis-metrics"><div><span>Pages read</span><strong>{originalAnalysis.pagesProcessed.length}</strong></div><div><span>Trip candidates</span><strong>{originalAnalysis.tripIds.length}</strong></div><div><span>Frequency codes</span><strong>{originalAnalysis.frequencyCodes.length}</strong></div><div><span>Contract</span><strong>{originalAnalysis.contractNumber || "?"}</strong></div></div>
+        <div className="reviewer-totals">
+          <div><p className="eyebrow">Reviewer-confirmed totals</p><h4>Enter independently summed original values</h4><span>These remain separate from OCR and are used for the verified change calculation only after confirmation.</span></div>
+          <div className="reviewer-total-fields">
+            <label>Original annual miles<input inputMode="decimal" value={verifiedOriginalMiles} onChange={(event) => { setVerifiedOriginalMiles(event.target.value); setTotalsConfirmed(false); }} placeholder="Example: 602407.2" /></label>
+            <label>Original annual hours<input inputMode="decimal" value={verifiedOriginalHours} onChange={(event) => { setVerifiedOriginalHours(event.target.value); setTotalsConfirmed(false); }} placeholder="Example: 21373.84" /></label>
+          </div>
+          <label className="range-confirmation"><input type="checkbox" checked={totalsConfirmed} disabled={!verifiedOriginalMiles || !verifiedOriginalHours} onChange={(event) => setTotalsConfirmed(event.target.checked)} /><span>I independently added the original schedule miles and hours and confirm these entries match my calculation.</span></label>
+          {totalsConfirmed && confirmedOriginalMiles != null && confirmedOriginalHours != null && analysis?.annualMiles != null && analysis?.annualHours != null && <div className="verified-change-grid">
+            <div><span>Verified miles change</span><strong>{(analysis.annualMiles - confirmedOriginalMiles).toLocaleString(undefined, { maximumFractionDigits: 2, signDisplay: "always" })}</strong></div>
+            <div><span>Verified hours change</span><strong>{(analysis.annualHours - confirmedOriginalHours).toLocaleString(undefined, { maximumFractionDigits: 2, signDisplay: "always" })}</strong></div>
+          </div>}
+        </div>
         {comparison && !originalAnalysis.lowConfidence && <div className="schedule-difference-grid">
           <div className={comparison.contractMismatch ? "difference-alert" : ""}><span>Contract check</span><strong>{comparison.contractMismatch ? `Mismatch: ${originalAnalysis.contractNumber} / ${analysis?.contractNumber}` : "Matches"}</strong></div>
           <div className="difference-alert"><span>Trip comparison</span><strong>Withheld pending row-by-row validation</strong><small>{originalAnalysis.tripIds.length} OCR candidates{files.driver?.tripRows ? ` · ${files.driver.tripRows} driver-schedule rows` : ""}. Values such as vehicle code 200 are not accepted as trips.</small></div>
           <div><span>Frequency changes</span><strong>{[...comparison.addedFrequencies.map((code) => `+${code}`), ...comparison.removedFrequencies.map((code) => `−${code}`)].join(", ") || "None detected"}</strong></div>
           <div><span>Original annual miles</span><strong>{originalAnalysis.annualMiles == null ? "Not confirmed" : originalAnalysis.annualMiles.toLocaleString()}</strong></div>
           <div><span>Revised annual miles</span><strong>{analysis?.annualMiles == null ? "Not confirmed" : analysis.annualMiles.toLocaleString()}</strong></div>
-          <div><span>Annual miles change</span><strong>{comparison.milesDelta == null ? "Not confirmed" : comparison.milesDelta.toLocaleString(undefined, { maximumFractionDigits: 2, signDisplay: "always" })}</strong></div>
+          <div><span>OCR miles change</span><strong>{comparison.milesDelta == null ? "Not available" : `${comparison.milesDelta.toLocaleString(undefined, { maximumFractionDigits: 2, signDisplay: "always" })} · Draft only`}</strong></div>
           <div><span>Original annual hours</span><strong>{originalAnalysis.annualHours == null ? "Not confirmed" : originalAnalysis.annualHours.toLocaleString()}</strong></div>
           <div><span>Revised annual hours</span><strong>{analysis?.annualHours == null ? "Not confirmed" : analysis.annualHours.toLocaleString()}</strong></div>
-          <div><span>Annual hours change</span><strong>{comparison.hoursDelta == null ? "Not confirmed" : comparison.hoursDelta.toLocaleString(undefined, { maximumFractionDigits: 2, signDisplay: "always" })}</strong></div>
+          <div><span>OCR hours change</span><strong>{comparison.hoursDelta == null ? "Not available" : `${comparison.hoursDelta.toLocaleString(undefined, { maximumFractionDigits: 2, signDisplay: "always" })} · Draft only`}</strong></div>
         </div>}
         {originalAnalysis.lowConfidence && <p className="analysis-error"><strong>No trip, frequency, mileage, or hour differences are accepted from this run.</strong> Numeric OCR candidates may be miles, times, or NASS values rather than trip numbers.</p>}
         {originalAnalysis.warnings.map((warning) => <p className="analysis-warning" key={warning}>⚠ {warning}</p>)}
