@@ -83,8 +83,40 @@ function SummaryTable({
   );
 }
 
+type SupervisorContractGroup = {
+  supervisor: SummaryRow;
+  contracts: SummaryRow[];
+};
+
+function supervisorContractGroups(report: ProcessedReport): SupervisorContractGroup[] {
+  return report.supervisors
+    .filter((row) => row.key !== "Unassigned")
+    .map((supervisor) => {
+      const groups = new Map<string, typeof report.reportLoads>();
+      report.reportLoads
+        .filter((load) => load.supervisors.includes(supervisor.key))
+        .forEach((load) => groups.set(load.contract || "Unmapped", [...(groups.get(load.contract || "Unmapped") ?? []), load]));
+      const contracts = Array.from(groups.entries()).map(([key, loads]) => {
+        const totalStops = loads.reduce((sum, load) => sum + load.totalStops, 0);
+        const completedStops = loads.reduce((sum, load) => sum + load.completedStops, 0);
+        const incompleteStops = loads.reduce((sum, load) => sum + load.incompleteStops, 0);
+        return {
+          key,
+          label: supervisor.key === "Tonya Capps-Owen" ? `${key} assigned trips` : key,
+          loadCount: loads.length,
+          totalStops,
+          completedStops,
+          incompleteStops,
+          percentComplete: totalStops ? completedStops / totalStops : 0,
+        };
+      }).sort((a, b) => a.percentComplete - b.percentComplete || a.key.localeCompare(b.key));
+      return { supervisor, contracts };
+    });
+}
+
 function buildEmail(report: ProcessedReport) {
   const supervisors = report.supervisors.filter((row) => row.key !== "Unassigned");
+  const supervisorDetails = supervisorContractGroups(report);
   const lines = [
     `Completion Totals for ${displayDate(report.periodStart)} - ${displayDate(report.periodEnd)}`,
     "",
@@ -103,6 +135,12 @@ function buildEmail(report: ProcessedReport) {
   lines.push(
     `Main Total\t${report.totals.totalStops}\t${report.totals.completedStops}\t${report.totals.incompleteStops}\t${percent(report.totals.percentComplete)}`,
   );
+  lines.push("", "Supervisor Contract Detail");
+  supervisorDetails.forEach(({ supervisor, contracts }) => {
+    lines.push("", `${supervisor.label}\t${percent(supervisor.percentComplete)}`);
+    lines.push("Contract / assigned trips\tTotal Stops\tStops Completed\tStops Incomplete\t% Complete");
+    contracts.forEach((row) => lines.push(`${row.label}\t${row.totalStops}\t${row.completedStops}\t${row.incompleteStops}\t${percent(row.percentComplete)}`));
+  });
   return lines.join("\n");
 }
 
@@ -112,12 +150,17 @@ function escapeHtml(value: string) {
 
 function buildEmailHtml(report: ProcessedReport) {
   const supervisors = report.supervisors.filter((row) => row.key !== "Unassigned");
+  const supervisorDetails = supervisorContractGroups(report);
   const header = "background:#123b61;color:#fff;padding:8px;border:1px solid #d6dde3;text-align:left";
   const cell = "padding:7px 9px;border:1px solid #d6dde3;text-align:right";
   const nameCell = `${cell};text-align:left;font-weight:600`;
   const supervisorRows = supervisors.map((row, index) => `<tr style="${index < 5 ? "background:#e8f5ea" : ""}"><td style="${nameCell}">${escapeHtml(row.label)}</td><td style="${cell}">${percent(row.percentComplete)}</td></tr>`).join("");
   const contractRows = report.contracts.map((row, index) => `<tr style="${index < 10 ? "background:#f9e8ea" : ""}"><td style="${nameCell}">${escapeHtml(row.label)}</td><td style="${cell}">${number(row.totalStops)}</td><td style="${cell}">${number(row.completedStops)}</td><td style="${cell}">${number(row.incompleteStops)}</td><td style="${cell}">${percent(row.percentComplete)}</td></tr>`).join("");
-  return `<div style="max-width:900px;margin:0 auto;background:#ffffff;font-family:Arial,sans-serif;color:#243746"><div style="background:#123b61;color:#ffffff;padding:24px 28px"><div style="font-size:12px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;color:#d7e2ec">Davenport Transportation</div><h2 style="margin:7px 0 5px;color:#ffffff">USPS Completion Report</h2><div>${displayDate(report.periodStart)} - ${displayDate(report.periodEnd)}</div></div><div style="padding:24px 28px"><div style="display:inline-block;background:#eef2f5;border-left:5px solid #123b61;padding:12px 18px;margin-bottom:12px"><span style="font-size:13px;color:#5b6b79">Total Overall</span><br><strong style="font-size:26px;color:#123b61">${percent(report.totals.percentComplete)}</strong></div>${supervisors[0] ? `<p>Congratulations to <strong>${escapeHtml(supervisors[0].label)}</strong> for the highest percentage for the week!</p>` : ""}<h3 style="margin:24px 0 8px;color:#123b61">Supervisor Performance</h3><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Supervisor</th><th style="${header}">% Complete</th></tr></thead><tbody>${supervisorRows}</tbody></table><h3 style="margin:26px 0 8px;color:#123b61">Contract Performance</h3><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Contract</th><th style="${header}">Total Stops</th><th style="${header}">Completed</th><th style="${header}">Incomplete</th><th style="${header}">% Complete</th></tr></thead><tbody>${contractRows}</tbody></table><p style="margin-top:22px;color:#6b7c8c;font-size:12px">Prepared in DT Operations Hub</p></div></div>`;
+  const supervisorDetailHtml = supervisorDetails.map(({ supervisor, contracts }) => {
+    const rows = contracts.map((row) => `<tr><td style="${nameCell}">${escapeHtml(row.label)}</td><td style="${cell}">${number(row.totalStops)}</td><td style="${cell}">${number(row.completedStops)}</td><td style="${cell}">${number(row.incompleteStops)}</td><td style="${cell}">${percent(row.percentComplete)}</td></tr>`).join("");
+    return `<h4 style="margin:20px 0 6px;color:#123b61">${escapeHtml(supervisor.label)} — ${percent(supervisor.percentComplete)}</h4><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Contract / assigned trips</th><th style="${header}">Total Stops</th><th style="${header}">Completed</th><th style="${header}">Incomplete</th><th style="${header}">% Complete</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }).join("");
+  return `<div style="max-width:900px;margin:0 auto;background:#ffffff;font-family:Arial,sans-serif;color:#243746"><div style="background:#123b61;color:#ffffff;padding:24px 28px"><div style="font-size:12px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;color:#d7e2ec">Davenport Transportation</div><h2 style="margin:7px 0 5px;color:#ffffff">USPS Completion Report</h2><div>${displayDate(report.periodStart)} - ${displayDate(report.periodEnd)}</div></div><div style="padding:24px 28px"><div style="display:inline-block;background:#eef2f5;border-left:5px solid #123b61;padding:12px 18px;margin-bottom:12px"><span style="font-size:13px;color:#5b6b79">Total Overall</span><br><strong style="font-size:26px;color:#123b61">${percent(report.totals.percentComplete)}</strong></div>${supervisors[0] ? `<p>Congratulations to <strong>${escapeHtml(supervisors[0].label)}</strong> for the highest percentage for the week!</p>` : ""}<h3 style="margin:24px 0 8px;color:#123b61">Supervisor Performance</h3><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Supervisor</th><th style="${header}">% Complete</th></tr></thead><tbody>${supervisorRows}</tbody></table><h3 style="margin:26px 0 8px;color:#123b61">Contract Performance</h3><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Contract</th><th style="${header}">Total Stops</th><th style="${header}">Completed</th><th style="${header}">Incomplete</th><th style="${header}">% Complete</th></tr></thead><tbody>${contractRows}</tbody></table><h3 style="margin:30px 0 8px;color:#123b61">Supervisor Contract Detail</h3>${supervisorDetailHtml}<p style="margin-top:22px;color:#6b7c8c;font-size:12px">Prepared in DT Operations Hub</p></div></div>`;
 }
 
 export default function UploadPage() {
