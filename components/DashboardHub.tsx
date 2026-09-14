@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 
 type Row = { period_start?: string; contract_number?: string; supervisor?: string; load_count: number; total_stops: number; completed_stops: number; incomplete_stops: number; completion_percent: number };
 type HubData = { totals: Row; trend: Row[]; contracts: Row[]; supervisors: Row[] };
+type LocationRow = { key: string; occurrences: number };
 const empty: HubData = { totals: { load_count: 0, total_stops: 0, completed_stops: 0, incomplete_stops: 0, completion_percent: 0 }, trend: [], contracts: [], supervisors: [] };
 const number = (value: number) => Number(value || 0).toLocaleString("en-US");
 const percent = (value: number) => `${(Number(value || 0) * 100).toFixed(2)}%`;
@@ -35,6 +36,10 @@ export default function DashboardHub() {
   const [contractOptions, setContractOptions] = useState<string[]>([]);
   const [supervisorOptions, setSupervisorOptions] = useState<string[]>([]);
   const [excludeAugust, setExcludeAugust] = useState(false);
+  const [maxCompletion, setMaxCompletion] = useState("");
+  const [minMissedStops, setMinMissedStops] = useState("");
+  const [locations, setLocations] = useState<LocationRow[]>([]);
+  const [missedReportCount, setMissedReportCount] = useState(0);
   const [data, setData] = useState<HubData>(empty);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -57,11 +62,26 @@ export default function DashboardHub() {
       p_contracts: selectedContracts.length ? selectedContracts : null,
       p_supervisors: selectedSupervisors.length ? selectedSupervisors : null,
       p_exclude_august_2026: excludeAugust,
+      p_max_completion: maxCompletion === "" ? null : Number(maxCompletion) / 100,
+      p_min_missed_stops: minMissedStops === "" ? null : Number(minMissedStops),
     });
     if (result.error) { setError(result.error.message); setData(empty); }
     else setData((result.data ?? empty) as HubData);
     setLoading(false);
-  })(); }, [start, end, grain, selectedContracts, selectedSupervisors, excludeAugust]);
+  })(); }, [start, end, grain, selectedContracts, selectedSupervisors, excludeAugust, maxCompletion, minMissedStops]);
+
+  useEffect(() => { void (async () => {
+    const result = await supabase.from("report_history").select("data,period_start,period_end")
+      .eq("report_type", "missed_stops").lte("period_start", end).gte("period_end", start);
+    if (result.error) return;
+    const grouped = new Map<string, number>();
+    (result.data ?? []).forEach((record) => {
+      const rows = ((record.data as { byLocation?: LocationRow[] })?.byLocation ?? []);
+      rows.forEach((row) => grouped.set(row.key, (grouped.get(row.key) ?? 0) + Number(row.occurrences || 0)));
+    });
+    setMissedReportCount(result.data?.length ?? 0);
+    setLocations(Array.from(grouped, ([key, occurrences]) => ({ key, occurrences })).sort((a,b) => b.occurrences-a.occurrences).slice(0,25));
+  })(); }, [start, end]);
 
   const maxIncomplete = useMemo(() => Math.max(1, ...data.trend.map((row) => Number(row.incomplete_stops))), [data.trend]);
 
@@ -80,8 +100,10 @@ export default function DashboardHub() {
       <label>View by<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Day</option><option value="week">Week (Sat–Fri)</option><option value="month">Month</option><option value="year">Year</option></select></label>
       <MultiSelect label="Supervisors" options={supervisorOptions} selected={selectedSupervisors} setSelected={setSelectedSupervisors} />
       <MultiSelect label="Contracts" options={contractOptions} selected={selectedContracts} setSelected={setSelectedContracts} />
+      <label>Contract completion at or below (%)<input type="number" min="0" max="100" step="0.01" value={maxCompletion} onChange={(event) => setMaxCompletion(event.target.value)} placeholder="Example: 95" /></label>
+      <label>Contract missed stops at least<input type="number" min="0" step="1" value={minMissedStops} onChange={(event) => setMinMissedStops(event.target.value)} placeholder="Example: 25" /></label>
       <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20</label>
-      {(selectedContracts.length > 0 || selectedSupervisors.length > 0) && <button className="clear-filters" onClick={() => { setSelectedContracts([]); setSelectedSupervisors([]); }}>Clear selections</button>}
+      {(selectedContracts.length > 0 || selectedSupervisors.length > 0 || maxCompletion || minMissedStops) && <button className="clear-filters" onClick={() => { setSelectedContracts([]); setSelectedSupervisors([]); setMaxCompletion(""); setMinMissedStops(""); }}>Clear selections</button>}
     </section>
     <PeriodAnnotations start={start} end={end} />
     {error && <div className="alert alert-error">{error.includes("dashboard_hub_filtered") ? "The dashboard database update still needs to be installed in Supabase." : error}</div>}
@@ -101,6 +123,7 @@ export default function DashboardHub() {
         <HubTable title="Supervisors" rows={data.supervisors} kind="supervisor" />
         <HubTable title="Contracts" rows={data.contracts} kind="contract" />
       </section>
+      <section className="panel overflow-hidden"><div className="panel-heading"><h2>Sunday missed-stop locations</h2><span>{missedReportCount ? `${missedReportCount} overlapping report${missedReportCount === 1 ? "" : "s"}` : "No Sunday report for these dates"}</span></div>{locations.length ? <div className="table-scroll"><table className="data-table"><thead><tr><th>Location</th><th>Occurrences</th></tr></thead><tbody>{locations.map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.occurrences)}</td></tr>)}</tbody></table></div> : <div className="location-empty">Upload the Sunday missed-stops report to add location details for this period.</div>}</section>
     </>}
   </div>;
 }
