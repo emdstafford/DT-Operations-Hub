@@ -39,7 +39,7 @@ export default function PerformanceExplorer({ fixedContract, contractsOnly = fal
   const totals = trend.reduce((sum, row) => ({ loads: sum.loads + Number(row.load_count), total: sum.total + Number(row.total_stops), completed: sum.completed + Number(row.completed_stops), incomplete: sum.incomplete + Number(row.incomplete_stops) }), { loads: 0, total: 0, completed: 0, incomplete: 0 });
   return <div className="report-stack">
     {fixedContract && <div className="contract-print-toolbar no-print"><div><strong>Contract {fixedContract}</strong><span>Print the totals and {grain} trend for the selected dates.</span></div><button className="primary-link" type="button" disabled={loading} onClick={() => window.print()}>Print contract report</button></div>}
-    {fixedContract && <div className="print-only print-report-heading"><p>DT Intelligence Hub</p><h1>Contract {fixedContract} Performance</h1><strong>{start} – {end}</strong>{excludeAugust && <span>FourKites issue dates August 13–20 excluded</span>}</div>}
+    {fixedContract && <div className="print-only print-report-heading"><p>DT Intelligence Hub</p><h1>Contract {fixedContract} Performance</h1><strong>{start} – {end}</strong></div>}
     <section className="panel filter-bar no-print">
       <label>Start date<input type="date" value={start} onChange={(event) => setStart(event.target.value)} /></label>
       <label>End date<input type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
@@ -47,7 +47,7 @@ export default function PerformanceExplorer({ fixedContract, contractsOnly = fal
       {!contractsOnly && !fixedContract && <label>Supervisor<select value={selectedSupervisor} onChange={(event) => setSelectedSupervisor(event.target.value)}><option value="">All supervisors</option>{supervisors.filter((row) => row.supervisor && row.supervisor !== "Unassigned").map((row) => <option key={row.supervisor} value={row.supervisor}>{row.supervisor}</option>)}</select></label>}
       <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20</label>
     </section>
-    <PeriodAnnotations start={start} end={end} />
+    {!fixedContract && <PeriodAnnotations start={start} end={end} />}
     {error && <div className="alert alert-error">{error}</div>}
     {loading ? <section className="empty-state"><h2>Loading shared history…</h2></section> : <>
       <section className="metric-grid"><article className="metric-card metric-primary"><span>Completion</span><strong>{percent(totals.total ? totals.completed / totals.total : 0)}</strong></article><article className="metric-card"><span>Unique loads</span><strong>{number(totals.loads)}</strong></article><article className="metric-card"><span>Total stops</span><strong>{number(totals.total)}</strong></article><article className="metric-card"><span>Incomplete</span><strong>{number(totals.incomplete)}</strong></article></section>
