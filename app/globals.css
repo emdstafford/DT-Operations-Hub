@@ -171,6 +171,8 @@ button, input { font: inherit; }
 .dashboard-email-bar strong { display:block; color:var(--navy-deep); }
 .dashboard-email-bar span { display:block; margin-top:4px; color:var(--muted); font-size:.78rem; }
 .dashboard-email-bar button { border:0; }
+.dashboard-report-buttons { display:flex; gap:9px; }
+.dashboard-report-buttons .hub-secondary-link { border:1px solid #cbd8e3; cursor:pointer; }
 .hub-grid { display:grid; grid-template-columns:1.35fr 1fr; gap:20px; align-items:start; }
 .trend-list { padding:10px 20px 18px; }
 .trend-row { display:grid; grid-template-columns:145px 1fr 115px; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid #edf0f3; }
@@ -226,6 +228,7 @@ button, input { font: inherit; }
   .hub-actions { display:grid; grid-template-columns:1fr 1fr; }
   .hub-filters { grid-template-columns:1fr; }
   .dashboard-email-bar { align-items:stretch; flex-direction:column; }
+  .dashboard-report-buttons { display:grid; grid-template-columns:1fr; }
   .multi-menu { width:100%; }
   .trend-row { grid-template-columns:1fr 90px; }
   .trend-track { grid-column:1/3; grid-row:2; }
