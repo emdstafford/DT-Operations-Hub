@@ -1,6 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import NavBar from "@/components/NavBar";
+import AuthGate from "@/components/AuthGate";
 
 export const metadata: Metadata = {
   title: "DT Intelligence Hub",
@@ -15,8 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <NavBar />
-        {children}
+        <AuthGate>{children}</AuthGate>
       </body>
     </html>
   );
