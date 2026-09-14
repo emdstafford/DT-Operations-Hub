@@ -3,49 +3,35 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-type ContractPerformanceRow = {
+type MonthlyRow = {
   contract_number: string;
+  period_start: string;
   load_count: number;
   total_stops: number;
   completed_stops: number;
   incomplete_stops: number;
   completion_percent: number;
+  supervisors: string[] | null;
 };
 
-type SupervisorContractRow = ContractPerformanceRow & {
-  supervisor: string;
-};
-
-type AssignmentRow = {
-  contract_number: string;
-  supervisor: string;
-};
-
-type ContractPrintRow = ContractPerformanceRow & {
+type ContractPacket = {
+  contract: string;
   supervisors: string[];
-};
-
-type DashboardPayload = {
-  contracts?: ContractPerformanceRow[];
-  supervisor_contracts?: SupervisorContractRow[];
+  months: MonthlyRow[];
+  totals: {
+    loads: number;
+    total: number;
+    completed: number;
+    incomplete: number;
+  };
 };
 
 const number = (value: number) => Number(value || 0).toLocaleString("en-US");
 const percent = (value: number) => `${(Number(value || 0) * 100).toFixed(2)}%`;
 
-function monthBounds(month: string) {
-  const [year, monthNumber] = month.split("-").map(Number);
-  const start = `${year}-${String(monthNumber).padStart(2, "0")}-01`;
-  const endDate = new Date(Date.UTC(year, monthNumber, 0));
-  const end = `${year}-${String(monthNumber).padStart(2, "0")}-${String(endDate.getUTCDate()).padStart(2, "0")}`;
-  return { start, end };
-}
-
-function displayDate(value: string) {
+function monthName(value: string) {
   return new Date(`${value}T12:00:00`).toLocaleDateString("en-US", {
     month: "long",
-    day: "numeric",
-    year: "numeric",
   });
 }
 
@@ -56,158 +42,143 @@ function health(value: number) {
   return { label: "Alert", className: "health-alert" };
 }
 
-function addSupervisor(map: Map<string, Set<string>>, contract: string, supervisor: string) {
-  if (!contract || !supervisor || supervisor === "Unassigned") return;
-  const names = map.get(contract) ?? new Set<string>();
-  names.add(supervisor);
-  map.set(contract, names);
-}
-
 export default function MonthlyContractPrintReport() {
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const [month, setMonth] = useState(currentMonth);
+  const currentYear = Number(new Date().toISOString().slice(0, 4));
+  const [year, setYear] = useState(currentYear);
   const [excludeAugust, setExcludeAugust] = useState(false);
-  const [contractRows, setContractRows] = useState<ContractPerformanceRow[]>([]);
-  const [embeddedSupervisorRows, setEmbeddedSupervisorRows] = useState<SupervisorContractRow[]>([]);
-  const [assignmentRows, setAssignmentRows] = useState<AssignmentRow[]>([]);
+  const [sourceRows, setSourceRows] = useState<MonthlyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const { start, end } = useMemo(() => monthBounds(month), [month]);
+  const start = `${year}-01-01`;
+  const end = `${year}-12-31`;
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       setLoading(true);
       setError("");
-
-      const [performanceResult, assignmentResult] = await Promise.all([
-        supabase.rpc("dashboard_hub_filtered", {
-          p_start: start,
-          p_end: end,
-          p_grain: "month",
-          p_contracts: null,
-          p_supervisors: null,
-          p_exclude_august_2026: excludeAugust,
-          p_max_completion: null,
-          p_min_missed_stops: null,
-        }),
-        supabase
-          .from("contract_assignment_periods")
-          .select("contract_number, supervisor")
-          .lte("start_date", end)
-          .or(`end_date.is.null,end_date.gte.${start}`),
-      ]);
+      const result = await supabase.rpc("all_contract_monthly_performance", {
+        p_start: start,
+        p_end: end,
+        p_exclude_august_2026: excludeAugust,
+      });
 
       if (cancelled) return;
-      if (performanceResult.error) {
-        setError(performanceResult.error.message);
-        setContractRows([]);
-        setEmbeddedSupervisorRows([]);
+      if (result.error) {
+        setError(
+          result.error.message.includes("all_contract_monthly_performance")
+            ? "Install supabase/all_contract_monthly_print.sql in Supabase to enable this report."
+            : result.error.message
+        );
+        setSourceRows([]);
       } else {
-        const payload = performanceResult.data as DashboardPayload | null;
-        setContractRows(payload?.contracts ?? []);
-        setEmbeddedSupervisorRows(payload?.supervisor_contracts ?? []);
+        setSourceRows((result.data ?? []) as MonthlyRow[]);
       }
-
-      // Dated assignments are authoritative where they exist. The supervisors
-      // embedded in historical load rows remain the fallback for other contracts.
-      setAssignmentRows(assignmentResult.error ? [] : (assignmentResult.data ?? []) as AssignmentRow[]);
       setLoading(false);
     })();
 
     return () => { cancelled = true; };
   }, [start, end, excludeAugust]);
 
-  const rows = useMemo<ContractPrintRow[]>(() => {
-    const embeddedByContract = new Map<string, Set<string>>();
-    const datedByContract = new Map<string, Set<string>>();
-
-    for (const row of embeddedSupervisorRows) {
-      addSupervisor(embeddedByContract, row.contract_number || "Unmapped", row.supervisor);
-    }
-    for (const row of assignmentRows) {
-      addSupervisor(datedByContract, row.contract_number, row.supervisor);
-    }
-
-    return contractRows.map((row) => {
+  const packets = useMemo<ContractPacket[]>(() => {
+    const grouped = new Map<string, MonthlyRow[]>();
+    for (const source of sourceRows) {
+      const row = {
+        ...source,
+        load_count: Number(source.load_count),
+        total_stops: Number(source.total_stops),
+        completed_stops: Number(source.completed_stops),
+        incomplete_stops: Number(source.incomplete_stops),
+        completion_percent: Number(source.completion_percent),
+        supervisors: Array.isArray(source.supervisors) ? source.supervisors : [],
+      };
       const contract = row.contract_number || "Unmapped";
-      const authoritative = datedByContract.get(contract);
-      const fallback = embeddedByContract.get(contract);
-      const supervisors = [...(authoritative?.size ? authoritative : fallback ?? new Set<string>())]
-        .sort((a, b) => a.localeCompare(b));
+      const months = grouped.get(contract) ?? [];
+      months.push(row);
+      grouped.set(contract, months);
+    }
+
+    return [...grouped.entries()].map(([contract, months]) => {
+      months.sort((a, b) => a.period_start.localeCompare(b.period_start));
+      const supervisorSet = new Set<string>();
+      months.forEach((row) => row.supervisors?.forEach((name) => {
+        if (name && name !== "Unassigned") supervisorSet.add(name);
+      }));
+      const totals = months.reduce((sum, row) => ({
+        loads: sum.loads + row.load_count,
+        total: sum.total + row.total_stops,
+        completed: sum.completed + row.completed_stops,
+        incomplete: sum.incomplete + row.incomplete_stops,
+      }), { loads: 0, total: 0, completed: 0, incomplete: 0 });
 
       return {
-        contract_number: contract,
-        supervisors: supervisors.length ? supervisors : ["Unassigned"],
-        load_count: Number(row.load_count),
-        total_stops: Number(row.total_stops),
-        completed_stops: Number(row.completed_stops),
-        incomplete_stops: Number(row.incomplete_stops),
-        completion_percent: Number(row.completion_percent),
+        contract,
+        supervisors: supervisorSet.size ? [...supervisorSet].sort((a, b) => a.localeCompare(b)) : ["Unassigned"],
+        months,
+        totals,
       };
-    }).sort((a, b) =>
-      a.completion_percent - b.completion_percent ||
-      a.contract_number.localeCompare(b.contract_number)
-    );
-  }, [contractRows, embeddedSupervisorRows, assignmentRows]);
-
-  const totals = useMemo(() => rows.reduce((sum, row) => ({
-    loads: sum.loads + row.load_count,
-    total: sum.total + row.total_stops,
-    completed: sum.completed + row.completed_stops,
-    incomplete: sum.incomplete + row.incomplete_stops,
-  }), { loads: 0, total: 0, completed: 0, incomplete: 0 }), [rows]);
+    }).sort((a, b) => a.contract.localeCompare(b.contract));
+  }, [sourceRows]);
 
   return <section className="panel monthly-contract-report" id="monthly-report">
     <div className="monthly-report-controls no-print">
       <div>
-        <p className="eyebrow">Monthly printable report</p>
-        <h2>All contract totals</h2>
-        <p>One line per contract with every supervisor assigned during that month.</p>
+        <p className="eyebrow">Printable contract packet</p>
+        <h2>All contracts by month</h2>
+        <p>Every contract prints on its own page with its supervisor and January–December results.</p>
       </div>
       <div className="monthly-report-actions">
-        <label>Month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
+        <label>Report year
+          <input type="number" min="2023" max="2100" value={year} onChange={(event) => setYear(Number(event.target.value) || currentYear)} />
+        </label>
         <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20</label>
-        <button className="primary-link" type="button" disabled={loading || !rows.length} onClick={() => window.print()}>Print All Contracts</button>
+        <button className="primary-link" type="button" disabled={loading || !packets.length} onClick={() => window.print()}>Print All Contracts</button>
       </div>
-    </div>
-
-    <div className="print-only print-report-heading">
-      <p>DT Intelligence Hub</p>
-      <h1>Monthly Contract Performance</h1>
-      <strong>{displayDate(start)} – {displayDate(end)}</strong>
     </div>
 
     {error && <div className="alert alert-error">{error}</div>}
-    {loading ? <div className="hub-loading">Loading monthly contract totals…</div> :
-      rows.length ? <>
-        <div className="monthly-report-summary">
-          <span><strong>{rows.length}</strong> contracts</span>
-          <span><strong>{number(totals.loads)}</strong> loads</span>
-          <span><strong>{number(totals.total)}</strong> total stops</span>
-          <span><strong>{number(totals.incomplete)}</strong> incomplete</span>
-          <span><strong>{percent(totals.total ? totals.completed / totals.total : 0)}</strong> completion</span>
-        </div>
-        <div className="table-scroll monthly-print-table-wrap">
-          <table className="data-table monthly-print-table">
-            <thead><tr><th>Contract</th><th>Supervisor</th><th>Loads</th><th>Total</th><th>Completed</th><th>Incomplete</th><th>Completion</th><th>Status</th></tr></thead>
-            <tbody>{rows.map((row) => {
-              const status = health(row.completion_percent);
-              return <tr key={row.contract_number}>
-                <td className="font-semibold text-navy">{row.contract_number}</td>
-                <td>{row.supervisors.join(" / ")}</td>
-                <td>{number(row.load_count)}</td>
-                <td>{number(row.total_stops)}</td>
-                <td>{number(row.completed_stops)}</td>
-                <td>{number(row.incomplete_stops)}</td>
-                <td>{percent(row.completion_percent)}</td>
-                <td><span className={`contract-health ${status.className}`}>{status.label}</span></td>
-              </tr>;
-            })}</tbody>
-            <tfoot><tr><th colSpan={2}>All contracts</th><th>{number(totals.loads)}</th><th>{number(totals.total)}</th><th>{number(totals.completed)}</th><th>{number(totals.incomplete)}</th><th>{percent(totals.total ? totals.completed / totals.total : 0)}</th><th /></tr></tfoot>
-          </table>
-        </div>
-      </> : <div className="location-empty">No contract data was found for this month.</div>}
+    {loading ? <div className="hub-loading">Building the contract packet…</div> :
+      packets.length ? <div className="contract-packet">
+        {packets.map((packet) => {
+          const overallCompletion = packet.totals.total ? packet.totals.completed / packet.totals.total : 0;
+          const overallHealth = health(overallCompletion);
+          return <article className="contract-print-page" key={packet.contract}>
+            <header className="contract-page-heading">
+              <div>
+                <p>DT Intelligence Hub · {year}</p>
+                <h1>Contract {packet.contract}</h1>
+                <strong>Supervisor{packet.supervisors.length === 1 ? "" : "s"}: {packet.supervisors.join(" / ")}</strong>
+              </div>
+              <span className={`contract-health ${overallHealth.className}`}>{overallHealth.label}</span>
+            </header>
+
+            <div className="contract-page-summary">
+              <div><span>Completion</span><strong>{percent(overallCompletion)}</strong></div>
+              <div><span>Loads</span><strong>{number(packet.totals.loads)}</strong></div>
+              <div><span>Total stops</span><strong>{number(packet.totals.total)}</strong></div>
+              <div><span>Incomplete</span><strong>{number(packet.totals.incomplete)}</strong></div>
+            </div>
+
+            <table className="data-table contract-month-table">
+              <thead><tr><th>Month</th><th>Supervisor</th><th>Loads</th><th>Total</th><th>Completed</th><th>Incomplete</th><th>Completion</th></tr></thead>
+              <tbody>{packet.months.map((row) => {
+                const status = health(row.completion_percent);
+                const supervisors = row.supervisors?.filter((name) => name && name !== "Unassigned") ?? [];
+                return <tr key={row.period_start} className={status.className}>
+                  <th>{monthName(row.period_start)}</th>
+                  <td>{supervisors.length ? supervisors.join(" / ") : "Unassigned"}</td>
+                  <td>{number(row.load_count)}</td>
+                  <td>{number(row.total_stops)}</td>
+                  <td>{number(row.completed_stops)}</td>
+                  <td>{number(row.incomplete_stops)}</td>
+                  <td><strong>{percent(row.completion_percent)}</strong></td>
+                </tr>;
+              })}</tbody>
+              <tfoot><tr><th>Year total</th><th>{packet.supervisors.join(" / ")}</th><th>{number(packet.totals.loads)}</th><th>{number(packet.totals.total)}</th><th>{number(packet.totals.completed)}</th><th>{number(packet.totals.incomplete)}</th><th>{percent(overallCompletion)}</th></tr></tfoot>
+            </table>
+          </article>;
+        })}
+      </div> : <div className="location-empty">No contract data was found for {year}.</div>}
   </section>;
 }
