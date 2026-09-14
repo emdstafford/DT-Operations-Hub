@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import PeriodAnnotations from "@/components/PeriodAnnotations";
 
 type TrendRow = { period_start: string; load_count: number; total_stops: number; completed_stops: number; incomplete_stops: number; completion_percent: number };
 type ContractRow = Omit<TrendRow, "period_start"> & { contract_number: string };
@@ -67,6 +68,8 @@ export default function CompletionExplorer() {
       <label>Trend grouping<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Daily</option><option value="week">Weekly (Sat–Fri)</option><option value="month">Monthly</option><option value="year">Yearly</option></select></label>
       <label>Supervisor<select value={supervisor} onChange={(event) => setSupervisor(event.target.value)}><option value="">Overall company</option>{supervisorOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
     </section>
+
+    <PeriodAnnotations start={start} end={end} />
 
     {error && <div className="alert alert-error">{error}</div>}
     {loading ? <section className="empty-state"><h2>Loading shared history…</h2></section> : <>
