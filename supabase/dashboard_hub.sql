@@ -25,7 +25,9 @@ begin
     from public.usps_loads l
     where l.operating_date between p_start and p_end
       and (coalesce(cardinality(p_contracts), 0) = 0 or l.contract_number = any(p_contracts))
-      and (coalesce(cardinality(p_supervisors), 0) = 0 or l.supervisors && p_supervisors)
+      and (coalesce(cardinality(p_supervisors), 0) = 0
+        or l.supervisors && p_supervisors
+        or ('Unassigned' = any(p_supervisors) and cardinality(l.supervisors) = 0))
       and (not p_exclude_august_2026
         or l.operating_date not between date '2026-08-13' and date '2026-08-20')
   ),
