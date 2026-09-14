@@ -8,7 +8,7 @@ export default function MissedStopsPage() {
         </h1>
 
         <div className="bg-yellow-100 p-4 rounded mb-6">
-          Sunday Missed Stops Analysis
+          Missed Stops Analysis
         </div>
 
         <div>
