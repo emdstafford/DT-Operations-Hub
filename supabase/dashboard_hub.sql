@@ -7,7 +7,9 @@ create or replace function public.dashboard_hub_filtered(
   p_grain text default 'week',
   p_contracts text[] default null,
   p_supervisors text[] default null,
-  p_exclude_august_2026 boolean default false
+  p_exclude_august_2026 boolean default false,
+  p_max_completion numeric default null,
+  p_min_missed_stops integer default null
 )
 returns jsonb
 language plpgsql stable security definer set search_path = public
@@ -18,7 +20,7 @@ begin
     raise exception 'Approved DT Express account required' using errcode = '42501';
   end if;
 
-  with filtered as materialized (
+  with eligible_base as materialized (
     select l.*
     from public.usps_loads l
     where l.operating_date between p_start and p_end
@@ -26,6 +28,18 @@ begin
       and (coalesce(cardinality(p_supervisors), 0) = 0 or l.supervisors && p_supervisors)
       and (not p_exclude_august_2026
         or l.operating_date not between date '2026-08-13' and date '2026-08-20')
+  ),
+  eligible_contracts as (
+    select contract_number
+    from eligible_base
+    group by contract_number
+    having (p_max_completion is null or
+      case when sum(total_stops)=0 then 0 else sum(completed_stops)::numeric/sum(total_stops) end <= p_max_completion)
+      and (p_min_missed_stops is null or sum(incomplete_stops) >= p_min_missed_stops)
+  ),
+  filtered as materialized (
+    select b.* from eligible_base b
+    join eligible_contracts c on c.contract_number is not distinct from b.contract_number
   ),
   totals as (
     select count(*)::bigint load_count,
@@ -75,6 +89,6 @@ begin
 end;
 $$;
 
-revoke all on function public.dashboard_hub_filtered(date,date,text,text[],text[],boolean) from public;
-grant execute on function public.dashboard_hub_filtered(date,date,text,text[],text[],boolean) to authenticated;
+revoke all on function public.dashboard_hub_filtered(date,date,text,text[],text[],boolean,numeric,integer) from public;
+grant execute on function public.dashboard_hub_filtered(date,date,text,text[],text[],boolean,numeric,integer) to authenticated;
 notify pgrst, 'reload schema';
