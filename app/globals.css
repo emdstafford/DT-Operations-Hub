@@ -326,3 +326,49 @@ button, input { font: inherit; }
 .trip-review-check input{width:16px;height:16px;accent-color:var(--navy)}
 @media(max-width:900px){.trip-reconciliation{grid-column:1}.reconciliation-summary{grid-template-columns:1fr 1fr}}
 @media(max-width:600px){.reconciliation-summary{grid-template-columns:1fr}.reconciliation-table-wrap{max-height:none}.reconciliation-table{min-width:650px}}
+
+
+/* Printable contract reports */
+.print-only{display:none}
+.contract-print-toolbar,.monthly-report-controls{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 19px;border:1px solid #cbd8e3;border-radius:10px;background:#edf3f8}
+.contract-print-toolbar strong,.monthly-report-controls h2{display:block;margin:.15rem 0;color:var(--navy-deep)}
+.contract-print-toolbar span,.monthly-report-controls p:not(.eyebrow){display:block;margin:.25rem 0 0;color:var(--muted);font-size:.78rem}
+.contract-print-toolbar button,.monthly-report-controls button{border:0}
+.monthly-contract-report{margin-top:20px;overflow:hidden}
+.monthly-report-controls{border:0;border-bottom:1px solid var(--line);border-radius:0;background:#f5f8fa}
+.monthly-report-actions{display:flex;align-items:flex-end;gap:10px}
+.monthly-report-actions>label{display:grid;gap:5px;color:var(--navy);font-size:.72rem;font-weight:800}
+.monthly-report-actions input[type="month"]{min-height:42px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff}
+.monthly-report-actions .filter-checkbox{min-height:42px;display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;white-space:nowrap}
+.monthly-report-summary{display:flex;flex-wrap:wrap;gap:8px;padding:14px 18px;border-bottom:1px solid var(--line);background:#fff}
+.monthly-report-summary span{padding:7px 10px;border-radius:7px;color:#526171;background:#eef2f5;font-size:.75rem}
+.monthly-report-summary strong{color:var(--navy-deep)}
+.monthly-print-table tfoot th{background:#e7edf2;color:var(--navy-deep)}
+@media(max-width:900px){.monthly-report-controls{align-items:stretch;flex-direction:column}.monthly-report-actions{align-items:stretch;flex-direction:column}.monthly-report-actions button{width:100%}}
+@media print{
+  @page{size:portrait;margin:.45in}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  html,body{background:#fff!important}
+  .site-header,.no-print,.page-intro{display:none!important}
+  .print-only{display:block!important}
+  .page-shell{width:100%;margin:0;padding:0}
+  .report-stack{gap:10px}
+  .print-report-heading{margin:0 0 14px;padding-bottom:10px;border-bottom:3px solid var(--navy-deep)}
+  .print-report-heading p{margin:0;color:var(--navy);font-size:9pt;font-weight:800;text-transform:uppercase;letter-spacing:.1em}
+  .print-report-heading h1{margin:4px 0;color:var(--navy-deep);font-size:20pt}
+  .print-report-heading strong,.print-report-heading span{display:block;color:#46586a;font-size:9pt}
+  .panel{box-shadow:none!important}
+  .metric-grid{grid-template-columns:repeat(4,1fr)!important;gap:7px}
+  .metric-card{min-height:auto;padding:10px!important}
+  .metric-card strong{font-size:16pt!important}
+  .monthly-contract-report{margin:0;border:0}
+  .monthly-report-summary{padding:8px 0}
+  .monthly-print-table-wrap,.table-scroll{max-height:none!important;overflow:visible!important}
+  .data-table,.monthly-print-table{width:100%;font-size:8pt}
+  .data-table th,.data-table td,.monthly-print-table th,.monthly-print-table td{padding:5px 6px!important}
+  .data-table thead{display:table-header-group}
+  .data-table tfoot{display:table-footer-group}
+  .data-table tr{break-inside:avoid}
+  .contract-health{font-size:6.5pt}
+  .bottom-contract-row,.top-performer-row{background:transparent!important}
+}
