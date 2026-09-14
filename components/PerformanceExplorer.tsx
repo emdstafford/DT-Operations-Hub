@@ -43,7 +43,7 @@ export default function PerformanceExplorer({ fixedContract, contractsOnly = fal
       <label>End date<input type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
       <label>Trend grouping<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Daily</option><option value="week">Weekly (Sat–Fri)</option><option value="month">Monthly</option><option value="year">Yearly</option></select></label>
       {!contractsOnly && !fixedContract && <label>Supervisor<select value={selectedSupervisor} onChange={(event) => setSelectedSupervisor(event.target.value)}><option value="">All supervisors</option>{supervisors.filter((row) => row.supervisor && row.supervisor !== "Unassigned").map((row) => <option key={row.supervisor} value={row.supervisor}>{row.supervisor}</option>)}</select></label>}
-      <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude August 2026</label>
+      <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20</label>
     </section>
     <PeriodAnnotations start={start} end={end} />
     {error && <div className="alert alert-error">{error}</div>}
