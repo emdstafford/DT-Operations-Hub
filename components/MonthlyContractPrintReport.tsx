@@ -35,13 +35,6 @@ function monthName(value: string) {
   });
 }
 
-function health(value: number) {
-  const score = Number(value || 0);
-  if (score >= 0.95) return { label: "Good", className: "health-good" };
-  if (score >= 0.9) return { label: "Needs help", className: "health-help" };
-  return { label: "Alert", className: "health-alert" };
-}
-
 export default function MonthlyContractPrintReport() {
   const currentYear = Number(new Date().toISOString().slice(0, 4));
   const [year, setYear] = useState(currentYear);
@@ -142,7 +135,6 @@ export default function MonthlyContractPrintReport() {
       packets.length ? <div className="contract-packet">
         {packets.map((packet) => {
           const overallCompletion = packet.totals.total ? packet.totals.completed / packet.totals.total : 0;
-          const overallHealth = health(overallCompletion);
           return <article className="contract-print-page" key={packet.contract}>
             <header className="contract-page-heading">
               <div>
@@ -150,7 +142,6 @@ export default function MonthlyContractPrintReport() {
                 <h1>Contract {packet.contract}</h1>
                 <strong>Supervisor{packet.supervisors.length === 1 ? "" : "s"}: {packet.supervisors.join(" / ")}</strong>
               </div>
-              <span className={`contract-health ${overallHealth.className}`}>{overallHealth.label}</span>
             </header>
 
             <div className="contract-page-summary">
@@ -163,9 +154,8 @@ export default function MonthlyContractPrintReport() {
             <table className="data-table contract-month-table">
               <thead><tr><th>Month</th><th>Supervisor</th><th>Loads</th><th>Total</th><th>Completed</th><th>Incomplete</th><th>Completion</th></tr></thead>
               <tbody>{packet.months.map((row) => {
-                const status = health(row.completion_percent);
                 const supervisors = row.supervisors?.filter((name) => name && name !== "Unassigned") ?? [];
-                return <tr key={row.period_start} className={status.className}>
+                return <tr key={row.period_start}>
                   <th>{monthName(row.period_start)}</th>
                   <td>{supervisors.length ? supervisors.join(" / ") : "Unassigned"}</td>
                   <td>{number(row.load_count)}</td>
