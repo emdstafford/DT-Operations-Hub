@@ -83,6 +83,20 @@ export default function ScheduleBuilder() {
   const confirmedOriginalMiles = totalsConfirmed && verifiedOriginalMiles.trim() !== "" && Number.isFinite(Number(verifiedOriginalMiles.replaceAll(",", ""))) ? Number(verifiedOriginalMiles.replaceAll(",", "")) : null;
   const confirmedOriginalHours = totalsConfirmed && verifiedOriginalHours.trim() !== "" && Number.isFinite(Number(verifiedOriginalHours.replaceAll(",", ""))) ? Number(verifiedOriginalHours.replaceAll(",", "")) : null;
   const workbookSheets = useMemo(() => Object.values(files).flatMap((file) => file?.sheets || []), [files]);
+  const timelineEvents = useMemo(() => {
+    const events = new Map<string, { date: string; affectedTrips: Set<string>; newTrips: Set<string>; exhibits: number }>();
+    serviceChanges.forEach((change) => {
+      const dates = change.effectiveDates.split(",").map((value) => value.trim()).filter(Boolean);
+      (dates.length ? dates : ["Date required"]).forEach((date) => {
+        const event = events.get(date) ?? { date, affectedTrips: new Set<string>(), newTrips: new Set<string>(), exhibits: 0 };
+        change.affectedTrips.split(",").map((value) => value.trim()).filter(Boolean).forEach((trip) => event.affectedTrips.add(trip));
+        change.newTrips.split(",").map((value) => value.trim()).filter(Boolean).forEach((trip) => event.newTrips.add(trip));
+        event.exhibits += 1;
+        events.set(date, event);
+      });
+    });
+    return [...events.values()].sort((a, b) => a.date.localeCompare(b.date));
+  }, [serviceChanges]);
 
   const comparison = useMemo(() => {
     if (!analysis || !originalAnalysis) return null;
@@ -292,7 +306,7 @@ export default function ScheduleBuilder() {
       <div className="section-heading"><div><p className="eyebrow">Version timeline</p><h2>{contract || "Contract"} schedule history</h2></div><span className="review-waiting">Draft intake</span></div>
       <div className="timeline-list">
         <article><span>Baseline</span><strong>Original schedule</strong><small>{originalEffectiveDate || "Effective date required"}</small></article>
-        {serviceChanges.flatMap((change) => (change.effectiveDates.split(",").map((value) => value.trim()).filter(Boolean).length ? change.effectiveDates.split(",").map((value) => value.trim()).filter(Boolean) : ["Date required"]).map((date) => ({ change, date }))).sort((a, b) => a.date.localeCompare(b.date)).map(({ change, date }, index) => <article key={`${change.id}-${date}-${index}`}><span>Service change</span><strong>{date}</strong><small>{change.affectedTrips ? `Trips ${change.affectedTrips}` : "Affected trips require confirmation"}{change.newTrips ? ` · New trips ${change.newTrips}` : ""}</small></article>)}
+        {timelineEvents.map((event) => <article key={event.date}><span>Service-change package · {event.exhibits} exhibit{event.exhibits === 1 ? "" : "s"}</span><strong>{event.date}</strong><small>{event.affectedTrips.size ? `Affected trips ${[...event.affectedTrips].join(", ")}` : "Affected trips require confirmation"}{event.newTrips.size ? ` · New trips ${[...event.newTrips].join(", ")}` : ""}</small></article>)}
         <article><span>Consolidated source</span><strong>Newest schedule</strong><small>{effectiveDate || "Effective date required"}</small></article>
       </div>
       <p className="coming-note">This timeline is a local Draft. Saving versions to the shared contract record will be enabled only after secure schedule tables and approval policies are installed.</p>
