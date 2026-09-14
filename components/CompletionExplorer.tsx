@@ -16,6 +16,7 @@ export default function CompletionExplorer() {
   const [end, setEnd] = useState(today);
   const [grain, setGrain] = useState("week");
   const [supervisor, setSupervisor] = useState("");
+  const [excludeAugust, setExcludeAugust] = useState(false);
   const [supervisorOptions, setSupervisorOptions] = useState<string[]>([]);
   const [trend, setTrend] = useState<TrendRow[]>([]);
   const [contracts, setContracts] = useState<ContractRow[]>([]);
@@ -34,9 +35,10 @@ export default function CompletionExplorer() {
     void (async () => {
       setLoading(true);
       setError("");
-      const trendResult = await supabase.rpc("performance_trend", {
+      const trendResult = await supabase.rpc("performance_trend_filtered", {
         p_start: start, p_end: end, p_grain: grain,
         p_contract: null, p_supervisor: supervisor || null,
+        p_exclude_august_2026: excludeAugust,
       });
       if (trendResult.error) {
         setError(trendResult.error.message);
@@ -44,15 +46,16 @@ export default function CompletionExplorer() {
       } else setTrend((trendResult.data ?? []) as TrendRow[]);
 
       if (supervisor) {
-        const contractResult = await supabase.rpc("supervisor_contract_performance", {
+        const contractResult = await supabase.rpc("supervisor_contract_performance_filtered", {
           p_start: start, p_end: end, p_supervisor: supervisor,
+          p_exclude_august_2026: excludeAugust,
         });
         if (contractResult.error) setError(contractResult.error.message);
         setContracts((contractResult.data ?? []) as ContractRow[]);
       } else setContracts([]);
       setLoading(false);
     })();
-  }, [start, end, grain, supervisor]);
+  }, [start, end, grain, supervisor, excludeAugust]);
 
   const totals = trend.reduce((sum, row) => ({
     loads: sum.loads + Number(row.load_count),
@@ -67,6 +70,7 @@ export default function CompletionExplorer() {
       <label>End date<input type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
       <label>Trend grouping<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Daily</option><option value="week">Weekly (Sat–Fri)</option><option value="month">Monthly</option><option value="year">Yearly</option></select></label>
       <label>Supervisor<select value={supervisor} onChange={(event) => setSupervisor(event.target.value)}><option value="">Overall company</option>{supervisorOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+      <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude August 2026</label>
     </section>
 
     <PeriodAnnotations start={start} end={end} />
