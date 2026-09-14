@@ -26,6 +26,49 @@ function pageLines(items: TextItem[]) {
   return [...rows.entries()].sort((a, b) => b[0] - a[0]).map(([, row]) => row.sort((a, b) => a.x - b.x).map((part) => part.text).join(" "));
 }
 
+export function analyzeScheduleText(text: string, pageCount: number, fileName = ""): ScheduleAnalysis {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const headerContract = text.match(/\bHCR(?:#|\s+ID)?[\s\S]{0,120}?\b(\d{4}[A-Z])\b/i)?.[1];
+  const filenameContract = fileName.match(/\b(\d{4}[A-Z])\b/i)?.[1];
+  const contractNumber = (headerContract || filenameContract || "").toUpperCase();
+  const tripIds = new Set<string>();
+  for (const line of lines) {
+    const match = line.match(/^\s*(\d{1,3})\s+(\d{1,2})\s+\d{3,6}\b/);
+    if (match) tripIds.add(match[1]);
+  }
+  const frequencyCodes: ScheduleAnalysis["frequencyCodes"] = [];
+  const seenFrequencies = new Set<string>();
+  for (const line of lines) {
+    const match = line.match(/^\s*([A-Z0-9]{1,4})\s*-\s*(\d+)\s+(.+)$/i);
+    if (match && /daily|sunday|monday|tuesday|wednesday|thursday|friday|saturday|holiday/i.test(match[3])) {
+      const code = match[1].toUpperCase();
+      if (!seenFrequencies.has(code)) {
+        seenFrequencies.add(code);
+        frequencyCodes.push({ code, days: match[2], description: match[3].trim() });
+      }
+    }
+  }
+  const effectiveDates = [...new Set(text.match(/\b\d{2}\/\d{2}\/20\d{2}\b/g) || [])].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+  const annualMilesMatch = text.match(/Estimated Annual Schedule Miles\s*:?\s*([\d,]+(?:\.\d+)?)/i);
+  const annualHoursMatch = text.match(/Estimated Annual Schedule Hours\s*:?\s*([\d,]+(?:\.\d+)?)/i);
+  const warnings: string[] = [];
+  if (!contractNumber) warnings.push("Contract number was not confidently identified.");
+  if (!tripIds.size) warnings.push("No trip rows were confidently identified.");
+  if (!frequencyCodes.length) warnings.push("Frequency reference definitions were not found; do not approve this schedule.");
+  if (!effectiveDates.length) warnings.push("No effective dates were found.");
+  return {
+    pageCount,
+    contractNumber,
+    tripIds: [...tripIds].sort((a, b) => Number(a) - Number(b)),
+    frequencyCodes,
+    effectiveDates,
+    annualMiles: annualMilesMatch ? Number(annualMilesMatch[1].replaceAll(",", "")) : null,
+    annualHours: annualHoursMatch ? Number(annualHoursMatch[1].replaceAll(",", "")) : null,
+    changeSummaryFound: /Trip Change Summary/i.test(text),
+    warnings,
+  };
+}
+
 export async function parseUspsSchedule(file: File): Promise<ScheduleAnalysis> {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -39,39 +82,5 @@ export async function parseUspsSchedule(file: File): Promise<ScheduleAnalysis> {
     const content = await page.getTextContent();
     lines.push(...pageLines(content.items as TextItem[]));
   }
-  const text = lines.join("\n");
-  const headerContract = text.match(/\bHCR(?:#|\s+ID)?[\s\S]{0,120}?\b(\d{4}[A-Z])\b/i)?.[1];
-  const filenameContract = file.name?.match(/\b(\d{4}[A-Z])\b/i)?.[1];
-  const contractNumber = (headerContract || filenameContract || "").toUpperCase();
-  const tripIds = new Set<string>();
-  for (const line of lines) {
-    const match = line.match(/^\s*(\d{1,3})\s+(\d{1,2})\s+\d{3,6}\b/);
-    if (match) tripIds.add(match[1]);
-  }
-  const frequencyCodes: ScheduleAnalysis["frequencyCodes"] = [];
-  for (const line of lines) {
-    const match = line.match(/^\s*([A-Z0-9]{1,4})\s*-\s*(\d+)\s+(.+)$/i);
-    if (match && /daily|sunday|monday|tuesday|wednesday|thursday|friday|saturday|holiday/i.test(match[3])) {
-      frequencyCodes.push({ code: match[1].toUpperCase(), days: match[2], description: match[3].trim() });
-    }
-  }
-  const effectiveDates = [...new Set(text.match(/\b\d{2}\/\d{2}\/20\d{2}\b/g) || [])].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-  const annualMilesMatch = text.match(/Estimated Annual Schedule Miles\s*:?\s*([\d,]+(?:\.\d+)?)/i);
-  const annualHoursMatch = text.match(/Estimated Annual Schedule Hours\s*:?\s*([\d,]+(?:\.\d+)?)/i);
-  const warnings: string[] = [];
-  if (!contractNumber) warnings.push("Contract number was not confidently identified.");
-  if (!tripIds.size) warnings.push("No trip rows were confidently identified.");
-  if (!frequencyCodes.length) warnings.push("Frequency reference definitions were not found; do not approve this schedule.");
-  if (!effectiveDates.length) warnings.push("No effective dates were found.");
-  return {
-    pageCount: document.numPages,
-    contractNumber,
-    tripIds: [...tripIds].sort((a, b) => Number(a) - Number(b)),
-    frequencyCodes,
-    effectiveDates,
-    annualMiles: annualMilesMatch ? Number(annualMilesMatch[1].replaceAll(",", "")) : null,
-    annualHours: annualHoursMatch ? Number(annualHoursMatch[1].replaceAll(",", "")) : null,
-    changeSummaryFound: /Trip Change Summary/i.test(text),
-    warnings,
-  };
+  return analyzeScheduleText(lines.join("\n"), document.numPages, file.name);
 }
