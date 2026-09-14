@@ -101,10 +101,10 @@ button, input { font: inherit; }
 .data-table td { padding: 11px 13px; text-align: right; border-top: 1px solid #edf0f3; }
 .data-table tbody tr:hover { background: #f7f9fb; }
 .attention-row { background: #eef2f5; }
-.top-performer-row { background: #e8f5ea; }
-.bottom-contract-row { background: #f9e8ea; }
-.top-performer-row:hover { background: #dff0e2 !important; }
-.bottom-contract-row:hover { background: #f5dde0 !important; }
+.top-performer-row { color: #174e27; background: #c9e7cf; }
+.bottom-contract-row { color: #742430; background: #f0c8cd; }
+.top-performer-row:hover { background: #bde0c5 !important; }
+.bottom-contract-row:hover { background: #eabac1 !important; }
 .selected-day-row { background: #eaf1f7; }
 .day-button { border: 0; padding: 0; color: var(--navy); background: transparent; font: inherit; font-weight: 800; text-align: left; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .text-navy { color: var(--navy); }
