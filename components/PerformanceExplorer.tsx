@@ -14,6 +14,7 @@ export default function PerformanceExplorer({ fixedContract, contractsOnly = fal
   const [end, setEnd] = useState(today);
   const [grain, setGrain] = useState("week");
   const [selectedSupervisor, setSelectedSupervisor] = useState("");
+  const [excludeAugust, setExcludeAugust] = useState(false);
   const [trend, setTrend] = useState<Row[]>([]);
   const [contracts, setContracts] = useState<Row[]>([]);
   const [supervisors, setSupervisors] = useState<Row[]>([]);
@@ -23,9 +24,9 @@ export default function PerformanceExplorer({ fixedContract, contractsOnly = fal
   useEffect(() => { void (async () => {
     setLoading(true); setError("");
     const [trendResult, contractResult, supervisorResult] = await Promise.all([
-      supabase.rpc("performance_trend", { p_start: start, p_end: end, p_grain: grain, p_contract: fixedContract ?? null, p_supervisor: selectedSupervisor || null }),
-      supabase.rpc("contract_performance", { p_start: start, p_end: end }),
-      supabase.rpc("supervisor_performance", { p_start: start, p_end: end }),
+      supabase.rpc("performance_trend_filtered", { p_start: start, p_end: end, p_grain: grain, p_contract: fixedContract ?? null, p_supervisor: selectedSupervisor || null, p_exclude_august_2026: excludeAugust }),
+      supabase.rpc("contract_performance_filtered", { p_start: start, p_end: end, p_exclude_august_2026: excludeAugust }),
+      supabase.rpc("supervisor_performance_filtered", { p_start: start, p_end: end, p_exclude_august_2026: excludeAugust }),
     ]);
     const failure = trendResult.error || contractResult.error || supervisorResult.error;
     if (failure) setError(failure.message);
@@ -33,7 +34,7 @@ export default function PerformanceExplorer({ fixedContract, contractsOnly = fal
     setContracts(((contractResult.data ?? []) as Row[]).filter((row) => !fixedContract || row.contract_number === fixedContract));
     setSupervisors((supervisorResult.data ?? []) as Row[]);
     setLoading(false);
-  })(); }, [start, end, grain, fixedContract, selectedSupervisor]);
+  })(); }, [start, end, grain, fixedContract, selectedSupervisor, excludeAugust]);
 
   const totals = trend.reduce((sum, row) => ({ loads: sum.loads + Number(row.load_count), total: sum.total + Number(row.total_stops), completed: sum.completed + Number(row.completed_stops), incomplete: sum.incomplete + Number(row.incomplete_stops) }), { loads: 0, total: 0, completed: 0, incomplete: 0 });
   return <div className="report-stack">
@@ -42,6 +43,7 @@ export default function PerformanceExplorer({ fixedContract, contractsOnly = fal
       <label>End date<input type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
       <label>Trend grouping<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Daily</option><option value="week">Weekly (Sat–Fri)</option><option value="month">Monthly</option><option value="year">Yearly</option></select></label>
       {!contractsOnly && !fixedContract && <label>Supervisor<select value={selectedSupervisor} onChange={(event) => setSelectedSupervisor(event.target.value)}><option value="">All supervisors</option>{supervisors.filter((row) => row.supervisor && row.supervisor !== "Unassigned").map((row) => <option key={row.supervisor} value={row.supervisor}>{row.supervisor}</option>)}</select></label>}
+      <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude August 2026</label>
     </section>
     <PeriodAnnotations start={start} end={end} />
     {error && <div className="alert alert-error">{error}</div>}
