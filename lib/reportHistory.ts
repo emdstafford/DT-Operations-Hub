@@ -94,6 +94,7 @@ export async function saveMissedStopsSnapshot(fileName: string, summary: MissedS
     periodEnd,
     savedAt: new Date().toISOString(),
     uniqueLoadCount: summary.rows.length,
+    rows: summary.rows,
     duplicateLoadNumbers: summary.duplicateLoadNumbers,
     totalMissingStops: summary.totalMissingStops,
     geofenceNonCompliantLoads: summary.geofenceNonCompliantLoads,
