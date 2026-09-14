@@ -20,7 +20,7 @@ export type ReportSnapshot = {
   outsidePeriodCount: number;
 };
 
-export type MissedStopsSnapshot = Omit<MissedStopSummary, "rows"> & {
+export type MissedStopsSnapshot = MissedStopSummary & {
   id: string;
   fileName: string;
   periodStart: string;
