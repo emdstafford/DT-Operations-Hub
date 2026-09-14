@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-type SupervisorContractRow = {
-  supervisor: string;
+type ContractPerformanceRow = {
   contract_number: string;
   load_count: number;
   total_stops: number;
@@ -13,8 +12,22 @@ type SupervisorContractRow = {
   completion_percent: number;
 };
 
-type ContractPrintRow = Omit<SupervisorContractRow, "supervisor"> & {
+type SupervisorContractRow = ContractPerformanceRow & {
+  supervisor: string;
+};
+
+type AssignmentRow = {
+  contract_number: string;
+  supervisor: string;
+};
+
+type ContractPrintRow = ContractPerformanceRow & {
   supervisors: string[];
+};
+
+type DashboardPayload = {
+  contracts?: ContractPerformanceRow[];
+  supervisor_contracts?: SupervisorContractRow[];
 };
 
 const number = (value: number) => Number(value || 0).toLocaleString("en-US");
@@ -43,11 +56,20 @@ function health(value: number) {
   return { label: "Alert", className: "health-alert" };
 }
 
+function addSupervisor(map: Map<string, Set<string>>, contract: string, supervisor: string) {
+  if (!contract || !supervisor || supervisor === "Unassigned") return;
+  const names = map.get(contract) ?? new Set<string>();
+  names.add(supervisor);
+  map.set(contract, names);
+}
+
 export default function MonthlyContractPrintReport() {
   const currentMonth = new Date().toISOString().slice(0, 7);
   const [month, setMonth] = useState(currentMonth);
   const [excludeAugust, setExcludeAugust] = useState(false);
-  const [sourceRows, setSourceRows] = useState<SupervisorContractRow[]>([]);
+  const [contractRows, setContractRows] = useState<ContractPerformanceRow[]>([]);
+  const [embeddedSupervisorRows, setEmbeddedSupervisorRows] = useState<SupervisorContractRow[]>([]);
+  const [assignmentRows, setAssignmentRows] = useState<AssignmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -58,52 +80,77 @@ export default function MonthlyContractPrintReport() {
     void (async () => {
       setLoading(true);
       setError("");
-      const result = await supabase.rpc("dashboard_hub_filtered", {
-        p_start: start,
-        p_end: end,
-        p_grain: "month",
-        p_contracts: null,
-        p_supervisors: null,
-        p_exclude_august_2026: excludeAugust,
-        p_max_completion: null,
-        p_min_missed_stops: null,
-      });
+
+      const [performanceResult, assignmentResult] = await Promise.all([
+        supabase.rpc("dashboard_hub_filtered", {
+          p_start: start,
+          p_end: end,
+          p_grain: "month",
+          p_contracts: null,
+          p_supervisors: null,
+          p_exclude_august_2026: excludeAugust,
+          p_max_completion: null,
+          p_min_missed_stops: null,
+        }),
+        supabase
+          .from("contract_assignment_periods")
+          .select("contract_number, supervisor")
+          .lte("start_date", end)
+          .or(`end_date.is.null,end_date.gte.${start}`),
+      ]);
+
       if (cancelled) return;
-      if (result.error) {
-        setError(result.error.message);
-        setSourceRows([]);
+      if (performanceResult.error) {
+        setError(performanceResult.error.message);
+        setContractRows([]);
+        setEmbeddedSupervisorRows([]);
       } else {
-        const payload = result.data as { supervisor_contracts?: SupervisorContractRow[] } | null;
-        setSourceRows(payload?.supervisor_contracts ?? []);
+        const payload = performanceResult.data as DashboardPayload | null;
+        setContractRows(payload?.contracts ?? []);
+        setEmbeddedSupervisorRows(payload?.supervisor_contracts ?? []);
       }
+
+      // Dated assignments are authoritative where they exist. The supervisors
+      // embedded in historical load rows remain the fallback for other contracts.
+      setAssignmentRows(assignmentResult.error ? [] : (assignmentResult.data ?? []) as AssignmentRow[]);
       setLoading(false);
     })();
+
     return () => { cancelled = true; };
   }, [start, end, excludeAugust]);
 
   const rows = useMemo<ContractPrintRow[]>(() => {
-    const grouped = new Map<string, ContractPrintRow>();
-    for (const row of sourceRows) {
-      const contract = row.contract_number || "Unmapped";
-      const existing = grouped.get(contract);
-      if (existing) {
-        if (row.supervisor && !existing.supervisors.includes(row.supervisor)) existing.supervisors.push(row.supervisor);
-      } else {
-        grouped.set(contract, {
-          contract_number: contract,
-          supervisors: row.supervisor ? [row.supervisor] : ["Unassigned"],
-          load_count: Number(row.load_count),
-          total_stops: Number(row.total_stops),
-          completed_stops: Number(row.completed_stops),
-          incomplete_stops: Number(row.incomplete_stops),
-          completion_percent: Number(row.completion_percent),
-        });
-      }
+    const embeddedByContract = new Map<string, Set<string>>();
+    const datedByContract = new Map<string, Set<string>>();
+
+    for (const row of embeddedSupervisorRows) {
+      addSupervisor(embeddedByContract, row.contract_number || "Unmapped", row.supervisor);
     }
-    return [...grouped.values()]
-      .map((row) => ({ ...row, supervisors: row.supervisors.sort((a, b) => a.localeCompare(b)) }))
-      .sort((a, b) => a.completion_percent - b.completion_percent || a.contract_number.localeCompare(b.contract_number));
-  }, [sourceRows]);
+    for (const row of assignmentRows) {
+      addSupervisor(datedByContract, row.contract_number, row.supervisor);
+    }
+
+    return contractRows.map((row) => {
+      const contract = row.contract_number || "Unmapped";
+      const authoritative = datedByContract.get(contract);
+      const fallback = embeddedByContract.get(contract);
+      const supervisors = [...(authoritative?.size ? authoritative : fallback ?? new Set<string>())]
+        .sort((a, b) => a.localeCompare(b));
+
+      return {
+        contract_number: contract,
+        supervisors: supervisors.length ? supervisors : ["Unassigned"],
+        load_count: Number(row.load_count),
+        total_stops: Number(row.total_stops),
+        completed_stops: Number(row.completed_stops),
+        incomplete_stops: Number(row.incomplete_stops),
+        completion_percent: Number(row.completion_percent),
+      };
+    }).sort((a, b) =>
+      a.completion_percent - b.completion_percent ||
+      a.contract_number.localeCompare(b.contract_number)
+    );
+  }, [contractRows, embeddedSupervisorRows, assignmentRows]);
 
   const totals = useMemo(() => rows.reduce((sum, row) => ({
     loads: sum.loads + row.load_count,
@@ -130,7 +177,6 @@ export default function MonthlyContractPrintReport() {
       <p>DT Intelligence Hub</p>
       <h1>Monthly Contract Performance</h1>
       <strong>{displayDate(start)} – {displayDate(end)}</strong>
-      {excludeAugust && <span>FourKites issue dates August 13–20 excluded</span>}
     </div>
 
     {error && <div className="alert alert-error">{error}</div>}
