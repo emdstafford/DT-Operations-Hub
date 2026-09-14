@@ -38,7 +38,9 @@ export default function PerformanceExplorer({ fixedContract, contractsOnly = fal
 
   const totals = trend.reduce((sum, row) => ({ loads: sum.loads + Number(row.load_count), total: sum.total + Number(row.total_stops), completed: sum.completed + Number(row.completed_stops), incomplete: sum.incomplete + Number(row.incomplete_stops) }), { loads: 0, total: 0, completed: 0, incomplete: 0 });
   return <div className="report-stack">
-    <section className="panel filter-bar">
+    {fixedContract && <div className="contract-print-toolbar no-print"><div><strong>Contract {fixedContract}</strong><span>Print the totals and {grain} trend for the selected dates.</span></div><button className="primary-link" type="button" disabled={loading} onClick={() => window.print()}>Print contract report</button></div>}
+    {fixedContract && <div className="print-only print-report-heading"><p>DT Intelligence Hub</p><h1>Contract {fixedContract} Performance</h1><strong>{start} – {end}</strong>{excludeAugust && <span>FourKites issue dates August 13–20 excluded</span>}</div>}
+    <section className="panel filter-bar no-print">
       <label>Start date<input type="date" value={start} onChange={(event) => setStart(event.target.value)} /></label>
       <label>End date<input type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
       <label>Trend grouping<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Daily</option><option value="week">Weekly (Sat–Fri)</option><option value="month">Monthly</option><option value="year">Yearly</option></select></label>
