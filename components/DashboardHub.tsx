@@ -67,6 +67,10 @@ export default function DashboardHub() {
   const [drillLoading, setDrillLoading] = useState(false);
   const [drillError, setDrillError] = useState("");
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [previousData, setPreviousData] = useState<HubData | null>(null);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonError, setComparisonError] = useState("");
+  const [previousPeriod, setPreviousPeriod] = useState<{ start: string; end: string } | null>(null);
 
   useEffect(() => { void (async () => {
     const [latest, contracts, supervisors] = await Promise.all([
@@ -186,6 +190,63 @@ export default function DashboardHub() {
     setSelectedDay("");
   }
   const isEntireReport = selectedSupervisors.length === 0 && selectedContracts.length === 0 && maxCompletion === "" && minMissedStops === "";
+  const comparisonRows = useMemo(() => {
+    if (!previousData) return [];
+    const prior = new Map(previousData.contracts.map((row) => [row.contract_number || "Unmapped", row]));
+    return data.contracts.map((row) => {
+      const name = row.contract_number || "Unmapped";
+      const previous = prior.get(name);
+      const currentRate = Number(row.completion_percent || 0);
+      const previousRate = previous ? Number(previous.completion_percent || 0) : null;
+      const percentagePointChange = previousRate == null ? null : (currentRate - previousRate) * 100;
+      const missedChange = previous ? Number(row.incomplete_stops || 0) - Number(previous.incomplete_stops || 0) : null;
+      let status = "No prior data";
+      if (previousRate != null) {
+        if (currentRate < 0.95 && previousRate >= 0.95) status = "New concern";
+        else if (currentRate < 0.95) status = "Needs attention";
+        else if ((percentagePointChange ?? 0) <= -0.5) status = "Declining";
+        else if ((percentagePointChange ?? 0) >= 0.5) status = "Improving";
+        else status = "On target";
+      }
+      return { name, current: row, previous, percentagePointChange, missedChange, status };
+    }).sort((a, b) => {
+      const priority = (status: string) => status === "New concern" ? 0 : status === "Needs attention" ? 1 : status === "Declining" ? 2 : status === "Improving" ? 3 : 4;
+      return priority(a.status) - priority(b.status) || (a.percentagePointChange ?? 0) - (b.percentagePointChange ?? 0);
+    });
+  }, [data.contracts, previousData]);
+
+  async function comparePreviousPeriod() {
+    setComparisonLoading(true);
+    setComparisonError("");
+    setPreviousData(null);
+    const currentStart = new Date(`${start}T12:00:00Z`);
+    const currentEnd = new Date(`${end}T12:00:00Z`);
+    const days = Math.max(1, Math.round((currentEnd.getTime() - currentStart.getTime()) / 86400000) + 1);
+    const priorEnd = new Date(currentStart);
+    priorEnd.setUTCDate(priorEnd.getUTCDate() - 1);
+    const priorStart = new Date(priorEnd);
+    priorStart.setUTCDate(priorStart.getUTCDate() - days + 1);
+    const priorRange = { start: priorStart.toISOString().slice(0, 10), end: priorEnd.toISOString().slice(0, 10) };
+    try {
+      const result = await supabase.rpc("dashboard_hub_filtered", {
+        p_start: priorRange.start,
+        p_end: priorRange.end,
+        p_grain: grain,
+        p_contracts: selectedContracts.length ? selectedContracts : null,
+        p_supervisors: selectedSupervisors.length ? selectedSupervisors : null,
+        p_exclude_august_2026: excludeAugust,
+        p_max_completion: null,
+        p_min_missed_stops: null,
+      });
+      if (result.error) throw result.error;
+      setPreviousData((result.data ?? empty) as HubData);
+      setPreviousPeriod(priorRange);
+    } catch (error) {
+      setComparisonError(error instanceof Error ? error.message : "The previous period could not be loaded.");
+    } finally {
+      setComparisonLoading(false);
+    }
+  }
 
   async function copyEmail() {
     const email = filteredEmail(data, start, end, selectedSupervisors, selectedContracts, isEntireReport);
@@ -286,6 +347,7 @@ export default function DashboardHub() {
           <button className={rangeMode === "day" ? "active" : ""} onClick={() => chooseRange("day")}>Latest day</button>
           <button className={rangeMode === "week" ? "active" : ""} onClick={() => chooseRange("week")}>Latest week</button>
           <button className={rangeMode === "month" ? "active" : ""} onClick={() => chooseRange("month")}>Latest month</button>
+          <button className={maxCompletion === "95" ? "goal-filter active" : "goal-filter"} onClick={() => setMaxCompletion(maxCompletion === "95" ? "" : "95")}>Below 95%</button>
         </div>
         <div className="executive-date-fields">
           <label>From<input type="date" value={start} onChange={(event) => { setStart(event.target.value); setRangeMode("custom"); }} /></label>
@@ -315,6 +377,24 @@ export default function DashboardHub() {
         <article className="metric-card"><span>Total stops</span><strong>{number(data.totals.total_stops)}</strong></article>
         <article className="metric-card"><span>Incomplete stops</span><strong>{number(data.totals.incomplete_stops)}</strong></article>
       </section>
+      <section className="contract-review-bar panel">
+        <div><strong>Why is a contract having trouble?</strong><span>Select one contract to focus every dashboard section and build a printable evidence report.</span></div>
+        <select aria-label="Select contract for review" value={selectedContracts.length === 1 ? selectedContracts[0] : ""} onChange={(event) => setSelectedContracts(event.target.value ? [event.target.value] : [])}>
+          <option value="">Choose a contract</option>
+          {contractOptions.map((contract) => <option value={contract} key={contract}>{contract}</option>)}
+        </select>
+        <button className="hub-secondary-link" disabled={selectedContracts.length !== 1 || loading || reviewLoading} onClick={() => void printPerformanceReview()}>{reviewLoading ? "Building…" : "Print contract review"}</button>
+      </section>
+      <section className="comparison-action panel">
+        <div><strong>How did performance change?</strong><span>Compare this exact date range with the immediately preceding range of the same length.</span></div>
+        <button className="primary-link" disabled={loading || comparisonLoading} onClick={() => void comparePreviousPeriod()}>{comparisonLoading ? "Comparing…" : "Compare previous period"}</button>
+      </section>
+      {comparisonError && <div className="alert alert-error">{comparisonError}</div>}
+      {previousData && previousPeriod && <section className="panel comparison-panel">
+        <div className="panel-heading"><h2>Contract movement</h2><span>{displayDate(previousPeriod.start)} – {displayDate(previousPeriod.end)} compared with {displayDate(start)} – {displayDate(end)}</span></div>
+        <div className="table-scroll hub-table-scroll"><table className="data-table comparison-table"><thead><tr><th>Contract</th><th>Current</th><th>Previous</th><th>Point Change</th><th>Missed Stop Change</th><th>Status</th></tr></thead><tbody>{comparisonRows.map((row) => <tr key={row.name} className={row.status === "New concern" || row.status === "Needs attention" ? "comparison-concern" : row.status === "Improving" ? "comparison-improving" : ""}><td><button className="day-button" onClick={() => setSelectedContracts([row.name])}>{row.name}</button></td><td>{percent(row.current.completion_percent)}</td><td>{row.previous ? percent(row.previous.completion_percent) : "No data"}</td><td>{row.percentagePointChange == null ? "—" : `${row.percentagePointChange >= 0 ? "+" : ""}${row.percentagePointChange.toFixed(2)} pts`}</td><td>{row.missedChange == null ? "—" : `${row.missedChange >= 0 ? "+" : ""}${number(row.missedChange)}`}</td><td><strong>{row.status}</strong></td></tr>)}</tbody></table></div>
+        <p className="comparison-note">“Why” reports show confirmed TQ results, affected trips and loads, Sunday geofence locations, and saved operational notes. They do not invent a cause that has not been documented.</p>
+      </section>}
       {selectedSupervisors.length > 0 && <section className="supervisor-focus-stack">
         {selectedSupervisors.map((name) => {
           const supervisor = data.supervisors.find((row) => row.supervisor === name);
