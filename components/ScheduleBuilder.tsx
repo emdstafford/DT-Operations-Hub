@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { parseUspsSchedule, type ScheduleAnalysis } from "@/lib/parseUspsSchedule";
 import { parseScannedUspsSchedule, type OcrProgress, type OcrScheduleAnalysis } from "@/lib/parseScannedUspsSchedule";
+import ScheduleTripReconciliation from "@/components/ScheduleTripReconciliation";
 
 type IntakeKind = "source" | "simplified" | "driver" | "rates";
 type Intake = { name: string; size: number; file: File; sheets?: string[]; truckSheets?: number; tripRows?: number; parkingLocations?: string[] };
@@ -301,6 +302,14 @@ export default function ScheduleBuilder() {
         <p className="approval-blocker"><strong>Approval remains blocked.</strong> The next reconciliation stage must verify each stop’s name, address, NASS code, arrival/departure time, frequency, mileage, and vehicle requirement.</p>
       </div>}
     </section>
+
+    {analysis && <ScheduleTripReconciliation
+      contract={contract}
+      effectiveDate={effectiveDate}
+      officialTrips={analysis.tripIds}
+      simplifiedFile={files.simplified?.file}
+      driverFile={files.driver?.file}
+    />}
 
     {serviceChanges.length > 0 && <section className="panel schedule-timeline">
       <div className="section-heading"><div><p className="eyebrow">Version timeline</p><h2>{contract || "Contract"} schedule history</h2></div><span className="review-waiting">Draft intake</span></div>
