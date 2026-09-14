@@ -17,6 +17,7 @@ type TripDrillRow = { operatingDate: string; contract: string; trip: string; loa
 const empty: HubData = { totals: { load_count: 0, total_stops: 0, completed_stops: 0, incomplete_stops: 0, completion_percent: 0 }, trend: [], contracts: [], supervisors: [], supervisor_contracts: [] };
 const number = (value: number) => Number(value || 0).toLocaleString("en-US");
 const percent = (value: number) => `${(Number(value || 0) * 100).toFixed(2)}%`;
+const contractHealth = (value: number) => Number(value || 0) >= 0.95 ? { label: "Good", className: "health-good" } : Number(value || 0) >= 0.90 ? { label: "Needs help", className: "health-help" } : { label: "Alert", className: "health-alert" };
 const displayDate = (value: string) => new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character] ?? character);
 
@@ -215,6 +216,12 @@ export default function DashboardHub() {
     });
   }, [data.contracts, previousData]);
 
+  useEffect(() => {
+    setPreviousData(null);
+    setPreviousPeriod(null);
+    setComparisonError("");
+  }, [start, end, selectedContracts, selectedSupervisors, excludeAugust]);
+
   async function comparePreviousPeriod() {
     setComparisonLoading(true);
     setComparisonError("");
@@ -408,7 +415,7 @@ export default function DashboardHub() {
       </section>}
       <section className="hub-grid">
         <section className="panel hub-trend"><div className="panel-heading"><h2>Performance trend</h2><span>{grain === "day" ? "Click a day to see trips" : "Select Day view for trip drill-down"}</span></div><div className="trend-list">{data.trend.map((row) => <div className={`trend-row ${grain === "day" ? "trend-row-clickable" : ""}`} key={row.period_start}><div><button className="trend-day-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{row.period_start}</button><span>{percent(row.completion_percent)}</span></div><div className="trend-track"><i style={{width:`${Math.max(2, Number(row.incomplete_stops) / maxIncomplete * 100)}%`}} /></div><button className="trend-missed-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{number(row.incomplete_stops)} incomplete</button></div>)}</div></section>
-        <section className="panel attention-panel"><div className="panel-heading"><h2>Needs attention</h2><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="attention-list">{data.contracts.slice(0,10).map((row,index) => <Link href={`/contracts/${encodeURIComponent(row.contract_number || "Unmapped")}?start=${start}&end=${end}`} key={row.contract_number}><span>{index+1}</span><strong>{row.contract_number}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.incomplete_stops)} incomplete</small></Link>)}</div></section>
+        <section className="panel attention-panel"><div className="panel-heading"><h2>Needs attention</h2><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="attention-list">{data.contracts.slice(0,10).map((row,index) => <Link href={`/contracts/${encodeURIComponent(row.contract_number || "Unmapped")}?start=${start}&end=${end}`} key={row.contract_number}><span>{index+1}</span><strong>{row.contract_number}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.incomplete_stops)} incomplete · <b className={`contract-health ${contractHealth(row.completion_percent).className}`}>{contractHealth(row.completion_percent).label}</b></small></Link>)}</div></section>
       </section>
       {selectedDay && grain === "day" && <section className="panel day-drilldown">
         <div className="panel-heading"><div><p className="eyebrow">Daily missed-stop drill-down</p><h2>{displayDate(selectedDay)}</h2></div><button className="clear-filters" onClick={() => { setSelectedDay(""); setTripBreakdown([]); }}>Close</button></div>
@@ -436,5 +443,5 @@ function MultiSelect({ label, options, selected, setSelected }: { label: string;
 }
 
 function HubTable({ title, rows, kind, highlightRankings, onSupervisorSelect }: { title: string; rows: Row[]; kind: "contract" | "supervisor"; highlightRankings?: boolean; onSupervisorSelect?: (name: string) => void }) {
-  return <section className="panel overflow-hidden"><div className="panel-heading"><h2>{title}</h2><span>{kind === "supervisor" ? "Click a name to filter" : `${rows.length} results`}</span></div><div className="table-scroll hub-table-scroll"><table className="data-table"><thead><tr><th>{title.slice(0,-1)}</th><th>Stops</th><th>Incomplete</th><th>Completion</th></tr></thead><tbody>{rows.map((row,index) => { const name = kind === "contract" ? row.contract_number : row.supervisor; return <tr key={name} className={name === "Unassigned" ? "attention-row" : highlightRankings && kind === "supervisor" && index < 5 ? "top-performer-row" : highlightRankings && kind === "contract" && index < 10 ? "bottom-contract-row" : ""}><td className="font-semibold text-navy">{kind === "contract" ? <Link className="day-button" href={`/contracts/${encodeURIComponent(name || "Unmapped")}`}>{name}</Link> : <button className="day-button" onClick={() => name && onSupervisorSelect?.(name)}>{name}</button>}</td><td>{number(row.total_stops)}</td><td>{number(row.incomplete_stops)}</td><td>{percent(row.completion_percent)}</td></tr>; })}</tbody></table></div></section>;
+  return <section className="panel overflow-hidden"><div className="panel-heading"><h2>{title}</h2><span>{kind === "supervisor" ? "Click a name to filter" : `${rows.length} results`}</span></div><div className="table-scroll hub-table-scroll"><table className="data-table"><thead><tr><th>{title.slice(0,-1)}</th><th>Stops</th><th>Incomplete</th><th>Completion</th></tr></thead><tbody>{rows.map((row,index) => { const name = kind === "contract" ? row.contract_number : row.supervisor; return <tr key={name} className={name === "Unassigned" ? "attention-row" : highlightRankings && kind === "supervisor" && index < 5 ? "top-performer-row" : highlightRankings && kind === "contract" && index < 10 ? "bottom-contract-row" : ""}><td className="font-semibold text-navy">{kind === "contract" ? <span className="contract-name-health"><Link className="day-button" href={`/contracts/${encodeURIComponent(name || "Unmapped")}`}>{name}</Link><b className={`contract-health ${contractHealth(row.completion_percent).className}`}>{contractHealth(row.completion_percent).label}</b></span> : <button className="day-button" onClick={() => name && onSupervisorSelect?.(name)}>{name}</button>}</td><td>{number(row.total_stops)}</td><td>{number(row.incomplete_stops)}</td><td>{percent(row.completion_percent)}</td></tr>; })}</tbody></table></div></section>;
 }
