@@ -247,7 +247,7 @@ export default function UploadPage() {
         <div>
           <p className="eyebrow">One upload center</p>
           <h1>Upload a report</h1>
-          <p>Choose either a daily or weekly USPS load-details file, or the Sunday missed-stops file. The hub will recognize it automatically.</p>
+          <p>Choose either a daily or weekly USPS load-details file, or the missed-stops file. The hub will recognize it automatically.</p>
         </div>
         <label className="upload-button">
           <span>{loading ? "Identifying and processing…" : "Choose report"}</span>
@@ -268,7 +268,7 @@ export default function UploadPage() {
 
       {reportType === "missed" && missedStops && (
         <div className="report-stack">
-          <section className="report-banner"><div><p className="eyebrow eyebrow-light">Missed-stops report recognized</p><h2>{number(missedStops.rows.length)} unique non-compliant loads</h2><p>The Sunday workbook was identified automatically.</p></div></section>
+          <section className="report-banner"><div><p className="eyebrow eyebrow-light">Missed-stops report recognized</p><h2>{number(missedStops.rows.length)} unique non-compliant loads</h2><p>The missed-stops workbook was identified automatically.</p></div></section>
           <section className="metric-grid">
             <article className="metric-card metric-primary"><span>Missing stops</span><strong>{number(missedStops.totalMissingStops)}</strong></article>
             <article className="metric-card"><span>Geofence non-compliant loads</span><strong>{number(missedStops.geofenceNonCompliantLoads)}</strong></article>
