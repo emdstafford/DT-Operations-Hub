@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import PeriodAnnotations from "@/components/PeriodAnnotations";
 
 type Row = { period_start?: string; contract_number?: string; supervisor?: string; load_count: number; total_stops: number; completed_stops: number; incomplete_stops: number; completion_percent: number };
 const number = (value: number) => Number(value || 0).toLocaleString("en-US");
@@ -42,6 +43,7 @@ export default function PerformanceExplorer({ fixedContract, contractsOnly = fal
       <label>Trend grouping<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Daily</option><option value="week">Weekly (Sat–Fri)</option><option value="month">Monthly</option><option value="year">Yearly</option></select></label>
       {!contractsOnly && !fixedContract && <label>Supervisor<select value={selectedSupervisor} onChange={(event) => setSelectedSupervisor(event.target.value)}><option value="">All supervisors</option>{supervisors.filter((row) => row.supervisor && row.supervisor !== "Unassigned").map((row) => <option key={row.supervisor} value={row.supervisor}>{row.supervisor}</option>)}</select></label>}
     </section>
+    <PeriodAnnotations start={start} end={end} />
     {error && <div className="alert alert-error">{error}</div>}
     {loading ? <section className="empty-state"><h2>Loading shared history…</h2></section> : <>
       <section className="metric-grid"><article className="metric-card metric-primary"><span>Completion</span><strong>{percent(totals.total ? totals.completed / totals.total : 0)}</strong></article><article className="metric-card"><span>Unique loads</span><strong>{number(totals.loads)}</strong></article><article className="metric-card"><span>Total stops</span><strong>{number(totals.total)}</strong></article><article className="metric-card"><span>Incomplete</span><strong>{number(totals.incomplete)}</strong></article></section>
