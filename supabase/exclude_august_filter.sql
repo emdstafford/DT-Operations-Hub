@@ -1,5 +1,22 @@
--- Optional August 2026 exclusion for historical comparisons.
+-- Optional August 13-20, 2026 exclusion for historical comparisons.
 -- Run in Supabase SQL Editor as postgres.
+
+update public.report_annotations
+set period_start = date '2026-08-13',
+    period_end = date '2026-08-20',
+    note = 'FourKites tracking problems affected results from August 13 through August 20, 2026.'
+where title = 'FourKites tracking issue'
+  and period_start = date '2026-08-01';
+
+insert into public.report_annotations (period_start, period_end, title, note)
+select date '2026-08-13', date '2026-08-20', 'FourKites tracking issue',
+       'FourKites tracking problems affected results from August 13 through August 20, 2026.'
+where not exists (
+  select 1 from public.report_annotations
+  where title = 'FourKites tracking issue'
+    and period_start = date '2026-08-13'
+    and period_end = date '2026-08-20'
+);
 
 create or replace function public.performance_trend_filtered(
   p_start date,
@@ -33,7 +50,7 @@ begin
     and (p_contract is null or l.contract_number = p_contract)
     and (p_supervisor is null or p_supervisor = any(l.supervisors))
     and (not p_exclude_august_2026
-      or l.operating_date not between date '2026-08-01' and date '2026-08-31')
+      or l.operating_date not between date '2026-08-13' and date '2026-08-20')
   group by 1 order by 1;
 end;
 $$;
@@ -56,7 +73,7 @@ begin
   from public.usps_loads l
   where l.operating_date between p_start and p_end
     and (not p_exclude_august_2026
-      or l.operating_date not between date '2026-08-01' and date '2026-08-31')
+      or l.operating_date not between date '2026-08-13' and date '2026-08-20')
   group by 1 order by 6 asc;
 end;
 $$;
@@ -82,7 +99,7 @@ begin
     as supervisor_rows(supervisor_name)
   where l.operating_date between p_start and p_end
     and (not p_exclude_august_2026
-      or l.operating_date not between date '2026-08-01' and date '2026-08-31')
+      or l.operating_date not between date '2026-08-13' and date '2026-08-20')
   group by supervisor_name order by 6 desc;
 end;
 $$;
@@ -110,7 +127,7 @@ begin
   where l.operating_date between p_start and p_end
     and p_supervisor = any(l.supervisors)
     and (not p_exclude_august_2026
-      or l.operating_date not between date '2026-08-01' and date '2026-08-31')
+      or l.operating_date not between date '2026-08-13' and date '2026-08-20')
   group by 1 order by 6 asc;
 end;
 $$;
