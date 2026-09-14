@@ -32,7 +32,8 @@ export default function ScheduleBuilder() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [firstOriginalPage, setFirstOriginalPage] = useState(5);
-  const [lastOriginalPage, setLastOriginalPage] = useState(17);
+  const [lastOriginalPage, setLastOriginalPage] = useState(27);
+  const [originalRotation, setOriginalRotation] = useState(90);
   const [pageRangeConfirmed, setPageRangeConfirmed] = useState(false);
   const [originalAnalysis, setOriginalAnalysis] = useState<OcrScheduleAnalysis | null>(null);
   const [ocrProgress, setOcrProgress] = useState<OcrProgress | null>(null);
@@ -110,7 +111,7 @@ export default function ScheduleBuilder() {
     setOriginalError("");
     setOriginalAnalysis(null);
     try {
-      const result = await parseScannedUspsSchedule(source, firstOriginalPage, lastOriginalPage, setOcrProgress);
+      const result = await parseScannedUspsSchedule(source, firstOriginalPage, lastOriginalPage, originalRotation, setOcrProgress);
       setOriginalAnalysis(result);
     } catch (error) {
       setOriginalError(error instanceof Error ? error.message : "The original schedule pages could not be read.");
@@ -167,12 +168,13 @@ export default function ScheduleBuilder() {
 
     <section className="panel original-reconciliation">
       <div className="section-heading"><div><p className="eyebrow">Step 4</p><h2>Read the original schedule pages</h2></div><span className="restricted-badge">Restricted document</span></div>
-      <p className="security-note"><strong>Select only the original schedule pages.</strong> Do not include cover, signature, banking, or rate-only pages. The suggested 5–17 range must be checked against this exact PDF before running OCR.</p>
+      <p className="security-note"><strong>Select only the original schedule pages.</strong> Do not include cover, signature, banking, or rate-only pages. The page range and rotation must be checked against this exact PDF before running OCR.</p>
       <div className="page-range-fields">
         <label>First schedule page<input type="number" min="1" value={firstOriginalPage} onChange={(event) => { setFirstOriginalPage(Number(event.target.value)); setPageRangeConfirmed(false); }} /></label>
         <label>Last schedule page<input type="number" min="1" value={lastOriginalPage} onChange={(event) => { setLastOriginalPage(Number(event.target.value)); setPageRangeConfirmed(false); }} /></label>
+        <label>Turn scanned pages<select value={originalRotation} onChange={(event) => { setOriginalRotation(Number(event.target.value)); setPageRangeConfirmed(false); }}><option value={90}>90° clockwise</option><option value={270}>90° counterclockwise</option><option value={180}>180°</option><option value={0}>No rotation</option></select></label>
       </div>
-      <label className="range-confirmation"><input type="checkbox" checked={pageRangeConfirmed} onChange={(event) => setPageRangeConfirmed(event.target.checked)} /><span>I checked the PDF and confirm this range contains schedule pages only—no signature or rate-only pages.</span></label>
+      <label className="range-confirmation"><input type="checkbox" checked={pageRangeConfirmed} onChange={(event) => setPageRangeConfirmed(event.target.checked)} /><span>I checked the PDF and confirm pages 5–27 contain schedule/location information only, with no signature or rate-only pages, and the selected rotation makes them readable.</span></label>
       <button className="primary-link schedule-action" type="button" disabled={!files.rates || !analysis || !pageRangeConfirmed || readingOriginal} onClick={() => void analyzeOriginal()}>{readingOriginal ? "Reading original schedule locally…" : "Compare original to revised schedule"}</button>
       {!analysis && files.rates && <p className="coming-note">Analyze the revised USPS schedule in Step 3 first.</p>}
       {ocrProgress && <div className="ocr-progress"><div><strong>PDF page {ocrProgress.page}</strong><span>{ocrProgress.status}</span></div><progress max="1" value={ocrProgress.progress} /></div>}
