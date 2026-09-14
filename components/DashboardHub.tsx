@@ -90,6 +90,7 @@ export default function DashboardHub() {
   })(); }, [start, end]);
 
   const maxIncomplete = useMemo(() => Math.max(1, ...data.trend.map((row) => Number(row.incomplete_stops))), [data.trend]);
+  const bottomContractNames = useMemo(() => new Set(data.contracts.slice(0, 10).map((row) => row.contract_number)), [data.contracts]);
 
   async function copyEmail() {
     const email = filteredEmail(data, start, end, selectedSupervisors, selectedContracts);
@@ -129,6 +130,17 @@ export default function DashboardHub() {
         <article className="metric-card"><span>Total stops</span><strong>{number(data.totals.total_stops)}</strong></article>
         <article className="metric-card"><span>Incomplete stops</span><strong>{number(data.totals.incomplete_stops)}</strong></article>
       </section>
+      {selectedSupervisors.length > 0 && <section className="supervisor-focus-stack">
+        {selectedSupervisors.map((name) => {
+          const supervisor = data.supervisors.find((row) => row.supervisor === name);
+          const contracts = data.supervisor_contracts.filter((row) => row.supervisor === name).sort((a,b) => Number(b.incomplete_stops)-Number(a.incomplete_stops));
+          return <section className="panel supervisor-focus" key={name}>
+            <div className="supervisor-focus-heading"><div><p className="eyebrow">Supervisor focus</p><h2>{name}</h2><span>{supervisor ? `${number(supervisor.total_stops)} total stops · ${number(supervisor.incomplete_stops)} missed · ${percent(supervisor.completion_percent)}` : "No loads in this period"}</span></div><div><button className="hub-secondary-link" onClick={() => setGrain("day")}>Show daily results</button><button className="clear-filters" onClick={() => setSelectedSupervisors(selectedSupervisors.filter((value) => value !== name))}>Close</button></div></div>
+            <div className="panel-heading"><h2>Contracts with the most missed stops</h2><span>Click a contract to focus the entire Dashboard</span></div>
+            <div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Total Stops</th><th>Completed</th><th>Missed Stops</th><th>Completion</th></tr></thead><tbody>{contracts.map((row) => <tr key={row.contract_number} className={bottomContractNames.has(row.contract_number) ? "bottom-contract-row" : ""}><td><button className="day-button" onClick={() => setSelectedContracts([row.contract_number])}>{row.contract_number}</button></td><td>{number(row.total_stops)}</td><td>{number(row.completed_stops)}</td><td>{number(row.incomplete_stops)}</td><td>{percent(row.completion_percent)}</td></tr>)}</tbody></table></div>
+          </section>;
+        })}
+      </section>}
       <section className="hub-grid">
         <section className="panel hub-trend"><div className="panel-heading"><h2>Performance trend</h2><span>{data.trend.length} periods</span></div><div className="trend-list">{data.trend.map((row) => <div className="trend-row" key={row.period_start}><div><strong>{row.period_start}</strong><span>{percent(row.completion_percent)}</span></div><div className="trend-track"><i style={{width:`${Math.max(2, Number(row.incomplete_stops) / maxIncomplete * 100)}%`}} /></div><small>{number(row.incomplete_stops)} incomplete</small></div>)}</div></section>
         <section className="panel attention-panel"><div className="panel-heading"><h2>Needs attention</h2><span>Lowest contracts</span></div><div className="attention-list">{data.contracts.slice(0,10).map((row,index) => <Link href={`/contracts/${encodeURIComponent(row.contract_number || "Unmapped")}`} key={row.contract_number}><span>{index+1}</span><strong>{row.contract_number}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.incomplete_stops)} incomplete</small></Link>)}</div></section>
