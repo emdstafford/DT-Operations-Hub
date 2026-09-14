@@ -120,30 +120,50 @@ export default function DashboardHub() {
     (result.data ?? []).forEach((record) => {
       const report = record.data as MissedHistoryData;
       const rows = report.rows ?? [];
-      const datedRows = rows.filter((row) => {
-        const date = String(row.operatingDate || "");
-        const contract = String(row.contract || "Unmapped");
-        const inDateRange = Boolean(date && date >= start && date <= end);
-        const inDashboardView = visibleContracts.size === 0 || visibleContracts.has(contract);
-        return inDateRange && inDashboardView;
-      });
-      if (datedRows.length) matchingReports += 1;
-      datedRows.forEach((row) => {
-        const contract = String(row.contract || "Unmapped");
-        const group = contractGroups.get(contract) ?? { loads: 0, missingStops: 0 };
-        group.loads += 1;
-        group.missingStops += Number(row.missingStops || 0);
-        contractGroups.set(contract, group);
-        String(row.missingLocations || "").split(",").map((value) => value.trim()).filter(Boolean).forEach((location) => {
-          locationGroups.set(location, (locationGroups.get(location) ?? 0) + 1);
+      if (rows.length) {
+        const datedRows = rows.filter((row) => {
+          const date = String(row.operatingDate || "");
+          const contract = String(row.contract || "Unmapped");
+          return Boolean(date && date >= start && date <= end)
+            && (visibleContracts.size === 0 || visibleContracts.has(contract));
         });
+        if (datedRows.length) matchingReports += 1;
+        datedRows.forEach((row) => {
+          const contract = String(row.contract || "Unmapped");
+          const group = contractGroups.get(contract) ?? { loads: 0, missingStops: 0 };
+          group.loads += 1;
+          group.missingStops += Number(row.missingStops || 0);
+          contractGroups.set(contract, group);
+          String(row.missingLocations || "").split(",").map((value) => value.trim()).filter(Boolean).forEach((location) => {
+            locationGroups.set(location, (locationGroups.get(location) ?? 0) + 1);
+          });
+        });
+        return;
+      }
+
+      // Older snapshots did not retain individual rows. Their saved aggregates
+      // are exact only when the entire report period is inside the selected range.
+      const fullyCovered = record.period_start >= start && record.period_end <= end;
+      if (!fullyCovered) return;
+      matchingReports += 1;
+      (report.byContract ?? []).forEach((row) => {
+        if (visibleContracts.size > 0 && !visibleContracts.has(row.key)) return;
+        const group = contractGroups.get(row.key) ?? { loads: 0, missingStops: 0 };
+        group.loads += Number(row.loads || 0);
+        group.missingStops += Number(row.missingStops || 0);
+        contractGroups.set(row.key, group);
       });
+      if (selectedContracts.length === 0 && selectedSupervisors.length === 0) {
+        (report.byLocation ?? []).forEach((row) => {
+          locationGroups.set(row.key, (locationGroups.get(row.key) ?? 0) + Number(row.occurrences || 0));
+        });
+      }
     });
 
     setMissedReportCount(matchingReports);
     setLocations(Array.from(locationGroups, ([key, occurrences]) => ({ key, occurrences })).sort((a,b) => b.occurrences-a.occurrences).slice(0,25));
     setMissedContracts(Array.from(contractGroups, ([key, value]) => ({ key, ...value })).sort((a,b) => b.missingStops-a.missingStops).slice(0,25));
-  })(); }, [start, end, data.contracts]);
+  })(); }, [start, end, data.contracts, selectedContracts.length, selectedSupervisors.length]);
 
   const maxIncomplete = useMemo(() => Math.max(1, ...data.trend.map((row) => Number(row.incomplete_stops))), [data.trend]);
 
@@ -308,7 +328,7 @@ export default function DashboardHub() {
       </section>}
       <section className="hub-grid">
         <section className="panel hub-trend"><div className="panel-heading"><h2>Performance trend</h2><span>{grain === "day" ? "Click a day to see trips" : "Select Day view for trip drill-down"}</span></div><div className="trend-list">{data.trend.map((row) => <div className={`trend-row ${grain === "day" ? "trend-row-clickable" : ""}`} key={row.period_start}><div><button className="trend-day-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{row.period_start}</button><span>{percent(row.completion_percent)}</span></div><div className="trend-track"><i style={{width:`${Math.max(2, Number(row.incomplete_stops) / maxIncomplete * 100)}%`}} /></div><button className="trend-missed-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{number(row.incomplete_stops)} incomplete</button></div>)}</div></section>
-        <section className="panel attention-panel"><div className="panel-heading"><h2>Needs attention</h2><span>Lowest contracts</span></div><div className="attention-list">{data.contracts.slice(0,10).map((row,index) => <Link href={`/contracts/${encodeURIComponent(row.contract_number || "Unmapped")}`} key={row.contract_number}><span>{index+1}</span><strong>{row.contract_number}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.incomplete_stops)} incomplete</small></Link>)}</div></section>
+        <section className="panel attention-panel"><div className="panel-heading"><h2>Needs attention</h2><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="attention-list">{data.contracts.slice(0,10).map((row,index) => <Link href={`/contracts/${encodeURIComponent(row.contract_number || "Unmapped")}?start=${start}&end=${end}`} key={row.contract_number}><span>{index+1}</span><strong>{row.contract_number}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.incomplete_stops)} incomplete</small></Link>)}</div></section>
       </section>
       {selectedDay && grain === "day" && <section className="panel day-drilldown">
         <div className="panel-heading"><div><p className="eyebrow">Daily missed-stop drill-down</p><h2>{displayDate(selectedDay)}</h2></div><button className="clear-filters" onClick={() => { setSelectedDay(""); setTripBreakdown([]); }}>Close</button></div>
