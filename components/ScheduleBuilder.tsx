@@ -7,6 +7,7 @@ import { parseScannedUspsSchedule, type OcrProgress, type OcrScheduleAnalysis } 
 
 type IntakeKind = "source" | "simplified" | "driver" | "rates";
 type Intake = { name: string; size: number; file: File; sheets?: string[]; truckSheets?: number; tripRows?: number; parkingLocations?: string[] };
+type ServiceChangeDraft = { id: string; name: string; size: number; file: File; effectiveDates: string; affectedTrips: string; newTrips: string; status: "Draft" };
 
 const slots: Array<{ kind: IntakeKind; title: string; help: string; accept: string; sensitive?: boolean }> = [
   { kind: "source", title: "Official revised USPS schedule", help: "The current searchable PDF used for trips, stops, frequencies, mileage, hours, and effective dates", accept: ".pdf" },
@@ -24,8 +25,44 @@ function listDifference(left: string[], right: string[]) {
   return left.filter((item) => !rightSet.has(item));
 }
 
+const monthNumbers: Record<string, string> = { jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06", jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12" };
+
+function dateFromParts(day: string, month: string, year: string) {
+  const fullYear = year.length === 2 ? `20${year}` : year;
+  return `${fullYear}-${monthNumbers[month.slice(0, 3).toLowerCase()]}-${day.padStart(2, "0")}`;
+}
+
+function inferChangeDetails(file: File): ServiceChangeDraft {
+  const readable = file.name.replaceAll("_", " ").replaceAll("-", " ").replace(/\s+/g, " ");
+  const dates = new Set<string>();
+  for (const match of readable.matchAll(/\b(\d{1,2})\s+([A-Za-z]{3,9})\s+(20\d{2}|\d{2})\b/g)) {
+    if (monthNumbers[match[2].slice(0, 3).toLowerCase()]) dates.add(dateFromParts(match[1], match[2], match[3]));
+  }
+  for (const match of readable.matchAll(/\b(\d{1,2})\s+(\d{1,2})\s+([A-Za-z]{3,9})\s+(20\d{2}|\d{2})\b/g)) {
+    if (monthNumbers[match[3].slice(0, 3).toLowerCase()]) {
+      dates.add(dateFromParts(match[1], match[3], match[4]));
+      dates.add(dateFromParts(match[2], match[3], match[4]));
+    }
+  }
+  const affectedSection = readable.match(/Trips?\s+(.+?)(?:New\s+Trips?|Eff|Effective|Signed|$)/i)?.[1] || "";
+  const newSection = readable.match(/New\s+Trips?\s+(.+?)(?:Eff|Effective|Signed|$)/i)?.[1] || "";
+  const numbers = (value: string) => [...value.matchAll(/\b\d{1,3}\b/g)].map((match) => String(Number(match[0]))).join(", ");
+  return {
+    id: `${file.name}-${file.size}-${file.lastModified}`,
+    name: file.name,
+    size: file.size,
+    file,
+    effectiveDates: [...dates].sort().join(", "),
+    affectedTrips: numbers(affectedSection),
+    newTrips: numbers(newSection),
+    status: "Draft",
+  };
+}
+
 export default function ScheduleBuilder() {
   const [files, setFiles] = useState<Partial<Record<IntakeKind, Intake>>>({});
+  const [serviceChanges, setServiceChanges] = useState<ServiceChangeDraft[]>([]);
+  const [originalEffectiveDate, setOriginalEffectiveDate] = useState("");
   const [contract, setContract] = useState("");
   const [effectiveDate, setEffectiveDate] = useState("");
   const [analysis, setAnalysis] = useState<ScheduleAnalysis | null>(null);
@@ -62,6 +99,20 @@ export default function ScheduleBuilder() {
     };
   }, [analysis, originalAnalysis]);
 
+  function chooseServiceChanges(selected: FileList | null) {
+    if (!selected) return;
+    const additions = Array.from(selected).filter((file) => /\.pdf$/i.test(file.name)).map(inferChangeDetails);
+    setServiceChanges((current) => {
+      const byId = new Map(current.map((item) => [item.id, item]));
+      additions.forEach((item) => byId.set(item.id, item));
+      return [...byId.values()];
+    });
+  }
+
+  function updateServiceChange(id: string, field: "effectiveDates" | "affectedTrips" | "newTrips", value: string) {
+    setServiceChanges((current) => current.map((item) => item.id === id ? { ...item, [field]: value } : item));
+  }
+
   async function choose(kind: IntakeKind, file?: File) {
     if (!file) return;
     let sheets: string[] | undefined;
@@ -70,6 +121,10 @@ export default function ScheduleBuilder() {
     let parkingLocations: string[] | undefined;
     if (/\.(xlsx|xlsm|xls)$/i.test(file.name)) {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      if (kind === "simplified") {
+        const baseline = file.name.match(/(?:effective|eff)\s*(\d{1,2})[\s_-]+(\d{1,2})[\s_-]+(\d{2,4})/i);
+        if (baseline) setOriginalEffectiveDate(dateFromParts(baseline[2], "Jan", baseline[3]).replace("-01-", `-${baseline[1].padStart(2, "0")}-`));
+      }
       sheets = workbook.SheetNames;
       truckSheets = sheets.filter((name) => /^TRUCK\s+\d+/i.test(name.trim())).length;
       if (kind === "driver") {
@@ -142,11 +197,25 @@ export default function ScheduleBuilder() {
           {files[slot.kind] ? <strong className="selected-file">✓ {files[slot.kind]?.name} · {fileSize(files[slot.kind]?.size || 0)}</strong> : <strong>Choose file</strong>}
         </label>)}
       </div>
+      <div className="service-change-intake">
+        <div><span className="upload-card-title">Service-change exhibits</span><p>Add every SV/RTO/change exhibit. Multiple effective dates in one PDF remain separate timeline events.</p></div>
+        <label className="hub-secondary-link"><input type="file" accept=".pdf" multiple onChange={(event) => chooseServiceChanges(event.target.files)} />Add change exhibits</label>
+      </div>
+      {serviceChanges.length > 0 && <div className="service-change-list">{serviceChanges.map((change) => <article key={change.id}>
+        <div className="service-change-file"><strong>{change.name}</strong><span>{fileSize(change.size)} · Local only</span><button type="button" onClick={() => setServiceChanges((current) => current.filter((item) => item.id !== change.id))}>Remove</button></div>
+        <div className="service-change-fields">
+          <label>Effective date(s)<input value={change.effectiveDates} onChange={(event) => updateServiceChange(change.id, "effectiveDates", event.target.value)} placeholder="YYYY-MM-DD, YYYY-MM-DD" /></label>
+          <label>Affected trips<input value={change.affectedTrips} onChange={(event) => updateServiceChange(change.id, "affectedTrips", event.target.value)} placeholder="9, 11, 13" /></label>
+          <label>New trips<input value={change.newTrips} onChange={(event) => updateServiceChange(change.id, "newTrips", event.target.value)} placeholder="44, 45" /></label>
+        </div>
+        <p>Filename clues only—confirm every date and trip against the exhibit before review.</p>
+      </article>)}</div>}
     </section>
 
     <section className="panel schedule-version">
       <div className="section-heading"><div><p className="eyebrow">Step 2</p><h2>Identify this version</h2></div></div>
       <div className="schedule-fields">
+        <label>Original effective date<input type="date" value={originalEffectiveDate} onChange={(event) => setOriginalEffectiveDate(event.target.value)} /></label>
         <label>Contract<input value={contract} onChange={(event) => setContract(event.target.value.toUpperCase())} placeholder="Contract number" /></label>
         <label>Effective date<input type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} /></label>
         <label>Change type<select defaultValue="service-change"><option value="base">Base schedule</option><option value="service-change">SV / service change</option><option value="correction">Correction</option></select></label>
@@ -218,6 +287,16 @@ export default function ScheduleBuilder() {
         <p className="approval-blocker"><strong>Approval remains blocked.</strong> The next reconciliation stage must verify each stop’s name, address, NASS code, arrival/departure time, frequency, mileage, and vehicle requirement.</p>
       </div>}
     </section>
+
+    {serviceChanges.length > 0 && <section className="panel schedule-timeline">
+      <div className="section-heading"><div><p className="eyebrow">Version timeline</p><h2>{contract || "Contract"} schedule history</h2></div><span className="review-waiting">Draft intake</span></div>
+      <div className="timeline-list">
+        <article><span>Baseline</span><strong>Original schedule</strong><small>{originalEffectiveDate || "Effective date required"}</small></article>
+        {serviceChanges.flatMap((change) => (change.effectiveDates.split(",").map((value) => value.trim()).filter(Boolean).length ? change.effectiveDates.split(",").map((value) => value.trim()).filter(Boolean) : ["Date required"]).map((date) => ({ change, date }))).sort((a, b) => a.date.localeCompare(b.date)).map(({ change, date }, index) => <article key={`${change.id}-${date}-${index}`}><span>Service change</span><strong>{date}</strong><small>{change.affectedTrips ? `Trips ${change.affectedTrips}` : "Affected trips require confirmation"}{change.newTrips ? ` · New trips ${change.newTrips}` : ""}</small></article>)}
+        <article><span>Consolidated source</span><strong>Newest schedule</strong><small>{effectiveDate || "Effective date required"}</small></article>
+      </div>
+      <p className="coming-note">This timeline is a local Draft. Saving versions to the shared contract record will be enabled only after secure schedule tables and approval policies are installed.</p>
+    </section>}
 
     <aside className="panel schedule-output">
       <p className="eyebrow">Planned output</p><h2>One approved schedule, several views</h2>
