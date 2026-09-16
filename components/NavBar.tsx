@@ -5,18 +5,21 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-const links = [
+const operationsLinks = [
   ["Dashboard", "/"],
   ["Schedule Builder", "/schedule-builder"],
   ["Upload", "/upload"],
   ["History", "/history"],
 ];
 
-export default function NavBar() {
+export default function NavBar({ operationsAccess, payrollAccess }: { operationsAccess: boolean; payrollAccess: boolean }) {
   const [employee, setEmployee] = useState("");
   useEffect(() => {
-    void supabase.auth.getUser().then(({ data }) => setEmployee(String(data.user?.user_metadata?.full_name || data.user?.email || "")));
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => setEmployee(String(session?.user.user_metadata?.full_name || session?.user.email || "")));
+    function updateEmployee(email?: string, name?: string) {
+      setEmployee(String(name || email || ""));
+    }
+    void supabase.auth.getUser().then(({ data }) => updateEmployee(data.user?.email, String(data.user?.user_metadata?.full_name || "")));
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => void updateEmployee(session?.user.email, String(session?.user.user_metadata?.full_name || "")));
     return () => data.subscription.unsubscribe();
   }, []);
 
@@ -31,7 +34,8 @@ export default function NavBar() {
         <div className="header-status"><span className="status-dot" />{employee || "Operations reporting"}</div>
       </div>
       <nav className="main-nav" aria-label="Primary navigation">
-        {links.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}
+        {operationsAccess && operationsLinks.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}
+        {payrollAccess && <Link href="/payroll/holiday-hours">Payroll Tools</Link>}
         {employee && <button className="nav-button" onClick={signOut}>Sign Out</button>}
       </nav>
     </header>
