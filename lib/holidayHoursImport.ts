@@ -64,7 +64,7 @@ function csvValue(value: string) {
   return /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
-export function createHolidayHoursImport(sourceCsv: string): HolidayHoursImportResult {
+export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 = 1): HolidayHoursImportResult {
   const data = parseCsv(sourceCsv.replace(/^\uFEFF/, ""));
   if (!data.length) throw new Error("The selected CSV is empty.");
 
@@ -116,7 +116,8 @@ export function createHolidayHoursImport(sourceCsv: string): HolidayHoursImportR
     .map((employee) => {
       // Formula: total hours / 2 / 40 * 8, equivalent to total hours / 10.
       // Integer arithmetic gives payroll-style half-up rounding at two decimals.
-      const holidayHundredths = Math.min(800, Math.floor((employee.hoursHundredths + 5) / 10));
+      const singleHolidayHundredths = Math.min(800, Math.floor((employee.hoursHundredths + 5) / 10));
+      const holidayHundredths = singleHolidayHundredths * holidayCount;
       return {
         companyCode: employee.companyCode,
         fileNumber: employee.fileNumber,
@@ -131,7 +132,7 @@ export function createHolidayHoursImport(sourceCsv: string): HolidayHoursImportR
     sourceRowCount,
     totalSourceHours: totalSourceHundredths / 100,
     totalHolidayHours: rows.reduce((total, employee) => total + employee.holidayHours, 0),
-    cappedEmployeeCount: rows.filter((employee) => employee.holidayHours === 8).length,
+    cappedEmployeeCount: rows.filter((employee) => employee.holidayHours === 8 * holidayCount).length,
   };
 }
 
