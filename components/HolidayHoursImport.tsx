@@ -57,30 +57,8 @@ export default function HolidayHoursImport() {
   }
 
   return <div className="payroll-tool-stack">
-    <section className="panel payroll-instructions">
-      <div className="panel-heading"><h2>Written instructions</h2><span>Holiday Hours Import</span></div>
-      <ol>
-        <li><strong>Go to Reports &amp; Analytics.</strong></li>
-        <li><strong>Open All Standard Reports.</strong></li>
-        <li><strong>Select Employee Hours for Holiday Import File.</strong></li>
-        <li><strong>Set Employee Information Effective Date As of.</strong> Choose the specific date needed for this holiday-hours calculation.</li>
-        <li><strong>Select Run and download the report as a CSV.</strong> Do not rename or remove the Company Code, File Number, or Hours columns.</li>
-        <li><strong>Select whether this import covers one or two holidays.</strong> Two holidays doubles each employee’s calculated amount.</li>
-        <li><strong>Upload the downloaded CSV below.</strong> The Hub adds every Hours row for the same employee, including rows from different pay codes or departments.</li>
-        <li><strong>Review the results.</strong> Check the employee count, combined source hours, employees capped at 8.00, and several individual employees.</li>
-        <li><strong>Download the import CSV.</strong> The file contains only Co Code, File #, and Hours 3 Amount.</li>
-        <li><strong>Import the downloaded CSV into the payroll program.</strong> Review its import preview and warnings before completing the import.</li>
-      </ol>
-      <div className="calculation-note">
-        <strong>Calculation used</strong>
-        <span>Total employee hours ÷ 2 ÷ 40 × 8, rounded to two decimals. Each holiday is capped at 8.00 hours. A two-holiday import doubles the result and has a 16.00-hour maximum.</span>
-      </div>
-      <p className="privacy-note"><strong>Private processing:</strong> The source file and calculated file remain in this browser. The Hub does not save payroll contents to shared report history.</p>
-    </section>
-
     <section className="panel payroll-upload-panel">
       <div>
-        <p className="eyebrow">Step 1</p>
         <h2>Upload employee hours</h2>
         <p>Select the unmodified CSV exported from the employee-hours report.</p>
       </div>
@@ -100,6 +78,27 @@ export default function HolidayHoursImport() {
           }} />
         </label>
       </div>
+    </section>
+
+    <section className="panel payroll-instructions">
+      <div className="panel-heading"><h2>Written instructions</h2><span>Holiday Hours Import</span></div>
+      <ol>
+        <li><strong>Go to Reports &amp; Analytics.</strong></li>
+        <li><strong>Open All Standard Reports.</strong></li>
+        <li><strong>Select Employee Hours for Holiday Import File.</strong></li>
+        <li><strong>Set Employee Information Effective Date As of.</strong> Choose the specific date needed for this holiday-hours calculation.</li>
+        <li><strong>Select Run and download the report as a CSV.</strong> Do not rename or remove the Company Code, File Number, or Hours columns.</li>
+        <li><strong>Select whether this import covers one or two holidays.</strong> Two holidays doubles each employee’s calculated amount.</li>
+        <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, including rows from different pay codes or departments.</li>
+        <li><strong>Review the results.</strong> Check the employee count, combined source hours, employees capped at 8.00, and several individual employees.</li>
+        <li><strong>Download the import CSV.</strong> The file contains only Co Code, File #, and Hours 3 Amount.</li>
+        <li><strong>Import the downloaded CSV into the payroll program.</strong> Review its import preview and warnings before completing the import.</li>
+      </ol>
+      <div className="calculation-note">
+        <strong>Calculation used</strong>
+        <span>Total employee hours ÷ 2 ÷ 40 × 8, rounded to two decimals. Each holiday is capped at 8.00 hours. A two-holiday import doubles the result and has a 16.00-hour maximum.</span>
+      </div>
+      <p className="privacy-note"><strong>Private processing:</strong> The source file and calculated file remain in this browser. The Hub does not save payroll contents to shared report history.</p>
     </section>
 
     {error && <section className="panel payroll-error"><strong>File not processed</strong><span>{error}</span></section>}
