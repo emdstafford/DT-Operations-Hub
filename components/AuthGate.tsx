@@ -7,13 +7,14 @@ import NavBar from "@/components/NavBar";
 import { supabase } from "@/lib/supabase";
 
 const publicPaths = ["/login", "/auth/callback"];
+const reportManagementPaths = ["/upload", "/history", "/schedule-builder", "/historical-upload", "/admin"];
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
-  const [operationsAccess, setOperationsAccess] = useState(false);
+  const [operationsRole, setOperationsRole] = useState("");
   const [payrollAccess, setPayrollAccess] = useState(false);
   const isPublic = publicPaths.some((path) => pathname.startsWith(path));
 
@@ -23,7 +24,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       if (!active) return;
       setSession(nextSession);
       if (!nextSession) {
-        setOperationsAccess(false);
+        setOperationsRole("");
         setPayrollAccess(false);
         setChecking(false);
         if (!isPublic) router.replace("/login");
@@ -32,13 +33,16 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
       const email = nextSession.user.email?.toLowerCase() ?? "";
       const [operationsResult, payrollResult] = await Promise.all([
-        supabase.from("approved_users").select("email").eq("email", email).eq("active", true).maybeSingle(),
+        supabase.from("approved_users").select("email, role").eq("email", email).eq("active", true).maybeSingle(),
         supabase.from("payroll_tool_users").select("email").eq("email", email).eq("active", true).maybeSingle(),
       ]);
       if (!active) return;
       const canUseOperations = Boolean(operationsResult.data);
       const canUsePayroll = Boolean(payrollResult.data);
-      setOperationsAccess(canUseOperations);
+      const role = String(operationsResult.data?.role || "");
+      const canManageReports = role === "admin" || role === "uploader";
+      const isReportManagementPath = reportManagementPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+      setOperationsRole(role);
       setPayrollAccess(canUsePayroll);
       setChecking(false);
 
@@ -51,6 +55,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         router.replace("/");
       } else if (!pathname.startsWith("/payroll/") && !canUseOperations) {
         router.replace("/payroll/holiday-hours");
+      } else if (isReportManagementPath && !canManageReports) {
+        router.replace("/");
       }
     }
 
@@ -68,7 +74,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   if (isPublic) return <>{children}</>;
   if (!session) return null;
   return <div className="app-frame">
-    <NavBar operationsAccess={operationsAccess} payrollAccess={payrollAccess} />
+    <NavBar operationsRole={operationsRole} payrollAccess={payrollAccess} />
     <div className="app-content">{children}</div>
   </div>;
 }
