@@ -13,8 +13,10 @@ const operationsLinks = [
   ["History", "/history"],
 ];
 
-export default function NavBar({ operationsAccess, payrollAccess }: { operationsAccess: boolean; payrollAccess: boolean }) {
+export default function NavBar({ operationsRole, payrollAccess }: { operationsRole: string; payrollAccess: boolean }) {
   const pathname = usePathname();
+  const operationsAccess = Boolean(operationsRole);
+  const canManageReports = operationsRole === "admin" || operationsRole === "uploader";
   const [employee, setEmployee] = useState("");
   useEffect(() => {
     function updateEmployee(email?: string, name?: string) {
@@ -35,7 +37,9 @@ export default function NavBar({ operationsAccess, payrollAccess }: { operations
         </Link>
       </div>
       <nav className="main-nav" aria-label="Primary navigation">
-        {operationsAccess && operationsLinks.map(([label, href]) => <Link className={pathname === href ? "active" : ""} href={href} key={href}>{label}</Link>)}
+        {operationsAccess && operationsLinks
+          .filter(([, href]) => href === "/" || canManageReports)
+          .map(([label, href]) => <Link className={pathname === href ? "active" : ""} href={href} key={href}>{label}</Link>)}
         {payrollAccess && <Link className={pathname.startsWith("/payroll/") ? "active" : ""} href="/payroll/holiday-hours">Payroll Tools</Link>}
       </nav>
       <div className="sidebar-user">
