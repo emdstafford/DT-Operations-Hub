@@ -67,5 +67,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   if (checking) return <main className="auth-loading"><img src="https://cdn.prod.website-files.com/6493ca96ecc7e42995686bc5/68fbcce63d1ad0ff30d74399_Draft%20LogoDT.png" alt="Davenport Transportation" /><span>Loading DT Intelligence Hub…</span></main>;
   if (isPublic) return <>{children}</>;
   if (!session) return null;
-  return <><NavBar operationsAccess={operationsAccess} payrollAccess={payrollAccess} />{children}</>;
+  return <div className="app-frame">
+    <NavBar operationsAccess={operationsAccess} payrollAccess={payrollAccess} />
+    <div className="app-content">{children}</div>
+  </div>;
 }
