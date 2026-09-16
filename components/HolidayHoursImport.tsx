@@ -81,7 +81,6 @@ export default function HolidayHoursImport() {
     </section>
 
     <section className="panel payroll-instructions">
-      <div className="panel-heading"><h2>Written instructions</h2><span>Holiday Hours Import</span></div>
       <ol>
         <li><strong>Go to Reports &amp; Analytics.</strong></li>
         <li><strong>Open All Standard Reports.</strong></li>
