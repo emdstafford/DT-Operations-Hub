@@ -56,8 +56,12 @@ export default function HolidayHoursImport() {
     <section className="panel payroll-instructions">
       <div className="panel-heading"><h2>Written instructions</h2><span>Holiday Hours Import</span></div>
       <ol>
-        <li><strong>Export the employee-hours source report as CSV.</strong> Do not rename or remove the Company Code, File Number, or Hours columns.</li>
-        <li><strong>Upload the source CSV below.</strong> The Hub adds every Hours row for the same employee, including rows from different pay codes or departments.</li>
+        <li><strong>Go to Reports &amp; Analytics.</strong></li>
+        <li><strong>Open All Standard Reports.</strong></li>
+        <li><strong>Select Employee Hours for Holiday Import File.</strong></li>
+        <li><strong>Set Employee Information Effective Date As of.</strong> Choose the specific date needed for this holiday-hours calculation.</li>
+        <li><strong>Select Run and download the report as a CSV.</strong> Do not rename or remove the Company Code, File Number, or Hours columns.</li>
+        <li><strong>Upload the downloaded CSV below.</strong> The Hub adds every Hours row for the same employee, including rows from different pay codes or departments.</li>
         <li><strong>Review the results.</strong> Check the employee count, combined source hours, employees capped at 8.00, and several individual employees.</li>
         <li><strong>Download the import CSV.</strong> The file contains only Co Code, File #, and Hours 3 Amount.</li>
         <li><strong>Import the downloaded CSV into the payroll program.</strong> Review its import preview and warnings before completing the import.</li>
