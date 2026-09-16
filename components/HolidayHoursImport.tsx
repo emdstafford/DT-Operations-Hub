@@ -91,7 +91,8 @@ export default function HolidayHoursImport() {
         <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, including rows from different pay codes or departments.</li>
         <li><strong>Review the results.</strong> Check the employee count, combined source hours, employees capped at 8.00, and several individual employees.</li>
         <li><strong>Download the import CSV.</strong> The file contains only Co Code, File #, and Hours 3 Amount.</li>
-        <li><strong>Import the downloaded CSV into the payroll program.</strong> Review its import preview and warnings before completing the import.</li>
+        <li><strong>In ADP, go to Worksheets.</strong></li>
+        <li><strong>Select Import File and choose the downloaded CSV.</strong> Review the ADP import preview and any warnings before completing the import.</li>
       </ol>
       <div className="calculation-note">
         <strong>Calculation used</strong>
