@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import type { OperationalNote } from "@/components/ContractOperationalNotes";
 import PeriodAnnotations from "@/components/PeriodAnnotations";
 import { supabase } from "@/lib/supabase";
 
@@ -20,6 +21,7 @@ const percent = (value: number) => `${(Number(value || 0) * 100).toFixed(2)}%`;
 const contractHealth = (value: number) => Number(value || 0) >= 0.95 ? { label: "Good", className: "health-good" } : Number(value || 0) >= 0.90 ? { label: "Needs help", className: "health-help" } : { label: "Alert", className: "health-alert" };
 const displayDate = (value: string) => new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character] ?? character);
+const operationalStatusLabel = (status: OperationalNote["status"]) => status === "waiting_on_usps" ? "Waiting on USPS" : status === "monitoring" ? "Monitoring" : "Resolved";
 
 function filteredEmail(data: HubData, start: string, end: string, supervisors: string[], contracts: string[], showCompanyRankings: boolean, includeSupervisorDetail = false, includeCongratulations = true) {
   const header = "background:#123b61;color:#fff;padding:8px;border:1px solid #d6dde3;text-align:left";
@@ -72,6 +74,7 @@ export default function DashboardHub() {
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState("");
   const [previousPeriod, setPreviousPeriod] = useState<{ start: string; end: string } | null>(null);
+  const [operationalNotes, setOperationalNotes] = useState<OperationalNote[]>([]);
 
   useEffect(() => { void (async () => {
     const [latest, contracts, supervisors] = await Promise.all([
@@ -112,6 +115,18 @@ export default function DashboardHub() {
     })();
     return () => { active = false; window.clearTimeout(timeout); controller.abort(); };
   }, [initialized, start, end, grain, selectedContracts, selectedSupervisors, excludeAugust, maxCompletion, minMissedStops]);
+
+  useEffect(() => {
+    if (!initialized) return;
+    void (async () => {
+      const result = await supabase.from("operational_notes")
+        .select("id,contract_number,trip_number,status,note,requested_on,effective_start,effective_end,created_at")
+        .lte("effective_start", end)
+        .or(`effective_end.is.null,effective_end.gte.${start}`)
+        .order("effective_start", { ascending: false });
+      if (!result.error) setOperationalNotes((result.data ?? []) as OperationalNote[]);
+    })();
+  }, [initialized, start, end]);
 
   useEffect(() => { void (async () => {
     const result = await supabase.from("report_history").select("data,period_start,period_end")
@@ -323,9 +338,10 @@ export default function DashboardHub() {
         group.loads += 1; group.loadNumbers.push(row.load_number); group.totalStops += Number(row.total_stops || 0); group.completedStops += Number(row.completed_stops || 0); group.incompleteStops += Number(row.incomplete_stops || 0); groups.set(key, group);
       });
       const trips = [...groups.values()].sort((a,b) => a.operatingDate.localeCompare(b.operatingDate) || b.incompleteStops-a.incompleteStops || a.contract.localeCompare(b.contract));
-      const [missedHistory, annotations] = await Promise.all([
+      const [missedHistory, annotations, savedOperationalNotes] = await Promise.all([
         supabase.from("report_history").select("data").eq("report_type","missed_stops").lte("period_start",end).gte("period_end",start),
         supabase.from("report_annotations").select("title,note,period_start,period_end").lte("period_start",end).gte("period_end",start).order("period_start"),
+        supabase.from("operational_notes").select("contract_number,trip_number,status,note,requested_on,effective_start,effective_end").lte("effective_start",end).or(`effective_end.is.null,effective_end.gte.${start}`).order("effective_start"),
       ]);
       const sundayMissing = (missedHistory.data ?? []).reduce((sum, item) => sum + Number((item.data as { totalMissingStops?: number })?.totalMissingStops || 0), 0);
       const header = "background:#123b61;color:#fff;padding:7px;border:1px solid #d6dde3;text-align:left";
@@ -336,9 +352,10 @@ export default function DashboardHub() {
       const tripRows = trips.map((row) => `<tr><td style="${nameCell}">${escapeHtml(row.operatingDate)}</td><td style="${nameCell}">${escapeHtml(row.contract)}</td><td style="${nameCell}">${escapeHtml(row.trip)}</td><td style="${cell}">${number(row.loads)}</td><td style="${cell}">${number(row.incompleteStops)}</td><td style="${nameCell};font-size:9px">${escapeHtml(row.loadNumbers.join(", "))}</td></tr>`).join("");
       const locationRows = locations.map((row) => `<tr><td style="${nameCell}">${escapeHtml(row.key)}</td><td style="${cell}">${number(row.occurrences)}</td></tr>`).join("");
       const noteRows = (annotations.data ?? []).map((row) => `<div style="margin:8px 0;padding:9px 11px;background:#eef2f5;border-left:4px solid #123b61"><strong>${escapeHtml(row.title)}</strong> (${row.period_start}–${row.period_end})<br><span>${escapeHtml(row.note)}</span></div>`).join("");
+      const operationalRows = ((savedOperationalNotes.data ?? []) as OperationalNote[]).filter((row) => visibleContracts.has(row.contract_number)).map((row) => `<div style="margin:8px 0;padding:9px 11px;background:#fff7df;border-left:4px solid #9b7414"><strong>${escapeHtml(row.contract_number)}${row.trip_number ? ` · Trip ${escapeHtml(row.trip_number)}` : ""} — ${escapeHtml(operationalStatusLabel(row.status))}</strong> (${row.effective_start}${row.effective_end ? `–${row.effective_end}` : "–current"})<br><span>${escapeHtml(row.note)}</span>${row.requested_on ? `<br><small>USPS change requested ${row.requested_on}</small>` : ""}</div>`).join("");
       const worstTrip = [...trips].sort((a,b) => b.incompleteStops-a.incompleteStops)[0]; const worstContract = data.contracts[0];
       const verified = [worstContract ? `${worstContract.contract_number || "Unmapped"} had the lowest completion at ${percent(worstContract.completion_percent)} with ${number(worstContract.incomplete_stops)} incomplete stops.` : "", worstTrip ? `${worstTrip.contract} trip ${worstTrip.trip} had the most incomplete stops (${number(worstTrip.incompleteStops)}).` : ""].filter(Boolean);
-      const html = `<div style="font-family:Arial,sans-serif;color:#243746"><header style="background:#123b61;color:white;padding:20px 24px"><small style="letter-spacing:1px">DT INTELLIGENCE HUB</small><h1 style="margin:5px 0">Performance Review Report</h1><div>${displayDate(start)} – ${displayDate(end)}</div></header><main style="padding:18px 24px"><p><strong>${escapeHtml(context)}</strong></p><div style="display:flex;gap:10px;flex-wrap:wrap"><div style="background:#eef2f5;padding:10px 14px"><small>COMPLETION</small><br><strong style="font-size:22px">${percent(data.totals.completion_percent)}</strong></div><div style="background:#eef2f5;padding:10px 14px"><small>TQ INCOMPLETE</small><br><strong style="font-size:22px">${number(data.totals.incomplete_stops)}</strong></div><div style="background:#eef2f5;padding:10px 14px"><small>MISSED GEOFENCE STOPS</small><br><strong style="font-size:22px">${number(sundayMissing)}</strong></div></div><h2>What the data confirms</h2><ul>${verified.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}<li>TQ incomplete stops and missed geofence stops are separate measures and may not match.</li></ul>${noteRows ? `<h2>Saved operational context</h2>${noteRows}` : ""}<h2>Contract performance</h2><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Contract</th><th style="${header}">Stops</th><th style="${header}">Incomplete</th><th style="${header}">Completion</th></tr></thead><tbody>${contractRows}</tbody></table><h2 style="break-before:page">Incomplete stops by trip</h2><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Operating Date</th><th style="${header}">Contract</th><th style="${header}">Trip</th><th style="${header}">Loads</th><th style="${header}">Incomplete</th><th style="${header}">Load Numbers</th></tr></thead><tbody>${tripRows}</tbody></table>${locationRows ? `<h2>Missed Geofence Locations</h2><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Location</th><th style="${header}">Occurrences</th></tr></thead><tbody>${locationRows}</tbody></table>` : ""}<p style="color:#677887;font-size:10px">Facts are drawn from saved TQ and missed-stops reports. A cause is shown only when documented in an operational note.</p></main></div>`;
+      const html = `<div style="font-family:Arial,sans-serif;color:#243746"><header style="background:#123b61;color:white;padding:20px 24px"><small style="letter-spacing:1px">DT INTELLIGENCE HUB</small><h1 style="margin:5px 0">Performance Review Report</h1><div>${displayDate(start)} – ${displayDate(end)}</div></header><main style="padding:18px 24px"><p><strong>${escapeHtml(context)}</strong></p><div style="display:flex;gap:10px;flex-wrap:wrap"><div style="background:#eef2f5;padding:10px 14px"><small>COMPLETION</small><br><strong style="font-size:22px">${percent(data.totals.completion_percent)}</strong></div><div style="background:#eef2f5;padding:10px 14px"><small>TQ INCOMPLETE</small><br><strong style="font-size:22px">${number(data.totals.incomplete_stops)}</strong></div><div style="background:#eef2f5;padding:10px 14px"><small>MISSED GEOFENCE STOPS</small><br><strong style="font-size:22px">${number(sundayMissing)}</strong></div></div><h2>What the data confirms</h2><ul>${verified.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}<li>TQ incomplete stops and missed geofence stops are separate measures and may not match.</li></ul>${noteRows || operationalRows ? `<h2>Saved operational context</h2>${noteRows}${operationalRows}` : ""}<h2>Contract performance</h2><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Contract</th><th style="${header}">Stops</th><th style="${header}">Incomplete</th><th style="${header}">Completion</th></tr></thead><tbody>${contractRows}</tbody></table><h2 style="break-before:page">Incomplete stops by trip</h2><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Operating Date</th><th style="${header}">Contract</th><th style="${header}">Trip</th><th style="${header}">Loads</th><th style="${header}">Incomplete</th><th style="${header}">Load Numbers</th></tr></thead><tbody>${tripRows}</tbody></table>${locationRows ? `<h2>Missed Geofence Locations</h2><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Location</th><th style="${header}">Occurrences</th></tr></thead><tbody>${locationRows}</tbody></table>` : ""}<p style="color:#677887;font-size:10px">Facts are drawn from saved TQ and missed-stops reports. A cause is shown only when documented in an operational note.</p></main></div>`;
       const printWindow = window.open("", "_blank");
       if (!printWindow) throw new Error("Allow pop-ups for DT Intelligence Hub to print the report.");
       printWindow.document.write(`<!doctype html><html><head><title>Performance Review ${start} to ${end}</title><style>@page{size:portrait;margin:.4in}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{margin:0}h2{color:#123b61;break-after:avoid}thead{display:table-header-group}tr{break-inside:avoid}</style></head><body>${html}<script>window.onload=()=>window.print()<\/script></body></html>`);
@@ -420,11 +437,11 @@ export default function DashboardHub() {
       {selectedDay && grain === "day" && <section className="panel day-drilldown">
         <div className="panel-heading"><div><p className="eyebrow">Daily missed-stop drill-down</p><h2>{displayDate(selectedDay)}</h2></div><button className="clear-filters" onClick={() => { setSelectedDay(""); setTripBreakdown([]); }}>Close</button></div>
         {drillError && <div className="alert alert-error">{drillError}</div>}
-        {drillLoading ? <div className="hub-loading">Loading trips for this day…</div> : tripBreakdown.length ? <div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Trip</th><th>Affected Loads</th><th>Total Stops</th><th>Completed</th><th>Missed Stops</th><th>Load Numbers</th></tr></thead><tbody>{tripBreakdown.map((row) => <tr key={`${row.operatingDate}-${row.contract}-${row.trip}`}><td className="font-semibold text-navy">{row.contract}</td><td>{row.trip}</td><td>{number(row.loads)}</td><td>{number(row.totalStops)}</td><td>{number(row.completedStops)}</td><td><strong>{number(row.incompleteStops)}</strong></td><td><details><summary>View {row.loadNumbers.length}</summary><div className="load-number-list">{row.loadNumbers.join(", ")}</div></details></td></tr>)}</tbody><tfoot><tr><th colSpan={2}>Day total</th><th>{number(tripBreakdown.reduce((sum,row) => sum + row.loads,0))}</th><th>{number(tripBreakdown.reduce((sum,row) => sum + row.totalStops,0))}</th><th>{number(tripBreakdown.reduce((sum,row) => sum + row.completedStops,0))}</th><th>{number(tripBreakdown.reduce((sum,row) => sum + row.incompleteStops,0))}</th><th /></tr></tfoot></table></div> : !drillError && <div className="location-empty">No incomplete TQ stops match the current filters for this day.</div>}
+        {drillLoading ? <div className="hub-loading">Loading trips for this day…</div> : tripBreakdown.length ? <div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Trip</th><th>Affected Loads</th><th>Total Stops</th><th>Completed</th><th>Missed Stops</th><th>Known context</th><th>Load Numbers</th></tr></thead><tbody>{tripBreakdown.map((row) => <tr key={`${row.operatingDate}-${row.contract}-${row.trip}`}><td className="font-semibold text-navy">{row.contract}</td><td>{row.trip}</td><td>{number(row.loads)}</td><td>{number(row.totalStops)}</td><td>{number(row.completedStops)}</td><td><strong>{number(row.incompleteStops)}</strong></td><td><OperationalContext notes={operationalNotes.filter((item) => item.contract_number === row.contract && (!item.trip_number || item.trip_number === row.trip))} /></td><td><details><summary>View {row.loadNumbers.length}</summary><div className="load-number-list">{row.loadNumbers.join(", ")}</div></details></td></tr>)}</tbody><tfoot><tr><th colSpan={2}>Day total</th><th>{number(tripBreakdown.reduce((sum,row) => sum + row.loads,0))}</th><th>{number(tripBreakdown.reduce((sum,row) => sum + row.totalStops,0))}</th><th>{number(tripBreakdown.reduce((sum,row) => sum + row.completedStops,0))}</th><th>{number(tripBreakdown.reduce((sum,row) => sum + row.incompleteStops,0))}</th><th colSpan={2} /></tr></tfoot></table></div> : !drillError && <div className="location-empty">No incomplete TQ stops match the current filters for this day.</div>}
         <p className="drill-note">These are official TQ incomplete-stop counts. Facility names come from the separate missed-stops report and may not match this total.</p>
       </section>}
       <section className="hub-grid">
-        <section className="panel overflow-hidden"><div className="panel-heading"><h2>Missed stops by contract</h2><span>{displayDate(start)} – {displayDate(end)}</span></div>{missedContracts.length ? <div className="table-scroll hub-table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Affected Loads</th><th>Missed Geofence Stops</th></tr></thead><tbody>{missedContracts.map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.loads)}</td><td>{number(row.missingStops)}</td></tr>)}</tbody></table></div> : <div className="location-empty">No missed-stop rows fall within the selected dates.</div>}</section>
+        <section className="panel overflow-hidden"><div className="panel-heading"><h2>Missed stops by contract</h2><span>{displayDate(start)} – {displayDate(end)}</span></div>{missedContracts.length ? <div className="table-scroll hub-table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Affected Loads</th><th>Missed Geofence Stops</th><th>Known context</th></tr></thead><tbody>{missedContracts.map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.loads)}</td><td>{number(row.missingStops)}</td><td><OperationalContext notes={operationalNotes.filter((item) => item.contract_number === row.key)} /></td></tr>)}</tbody></table></div> : <div className="location-empty">No missed-stop rows fall within the selected dates.</div>}</section>
         <section className="panel overflow-hidden"><div className="panel-heading"><h2>Missed geofence locations</h2><span>{missedReportCount ? `${missedReportCount} report${missedReportCount === 1 ? "" : "s"} with matching dates` : "No matching missed-stops report rows"}</span></div>{locations.length ? <div className="table-scroll hub-table-scroll"><table className="data-table"><thead><tr><th>Location</th><th>Occurrences</th></tr></thead><tbody>{locations.map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.occurrences)}</td></tr>)}</tbody></table></div> : <div className="location-empty">Upload the missed-stops report to add location details for this period.</div>}</section>
       </section>
       <details className="dashboard-detail-tables panel">
@@ -440,6 +457,17 @@ export default function DashboardHub() {
 
 function MultiSelect({ label, options, selected, setSelected }: { label: string; options: string[]; selected: string[]; setSelected: (values: string[]) => void }) {
   return <div className="multi-filter"><span>{label}</span><details><summary>{selected.length ? `${selected.length} selected` : `All ${label.toLowerCase()}`}</summary><div className="multi-menu"><button type="button" onClick={() => setSelected(selected.length === options.length ? [] : options)}>{selected.length === options.length ? "Clear all" : "Select all"}</button>{options.map((option) => <label key={option}><input type="checkbox" checked={selected.includes(option)} onChange={() => setSelected(selected.includes(option) ? selected.filter((value) => value !== option) : [...selected, option])} />{option}</label>)}</div></details></div>;
+}
+
+function OperationalContext({ notes }: { notes: OperationalNote[] }) {
+  if (!notes.length) return <span className="text-muted">—</span>;
+  const primary = notes[0];
+  return <div className="trip-note-cell">
+    <span className={`inline-operational-status status-${primary.status}`}>{operationalStatusLabel(primary.status)}</span>
+    <details><summary>{notes.length === 1 ? (primary.trip_number ? `Trip ${primary.trip_number} note` : "Contract note") : `${notes.length} saved notes`}</summary>
+      {notes.map((item) => <div className="contract-context" key={item.id}><p><strong>{item.trip_number ? `Trip ${item.trip_number}: ` : ""}</strong>{item.note}</p><small>Applies {item.effective_start}{item.effective_end ? ` through ${item.effective_end}` : " to current"}{item.requested_on ? ` · USPS requested ${item.requested_on}` : ""}</small></div>)}
+    </details>
+  </div>;
 }
 
 function HubTable({ title, rows, kind, highlightRankings, onSupervisorSelect }: { title: string; rows: Row[]; kind: "contract" | "supervisor"; highlightRankings?: boolean; onSupervisorSelect?: (name: string) => void }) {
