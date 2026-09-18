@@ -24,11 +24,13 @@ export default function ContractOperationalNotes({ contract }: { contract: strin
   const [notes, setNotes] = useState<OperationalNote[]>([]);
   const [canEdit, setCanEdit] = useState(false);
   const [trip, setTrip] = useState("");
-  const [status, setStatus] = useState<"waiting_on_usps" | "monitoring">("waiting_on_usps");
+  const [status, setStatus] = useState<OperationalNote["status"]>("waiting_on_usps");
   const [requestedOn, setRequestedOn] = useState("");
   const [effectiveStart, setEffectiveStart] = useState(today);
   const [note, setNote] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState("");
+  const [editingResolved, setEditingResolved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -56,21 +58,54 @@ export default function ContractOperationalNotes({ contract }: { contract: strin
     })();
   }, [loadNotes]);
 
+  function resetForm() {
+    setTrip("");
+    setRequestedOn("");
+    setEffectiveStart(today);
+    setNote("");
+    setStatus("waiting_on_usps");
+    setEditingId("");
+    setEditingResolved(false);
+    setShowForm(false);
+  }
+
+  function startNewNote() {
+    resetForm();
+    setShowForm(true);
+  }
+
+  function startEditing(item: OperationalNote) {
+    setTrip(item.trip_number || "");
+    setRequestedOn(item.requested_on || "");
+    setEffectiveStart(item.effective_start);
+    setNote(item.note);
+    setStatus(item.status);
+    setEditingId(item.id);
+    setEditingResolved(item.status === "resolved" || Boolean(item.effective_end));
+    setShowForm(true);
+    setError("");
+  }
+
   async function saveNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!note.trim()) return;
     setSaving(true); setError("");
-    const { error: saveError } = await supabase.from("operational_notes").insert({
+    const values = {
       contract_number: contract,
       trip_number: trip.trim() || null,
       status,
       note: note.trim(),
       requested_on: requestedOn || null,
       effective_start: effectiveStart,
-    });
+      updated_at: new Date().toISOString(),
+    };
+    const result = editingId
+      ? await supabase.from("operational_notes").update(values).eq("id", editingId)
+      : await supabase.from("operational_notes").insert(values);
+    const saveError = result.error;
     if (saveError) setError(saveError.message);
     else {
-      setTrip(""); setRequestedOn(""); setEffectiveStart(today); setNote(""); setStatus("waiting_on_usps"); setShowForm(false);
+      resetForm();
       await loadNotes();
     }
     setSaving(false);
@@ -94,22 +129,22 @@ export default function ContractOperationalNotes({ contract }: { contract: strin
   return <section className="panel operational-notes-panel no-print">
     <div className="panel-heading operational-notes-heading">
       <div><p className="eyebrow">Saved operational context</p><h2>Contract and trip notes</h2><span>Document known causes so the same missed-stop issue does not have to be researched again.</span></div>
-      {canEdit && <button type="button" className="primary-link" onClick={() => setShowForm((value) => !value)}>{showForm ? "Cancel" : "Add note"}</button>}
+      {canEdit && <button type="button" className="primary-link" onClick={() => showForm ? resetForm() : startNewNote()}>{showForm ? "Cancel" : "Add note"}</button>}
     </div>
     {error && <div className="alert alert-error">{error}</div>}
     {showForm && canEdit && <form className="operational-note-form" onSubmit={saveNote}>
-      <label>Status<select value={status} onChange={(event) => setStatus(event.target.value as "waiting_on_usps" | "monitoring")}><option value="waiting_on_usps">Waiting on USPS</option><option value="monitoring">Monitoring</option></select></label>
+      <label>Status<select value={status} disabled={editingResolved} onChange={(event) => setStatus(event.target.value as OperationalNote["status"])}><option value="waiting_on_usps">Waiting on USPS</option><option value="monitoring">Monitoring</option>{editingResolved && <option value="resolved">Resolved</option>}</select></label>
       <label>Trip number <span>(optional)</span><input value={trip} onChange={(event) => setTrip(event.target.value)} placeholder="Example: 33" /></label>
       <label>Requested from USPS <span>(optional)</span><input type="date" value={requestedOn} onChange={(event) => setRequestedOn(event.target.value)} /></label>
       <label>Applies beginning<input type="date" value={effectiveStart} onChange={(event) => setEffectiveStart(event.target.value)} required /></label>
       <label className="operational-note-text">What is happening?<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Example: Service change requested to remove this stop; waiting for USPS to update the schedule." required rows={3} /></label>
-      <button type="submit" className="primary-link" disabled={saving}>{saving ? "Saving…" : "Save operational note"}</button>
+      <button type="submit" className="primary-link" disabled={saving}>{saving ? "Saving…" : editingId ? "Update operational note" : "Save operational note"}</button>
     </form>}
     {active.length ? <div className="operational-note-list">{active.map((item) => <article key={item.id}>
       <div><span className={`operational-status status-${item.status}`}>{statusLabel(item.status)}</span><strong>{item.trip_number ? `Trip ${item.trip_number}` : "Entire contract"}</strong><small>Applies from {item.effective_start}{item.requested_on ? ` · USPS requested ${item.requested_on}` : ""}</small></div>
       <p>{item.note}</p>
-      {canEdit && <button type="button" className="clear-filters" disabled={saving} onClick={() => void resolveNote(item.id)}>Mark resolved</button>}
+      {canEdit && <div className="operational-note-actions"><button type="button" className="hub-secondary-link" disabled={saving} onClick={() => startEditing(item)}>Edit note</button><button type="button" className="clear-filters" disabled={saving} onClick={() => void resolveNote(item.id)}>Mark resolved</button></div>}
     </article>)}</div> : !error && <div className="location-empty">No active operational notes for this contract.</div>}
-    {resolved.length > 0 && <details className="resolved-note-history"><summary>View {resolved.length} resolved note{resolved.length === 1 ? "" : "s"}</summary><div className="operational-note-list">{resolved.map((item) => <article key={item.id}><div><span className="operational-status status-resolved">Resolved</span><strong>{item.trip_number ? `Trip ${item.trip_number}` : "Entire contract"}</strong><small>{item.effective_start} – {item.effective_end || "Resolved"}</small></div><p>{item.note}</p></article>)}</div></details>}
+    {resolved.length > 0 && <details className="resolved-note-history"><summary>View {resolved.length} resolved note{resolved.length === 1 ? "" : "s"}</summary><div className="operational-note-list">{resolved.map((item) => <article key={item.id}><div><span className="operational-status status-resolved">Resolved</span><strong>{item.trip_number ? `Trip ${item.trip_number}` : "Entire contract"}</strong><small>{item.effective_start} – {item.effective_end || "Resolved"}</small></div><p>{item.note}</p>{canEdit && <div className="operational-note-actions"><button type="button" className="hub-secondary-link" disabled={saving} onClick={() => startEditing(item)}>Edit note</button></div>}</article>)}</div></details>}
   </section>;
 }
