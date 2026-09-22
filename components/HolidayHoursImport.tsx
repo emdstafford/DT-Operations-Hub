@@ -3,10 +3,12 @@
 import { useMemo, useRef, useState } from "react";
 import {
   createHolidayHoursImport,
+  holidaySourceFingerprint,
   holidayHoursImportCsv,
   type HolidayHoursImportResult,
 } from "@/lib/holidayHoursImport";
-import HolidayHoursHistory from "@/components/HolidayHoursHistory";
+import HolidayHoursHistory, { type HolidayDraft } from "@/components/HolidayHoursHistory";
+import { supabase } from "@/lib/supabase";
 
 function number(value: number, digits = 2) {
   return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -18,6 +20,7 @@ export default function HolidayHoursImport() {
   const [holidayCount, setHolidayCount] = useState<1 | 2>(1);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
+  const [holidays, setHolidays] = useState<HolidayDraft[]>([{ name: "", date: "" }]);
   const result = useMemo<HolidayHoursImportResult | null>(() => sourceCsv ? createHolidayHoursImport(sourceCsv, holidayCount) : null, [sourceCsv, holidayCount]);
   const previewRows = useMemo(() => result?.rows.slice(0, 50) ?? [], [result]);
 
@@ -26,15 +29,43 @@ export default function HolidayHoursImport() {
     setSourceCsv("");
     setFileName(file.name);
     try {
+      if (holidays.some((holiday) => !holiday.name.trim() || !holiday.date)) {
+        throw new Error("Enter the holiday name and date before choosing the source CSV.");
+      }
       if (!file.name.toLowerCase().endsWith(".csv")) {
         throw new Error("Select the source report saved as a CSV file.");
       }
       const csv = await file.text();
       createHolidayHoursImport(csv, holidayCount);
+      const sourceFingerprint = await holidaySourceFingerprint(csv);
+      const { data: duplicates } = await supabase
+        .from("holiday_import_history")
+        .select("holiday_name, holiday_date")
+        .eq("source_fingerprint", sourceFingerprint)
+        .is("archived_at", null);
+      if (duplicates?.length) {
+        const savedAs = duplicates.map((row) => `${row.holiday_name} (${row.holiday_date})`).join(", ");
+        throw new Error(`Duplicate source file: it is already saved as ${savedAs}.`);
+      }
       setSourceCsv(csv);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The file could not be processed.");
     }
+  }
+
+  function changeHolidayCount(count: 1 | 2) {
+    setHolidayCount(count);
+    setHolidays(Array.from({ length: count }, () => ({ name: "", date: "" })));
+    setSourceCsv("");
+    setFileName("");
+    setError("");
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function updateHoliday(index: number, field: keyof HolidayDraft, value: string) {
+    setHolidays((current) => current.map((holiday, holidayIndex) => holidayIndex === index
+      ? { ...holiday, [field]: value }
+      : holiday));
   }
 
   function downloadImport() {
@@ -67,13 +98,17 @@ export default function HolidayHoursImport() {
         <fieldset className="holiday-count-selector">
           <legend>Number of holidays</legend>
           <div>
-            <button type="button" className={holidayCount === 1 ? "active" : ""} onClick={() => setHolidayCount(1)}>1 Holiday</button>
-            <button type="button" className={holidayCount === 2 ? "active" : ""} onClick={() => setHolidayCount(2)}>2 Holidays</button>
+            <button type="button" className={holidayCount === 1 ? "active" : ""} onClick={() => changeHolidayCount(1)}>1 Holiday</button>
+            <button type="button" className={holidayCount === 2 ? "active" : ""} onClick={() => changeHolidayCount(2)}>2 Holidays</button>
           </div>
         </fieldset>
-        <label className="upload-button payroll-file-button">
+        <div className="holiday-preupload-fields">{holidays.map((holiday, index) => <div key={index}>
+          <label>{holidayCount === 1 ? "Holiday name" : `Holiday ${index + 1} name`}<input type="text" value={holiday.name} placeholder={index === 0 ? "Christmas" : "New Year’s Day"} onChange={(event) => updateHoliday(index, "name", event.target.value)} /></label>
+          <label>Date<input type="date" value={holiday.date} onChange={(event) => updateHoliday(index, "date", event.target.value)} /></label>
+        </div>)}</div>
+        <label className={`upload-button payroll-file-button ${holidays.some((holiday) => !holiday.name.trim() || !holiday.date) ? "disabled" : ""}`}>
           {fileName ? "Choose a different file" : "Choose source CSV"}
-          <input ref={inputRef} type="file" accept=".csv,text/csv" onChange={(event) => {
+          <input ref={inputRef} type="file" accept=".csv,text/csv" disabled={holidays.some((holiday) => !holiday.name.trim() || !holiday.date)} onChange={(event) => {
             const file = event.target.files?.[0];
             if (file) void processFile(file);
           }} />
@@ -88,7 +123,7 @@ export default function HolidayHoursImport() {
         <li><strong>Select Employee Hours for Holiday Import File.</strong></li>
         <li><strong>Set Employee Information Effective Date As of.</strong> Choose the specific date needed for this holiday-hours calculation.</li>
         <li><strong>Select Run and download the report as a CSV.</strong> Do not rename or remove the Company Code, File Number, or Hours columns.</li>
-        <li><strong>Select whether this import covers one or two holidays.</strong> Two holidays doubles each employee’s calculated amount.</li>
+        <li><strong>Select whether this import covers one or two holidays, then enter each holiday name and date.</strong> The file chooser becomes available after these details are complete. Two holidays doubles each employee’s calculated amount.</li>
         <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, including rows from different pay codes or departments.</li>
         <li><strong>Review the results.</strong> Check the employee count, combined source hours, employees capped at 8.00, and several individual employees.</li>
         <li><strong>Download the import CSV.</strong> The file is named epihne23.csv and contains Co Code, Batch ID, File #, Hours 3 Code, and Hours 3 Amount.</li>
@@ -129,6 +164,6 @@ export default function HolidayHoursImport() {
         {result.rows.length > previewRows.length && <p className="payroll-preview-note">Showing the first {previewRows.length} employees. The downloaded CSV includes all {result.rows.length.toLocaleString()} employees.</p>}
       </section>
     </>}
-    <HolidayHoursHistory result={result} holidayCount={holidayCount} sourceFile={fileName} />
+    <HolidayHoursHistory result={result} holidayCount={holidayCount} sourceFile={fileName} sourceContents={sourceCsv} holidays={holidays} />
   </div>;
 }

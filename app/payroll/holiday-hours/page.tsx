@@ -1,5 +1,6 @@
 import HolidayHoursImport from "@/components/HolidayHoursImport";
 import PayrollAccessGate from "@/components/PayrollAccessGate";
+import Link from "next/link";
 
 export default function HolidayHoursPage() {
   return <main className="page-shell payroll-page">
@@ -9,7 +10,7 @@ export default function HolidayHoursPage() {
         <h1>Holiday Hours Import</h1>
         <p>Combine employee hours, calculate holiday hours, and create the payroll-ready import file.</p>
       </div>
-      <span className="restricted-badge">Payroll access only</span>
+      <div className="payroll-page-actions"><Link className="secondary-button" href="/payroll/holiday-trends">Payroll Trends</Link><span className="restricted-badge">Payroll access only</span></div>
     </header>
     <PayrollAccessGate><HolidayHoursImport /></PayrollAccessGate>
   </main>;

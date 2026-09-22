@@ -27,6 +27,7 @@ create table if not exists public.holiday_import_history (
   holiday_name text not null check (length(trim(holiday_name)) > 0),
   holiday_date date not null,
   source_file text not null,
+  source_fingerprint text,
   source_rows integer not null check (source_rows >= 0),
   unique_employees integer not null check (unique_employees >= 0),
   combined_source_hours numeric(12,2) not null check (combined_source_hours >= 0),
@@ -35,13 +36,26 @@ create table if not exists public.holiday_import_history (
   processed_by uuid not null default auth.uid() references auth.users(id),
   processed_by_email text not null default lower(auth.jwt() ->> 'email'),
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  archived_at timestamptz,
+  archived_by uuid references auth.users(id),
+  archived_by_email text
 );
+
+-- Safe to rerun after the original history setup.
+alter table public.holiday_import_history
+  add column if not exists source_fingerprint text,
+  add column if not exists archived_at timestamptz,
+  add column if not exists archived_by uuid references auth.users(id),
+  add column if not exists archived_by_email text;
 
 create index if not exists holiday_import_history_date_idx
   on public.holiday_import_history (holiday_date desc);
 create index if not exists holiday_import_history_name_idx
   on public.holiday_import_history (lower(holiday_name));
+create index if not exists holiday_import_history_source_fingerprint_idx
+  on public.holiday_import_history (source_fingerprint)
+  where source_fingerprint is not null;
 
 alter table public.holiday_import_history enable row level security;
 
@@ -68,5 +82,5 @@ with check (public.is_payroll_tool_user());
 revoke all on public.holiday_import_history from anon;
 revoke all on public.holiday_import_history from authenticated;
 grant select, insert on public.holiday_import_history to authenticated;
-grant update (holiday_name, holiday_date, updated_at)
+grant update (holiday_name, holiday_date, updated_at, archived_at, archived_by, archived_by_email)
   on public.holiday_import_history to authenticated;

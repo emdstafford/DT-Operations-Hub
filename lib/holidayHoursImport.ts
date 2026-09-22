@@ -64,6 +64,14 @@ function csvValue(value: string) {
   return /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
+export async function holidaySourceFingerprint(contents: string) {
+  const normalized = contents.replace(/^\uFEFF/, "");
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
+  return Array.from(new Uint8Array(hash))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 = 1): HolidayHoursImportResult {
   const data = parseCsv(sourceCsv.replace(/^\uFEFF/, ""));
   if (!data.length) throw new Error("The selected CSV is empty.");
