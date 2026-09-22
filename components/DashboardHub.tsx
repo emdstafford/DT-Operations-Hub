@@ -78,6 +78,8 @@ export default function DashboardHub() {
   const [comparisonError, setComparisonError] = useState("");
   const [previousPeriod, setPreviousPeriod] = useState<{ start: string; end: string } | null>(null);
   const [operationalNotes, setOperationalNotes] = useState<OperationalNote[]>([]);
+  const [dashboardView, setDashboardView] = useState<"overview" | "investigate">("overview");
+  const [investigateTab, setInvestigateTab] = useState<"contracts" | "supervisors" | "geofences" | "comparison">("contracts");
 
   useEffect(() => { void (async () => {
     const [latest, contracts, supervisors] = await Promise.all([
@@ -413,7 +415,17 @@ export default function DashboardHub() {
         <article className="metric-card"><span>Total stops</span><strong>{number(data.totals.total_stops)}</strong></article>
         <article className="metric-card"><span>Incomplete stops</span><strong>{number(data.totals.incomplete_stops)}</strong></article>
       </section>
-      <section className="contract-review-bar panel">
+      <nav className="dashboard-view-switch panel" aria-label="Dashboard view">
+        <button className={dashboardView === "overview" ? "active" : ""} onClick={() => setDashboardView("overview")}><strong>Overview</strong><span>Totals, trend, and urgent contracts</span></button>
+        <button className={dashboardView === "investigate" ? "active" : ""} onClick={() => setDashboardView("investigate")}><strong>Investigate</strong><span>Contracts, supervisors, geofences, and comparisons</span></button>
+      </nav>
+      {dashboardView === "investigate" && <nav className="investigation-tabs" aria-label="Investigation area">
+        <button className={investigateTab === "contracts" ? "active" : ""} onClick={() => setInvestigateTab("contracts")}>Contracts</button>
+        <button className={investigateTab === "supervisors" ? "active" : ""} onClick={() => setInvestigateTab("supervisors")}>Supervisors</button>
+        <button className={investigateTab === "geofences" ? "active" : ""} onClick={() => setInvestigateTab("geofences")}>Missed geofences</button>
+        <button className={investigateTab === "comparison" ? "active" : ""} onClick={() => setInvestigateTab("comparison")}>Compare periods</button>
+      </nav>}
+      {dashboardView === "investigate" && investigateTab === "contracts" && <><section className="contract-review-bar panel">
         <div><strong>Why is a contract having trouble?</strong><span>Select one contract to focus every dashboard section and build a printable evidence report.</span></div>
         <select aria-label="Select contract for review" value={selectedContracts.length === 1 ? selectedContracts[0] : ""} onChange={(event) => setSelectedContracts(event.target.value ? [event.target.value] : [])}>
           <option value="">Choose a contract</option>
@@ -421,7 +433,8 @@ export default function DashboardHub() {
         </select>
         <button className="hub-secondary-link" disabled={selectedContracts.length !== 1 || loading || reviewLoading} onClick={() => void printPerformanceReview()}>{reviewLoading ? "Building…" : "Print contract review"}</button>
       </section>
-      <section className="comparison-action panel">
+      <HubTable title="Contracts" rows={data.contracts} kind="contract" highlightRankings={isEntireReport} /></>}
+      {dashboardView === "investigate" && investigateTab === "comparison" && <><section className="comparison-action panel">
         <div><strong>How did performance change?</strong><span>Compare this exact date range with the immediately preceding range of the same length.</span></div>
         <button className="primary-link" disabled={loading || comparisonLoading} onClick={() => void comparePreviousPeriod()}>{comparisonLoading ? "Comparing…" : "Compare previous period"}</button>
       </section>
@@ -430,7 +443,9 @@ export default function DashboardHub() {
         <div className="panel-heading"><h2>Contract movement</h2><span>{displayDate(previousPeriod.start)} – {displayDate(previousPeriod.end)} compared with {displayDate(start)} – {displayDate(end)}</span></div>
         <div className="table-scroll hub-table-scroll"><table className="data-table comparison-table"><thead><tr><th>Contract</th><th>Current</th><th>Previous</th><th>Point Change</th><th>Missed Stop Change</th><th>Status</th></tr></thead><tbody>{comparisonRows.map((row) => <tr key={row.name} className={row.status === "New concern" || row.status === "Needs attention" ? "comparison-concern" : row.status === "Improving" ? "comparison-improving" : ""}><td><button className="day-button" onClick={() => setSelectedContracts([row.name])}>{row.name}</button></td><td>{percent(row.current.completion_percent)}</td><td>{row.previous ? percent(row.previous.completion_percent) : "No data"}</td><td>{row.percentagePointChange == null ? "—" : `${row.percentagePointChange >= 0 ? "+" : ""}${row.percentagePointChange.toFixed(2)} pts`}</td><td>{row.missedChange == null ? "—" : `${row.missedChange >= 0 ? "+" : ""}${number(row.missedChange)}`}</td><td><strong>{row.status}</strong></td></tr>)}</tbody></table></div>
         <p className="comparison-note">“Why” reports show confirmed TQ results, affected trips and loads, missed geofence locations, and saved operational notes. They do not invent a cause that has not been documented.</p>
-      </section>}
+      </section>}</>}
+      {dashboardView === "investigate" && investigateTab === "supervisors" && <>
+      <HubTable title="Supervisors" rows={data.supervisors} kind="supervisor" highlightRankings={isEntireReport} onSupervisorSelect={(name) => setSelectedSupervisors([name])} />
       {selectedSupervisors.length > 0 && <section className="supervisor-focus-stack">
         {selectedSupervisors.map((name) => {
           const supervisor = data.supervisors.find((row) => row.supervisor === name);
@@ -441,28 +456,21 @@ export default function DashboardHub() {
             <div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Total Stops</th><th>Completed</th><th>Missed Stops</th><th>Completion</th></tr></thead><tbody>{contracts.map((row) => <tr key={row.contract_number}><td><button className="day-button" onClick={() => setSelectedContracts([row.contract_number])}>{row.contract_number}</button></td><td>{number(row.total_stops)}</td><td>{number(row.completed_stops)}</td><td>{number(row.incomplete_stops)}</td><td>{percent(row.completion_percent)}</td></tr>)}</tbody></table></div>
           </section>;
         })}
-      </section>}
-      <section className="hub-grid">
+      </section>}</>}
+      {dashboardView === "overview" && <section className="hub-grid dashboard-overview-grid">
         <section className="panel hub-trend"><div className="panel-heading"><h2>Performance trend</h2><span>{grain === "day" ? "Click a day to see trips" : "Select Day view for trip drill-down"}</span></div><div className="trend-list">{data.trend.map((row) => <div className={`trend-row ${grain === "day" ? "trend-row-clickable" : ""}`} key={row.period_start}><div><button className="trend-day-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{row.period_start}</button><span>{percent(row.completion_percent)}</span></div><div className="trend-track"><i style={{width:`${Math.max(2, Number(row.incomplete_stops) / maxIncomplete * 100)}%`}} /></div><button className="trend-missed-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{number(row.incomplete_stops)} incomplete</button></div>)}</div></section>
-        <section className="panel attention-panel"><div className="panel-heading"><h2>Needs attention</h2><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="attention-list">{data.contracts.slice(0,10).map((row,index) => <Link href={`/contracts/${encodeURIComponent(row.contract_number || "Unmapped")}?start=${start}&end=${end}`} key={row.contract_number}><span>{index+1}</span><strong>{row.contract_number}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.incomplete_stops)} incomplete · <b className={`contract-health ${contractHealth(row.completion_percent).className}`}>{contractHealth(row.completion_percent).label}</b></small></Link>)}</div></section>
-      </section>
-      {selectedDay && grain === "day" && <section className="panel day-drilldown">
+        <section className="panel attention-panel"><div className="panel-heading"><h2>Five contracts needing attention</h2><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="attention-list">{data.contracts.slice(0,5).map((row,index) => <button type="button" key={row.contract_number} onClick={() => { setSelectedContracts([row.contract_number || "Unmapped"]); setDashboardView("investigate"); setInvestigateTab("contracts"); }}><span>{index+1}</span><strong>{row.contract_number}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.incomplete_stops)} incomplete · <b className={`contract-health ${contractHealth(row.completion_percent).className}`}>{contractHealth(row.completion_percent).label}</b></small></button>)}</div></section>
+      </section>}
+      {dashboardView === "overview" && selectedDay && grain === "day" && <section className="panel day-drilldown">
         <div className="panel-heading"><div><p className="eyebrow">Daily missed-stop drill-down</p><h2>{displayDate(selectedDay)}</h2></div><button className="clear-filters" onClick={() => { setSelectedDay(""); setTripBreakdown([]); }}>Close</button></div>
         {drillError && <div className="alert alert-error">{drillError}</div>}
         {drillLoading ? <div className="hub-loading">Loading trips for this day…</div> : tripBreakdown.length ? <div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Trip</th><th>Affected Loads</th><th>Total Stops</th><th>Completed</th><th>Missed Stops</th><th>Known context</th><th>Load Numbers</th></tr></thead><tbody>{tripBreakdown.map((row) => <tr key={`${row.operatingDate}-${row.contract}-${row.trip}`}><td className="font-semibold text-navy">{row.contract}</td><td>{row.trip}</td><td>{number(row.loads)}</td><td>{number(row.totalStops)}</td><td>{number(row.completedStops)}</td><td><strong>{number(row.incompleteStops)}</strong></td><td><OperationalContext notes={operationalNotes.filter((item) => item.contract_number === row.contract && (!item.trip_number || item.trip_number === row.trip))} /></td><td><details><summary>View {row.loadNumbers.length}</summary><div className="load-number-list">{row.loadNumbers.join(", ")}</div></details></td></tr>)}</tbody><tfoot><tr><th colSpan={2}>Day total</th><th>{number(tripBreakdown.reduce((sum,row) => sum + row.loads,0))}</th><th>{number(tripBreakdown.reduce((sum,row) => sum + row.totalStops,0))}</th><th>{number(tripBreakdown.reduce((sum,row) => sum + row.completedStops,0))}</th><th>{number(tripBreakdown.reduce((sum,row) => sum + row.incompleteStops,0))}</th><th colSpan={2} /></tr></tfoot></table></div> : !drillError && <div className="location-empty">No incomplete TQ stops match the current filters for this day.</div>}
         <p className="drill-note">These are official TQ incomplete-stop counts. Facility names come from the separate missed-stops report and may not match this total.</p>
       </section>}
-      <section className="hub-grid">
+      {dashboardView === "investigate" && investigateTab === "geofences" && <section className="hub-grid">
         <section className="panel overflow-hidden"><div className="panel-heading"><h2>Missed stops by contract</h2><span>{displayDate(start)} – {displayDate(end)}</span></div>{missedContracts.length ? <div className="table-scroll hub-table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Affected Loads</th><th>Missed Geofence Stops</th><th>Known context</th></tr></thead><tbody>{missedContracts.map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.loads)}</td><td>{number(row.missingStops)}</td><td><OperationalContext notes={operationalNotes.filter((item) => item.contract_number === row.key)} /></td></tr>)}</tbody></table></div> : <div className="location-empty">No missed-stop rows fall within the selected dates.</div>}</section>
         <section className="panel overflow-hidden"><div className="panel-heading"><h2>Missed geofence locations</h2><span>{missedReportCount ? `${missedReportCount} report${missedReportCount === 1 ? "" : "s"} with matching dates` : "No matching missed-stops report rows"}</span></div>{locations.length ? <div className="table-scroll hub-table-scroll"><table className="data-table"><thead><tr><th>Location</th><th>Occurrences</th></tr></thead><tbody>{locations.map((row) => <tr key={row.key}><td className="font-semibold text-navy">{row.key}</td><td>{number(row.occurrences)}</td></tr>)}</tbody></table></div> : <div className="location-empty">Upload the missed-stops report to add location details for this period.</div>}</section>
-      </section>
-      <details className="dashboard-detail-tables panel">
-        <summary>View all supervisors and contracts</summary>
-        <div className="hub-grid">
-          <HubTable title="Supervisors" rows={data.supervisors} kind="supervisor" highlightRankings={isEntireReport} onSupervisorSelect={(name) => setSelectedSupervisors([name])} />
-          <HubTable title="Contracts" rows={data.contracts} kind="contract" highlightRankings={isEntireReport} />
-        </div>
-      </details>
+      </section>}
     </>}
   </div>;
 }

@@ -34,6 +34,5 @@ export default function DashboardReportActions() {
 
   return <div className="hub-actions">
     <Link href="/upload" className="primary-link">Upload report</Link>
-    <Link href="/operational-exceptions" className="hub-secondary-link">Missed stops</Link>
   </div>;
 }
