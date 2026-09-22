@@ -80,6 +80,7 @@ export default function DashboardHub() {
   const [operationalNotes, setOperationalNotes] = useState<OperationalNote[]>([]);
   const [dashboardView, setDashboardView] = useState<"overview" | "investigate">("overview");
   const [investigateTab, setInvestigateTab] = useState<"contracts" | "supervisors" | "geofences" | "comparison">("contracts");
+  const [contractListMode, setContractListMode] = useState<"all" | "below95" | "incomplete">("all");
 
   useEffect(() => { void (async () => {
     const [latest, contracts, supervisors] = await Promise.all([
@@ -411,8 +412,8 @@ export default function DashboardHub() {
       <section className="metric-grid">
         <article className="metric-card metric-primary"><span>Completion</span><strong>{percent(data.totals.completion_percent)}</strong></article>
         <article className="metric-card"><span>Total stops</span><strong>{number(data.totals.total_stops)}</strong></article>
-        <article className="metric-card"><span>Incomplete stops</span><strong>{number(data.totals.incomplete_stops)}</strong></article>
-        <article className="metric-card"><span>Contracts below 95%</span><strong>{number(data.contracts.filter((row) => Number(row.completion_percent) < 0.95).length)}</strong></article>
+        <button type="button" className="metric-card metric-card-action" onClick={() => { setContractListMode("incomplete"); setDashboardView("investigate"); setInvestigateTab("contracts"); }}><span>Incomplete stops</span><strong>{number(data.totals.incomplete_stops)}</strong><small>View by contract →</small></button>
+        <button type="button" className="metric-card metric-card-action" onClick={() => { setContractListMode("below95"); setDashboardView("investigate"); setInvestigateTab("contracts"); }}><span>Contracts below 95%</span><strong>{number(data.contracts.filter((row) => Number(row.completion_percent) < 0.95).length)}</strong><small>View contracts →</small></button>
         <article className="metric-card"><span>Unique loads</span><strong>{number(data.totals.load_count)}</strong></article>
       </section>
       <section className="dashboard-email-bar"><div><strong>Report actions</strong><span>{displayDate(start)} – {displayDate(end)}{selectedSupervisors.length || selectedContracts.length ? " with selected filters" : " · Company-wide"}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => void printPerformanceReview()} disabled={reviewLoading}>{reviewLoading ? "Building review…" : "Performance Review"}</button><button className="hub-secondary-link" onClick={printGaryReport}>Gary’s Report</button><button className="primary-link" onClick={copyEmail}>{copied ? "Email report copied!" : "Copy Email Report"}</button></div></section>
@@ -434,7 +435,17 @@ export default function DashboardHub() {
         </select>
         <button className="hub-secondary-link" disabled={selectedContracts.length !== 1 || loading || reviewLoading} onClick={() => void printPerformanceReview()}>{reviewLoading ? "Building…" : "Print contract review"}</button>
       </section>
-      <HubTable title="Contracts" rows={data.contracts} kind="contract" highlightRankings={isEntireReport} /></>}
+      <nav className="contract-list-tabs" aria-label="Contract results">
+        <button className={contractListMode === "all" ? "active" : ""} onClick={() => setContractListMode("all")}>All contracts</button>
+        <button className={contractListMode === "below95" ? "active" : ""} onClick={() => setContractListMode("below95")}>Below 95%</button>
+        <button className={contractListMode === "incomplete" ? "active" : ""} onClick={() => setContractListMode("incomplete")}>Incomplete stops</button>
+      </nav>
+      <HubTable
+        title={contractListMode === "below95" ? "Contracts below 95%" : contractListMode === "incomplete" ? "Incomplete stops by contract" : "Contracts"}
+        rows={(contractListMode === "below95" ? data.contracts.filter((row) => Number(row.completion_percent) < 0.95) : contractListMode === "incomplete" ? data.contracts.filter((row) => Number(row.incomplete_stops) > 0).sort((a, b) => Number(b.incomplete_stops) - Number(a.incomplete_stops)) : data.contracts)}
+        kind="contract"
+        highlightRankings={isEntireReport && contractListMode === "all"}
+      /></>}
       {dashboardView === "investigate" && investigateTab === "comparison" && <><section className="comparison-action panel">
         <div><strong>How did performance change?</strong><span>Compare this exact date range with the immediately preceding range of the same length.</span></div>
         <button className="primary-link" disabled={loading || comparisonLoading} onClick={() => void comparePreviousPeriod()}>{comparisonLoading ? "Comparing…" : "Compare previous period"}</button>
@@ -460,7 +471,11 @@ export default function DashboardHub() {
       </section>}</>}
       {dashboardView === "overview" && <section className="hub-grid dashboard-overview-grid">
         <section className="panel hub-trend"><div className="panel-heading"><h2>Performance trend</h2><span>{grain === "day" ? "Click a day to see trips" : "Select Day view for trip drill-down"}</span></div><div className="trend-list">{data.trend.map((row) => <div className={`trend-row ${grain === "day" ? "trend-row-clickable" : ""}`} key={row.period_start}><div><button className="trend-day-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{row.period_start}</button><span>{percent(row.completion_percent)}</span></div><div className="trend-track"><i style={{width:`${Math.max(2, Number(row.incomplete_stops) / maxIncomplete * 100)}%`}} /></div><button className="trend-missed-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{number(row.incomplete_stops)} incomplete</button></div>)}</div></section>
-        <section className="panel attention-panel"><div className="panel-heading"><h2>Five contracts needing attention</h2><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="attention-list">{data.contracts.slice(0,5).map((row,index) => <button type="button" key={row.contract_number} onClick={() => { setSelectedContracts([row.contract_number || "Unmapped"]); setDashboardView("investigate"); setInvestigateTab("contracts"); }}><span>{index+1}</span><strong>{row.contract_number}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.incomplete_stops)} incomplete · <b className={`contract-health ${contractHealth(row.completion_percent).className}`}>{contractHealth(row.completion_percent).label}</b></small></button>)}</div></section>
+        <section className="panel attention-panel"><div className="panel-heading"><h2>Five contracts needing attention</h2><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="attention-list">{data.contracts.slice(0,5).map((row,index) => <button type="button" key={row.contract_number} onClick={() => { setSelectedContracts([row.contract_number || "Unmapped"]); setContractListMode("all"); setDashboardView("investigate"); setInvestigateTab("contracts"); }}><span>{index+1}</span><strong>{row.contract_number}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.incomplete_stops)} incomplete · <b className={`contract-health ${contractHealth(row.completion_percent).className}`}>{contractHealth(row.completion_percent).label}</b></small></button>)}</div></section>
+      </section>}
+      {dashboardView === "overview" && <section className="panel supervisor-overview">
+        <div className="panel-heading"><h2>Supervisor totals</h2><span>{displayDate(start)} – {displayDate(end)} · Click a supervisor for details</span></div>
+        <div className="supervisor-overview-grid">{data.supervisors.map((row) => <button type="button" key={row.supervisor || "Unassigned"} onClick={() => { setSelectedSupervisors([row.supervisor || "Unassigned"]); setDashboardView("investigate"); setInvestigateTab("supervisors"); }}><strong>{row.supervisor || "Unassigned"}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.total_stops)} stops · {number(row.incomplete_stops)} incomplete</small></button>)}</div>
       </section>}
       {dashboardView === "overview" && selectedDay && grain === "day" && <section className="panel day-drilldown">
         <div className="panel-heading"><div><p className="eyebrow">Daily missed-stop drill-down</p><h2>{displayDate(selectedDay)}</h2></div><button className="clear-filters" onClick={() => { setSelectedDay(""); setTripBreakdown([]); }}>Close</button></div>
