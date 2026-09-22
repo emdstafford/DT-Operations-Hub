@@ -1,5 +1,9 @@
 import * as XLSX from "xlsx";
-import { getContracts } from "../getContracts";
+import {
+  getContractAssignmentPeriods,
+  getContracts,
+  type ContractAssignmentPeriod,
+} from "../getContracts";
 import { isTonyaTrip } from "../tonyaTrips";
 
 export type Totals = {
@@ -156,8 +160,24 @@ function supervisorNames(value: string | null | undefined) {
     .filter((name) => name !== "Candi Tanner");
 }
 
-function resolveSupervisors(row: Pick<ProcessedLoad, "contract" | "trip">, assignments: ContractAssignment[]) {
+function resolveSupervisors(
+  row: Pick<ProcessedLoad, "contract" | "trip" | "operatingDate">,
+  assignments: ContractAssignment[],
+  assignmentPeriods: ContractAssignmentPeriod[],
+) {
   if (isTonyaTrip(row.contract, row.trip)) return ["Tonya Capps-Owen"];
+  const datedSupervisors = assignmentPeriods
+    .filter((item) =>
+      item.contract_number.trim().toUpperCase() === row.contract &&
+      Boolean(row.operatingDate) &&
+      row.operatingDate >= item.start_date &&
+      (!item.end_date || row.operatingDate <= item.end_date)
+    )
+    .flatMap((item) => supervisorNames(item.supervisor));
+  if (datedSupervisors.length) {
+    return Array.from(new Set(datedSupervisors))
+      .filter((name) => name !== "Tonya Capps-Owen" && name !== "Tonya Owens");
+  }
   const assignment = assignments.find(
     (item) => String(item.contract_number ?? "").trim().toUpperCase() === row.contract,
   );
@@ -185,10 +205,16 @@ export async function processReport(file: File): Promise<ProcessedReport> {
   if (!loadDetails) throw new Error('This workbook does not contain a "Load Details" sheet.');
 
   let assignments: ContractAssignment[] = [];
+  let assignmentPeriods: ContractAssignmentPeriod[] = [];
   try {
     assignments = await getContracts();
   } catch {
     assignments = [];
+  }
+  try {
+    assignmentPeriods = await getContractAssignmentPeriods();
+  } catch {
+    assignmentPeriods = [];
   }
 
   const { periodStart, periodEnd } = getReportPeriod(file.name, workbook);
@@ -209,7 +235,7 @@ export async function processReport(file: File): Promise<ProcessedReport> {
     }
     seen.add(loadNumber);
     const tags = String(row.Tags ?? "");
-    const { contract, trip } = findContract(tags, assignments);
+    const { contract, trip } = findContract(tags, [...assignments, ...assignmentPeriods]);
     const baseLoad = {
       loadNumber,
       operatingDate: getOperatingDate(tags),
@@ -220,7 +246,10 @@ export async function processReport(file: File): Promise<ProcessedReport> {
       incompleteStops: Number(row["Incomplete Stops"] || 0),
       tags,
     };
-    historicalLoads.push({ ...baseLoad, supervisors: resolveSupervisors(baseLoad, assignments) });
+    historicalLoads.push({
+      ...baseLoad,
+      supervisors: resolveSupervisors(baseLoad, assignments, assignmentPeriods),
+    });
   });
 
   const reportLoads = historicalLoads.filter((row) =>
