@@ -42,7 +42,7 @@ export default function HolidayHoursImport() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "Employee_Holiday_Hours_Import.csv";
+    link.download = "epihne23.csv";
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -90,7 +90,7 @@ export default function HolidayHoursImport() {
         <li><strong>Select whether this import covers one or two holidays.</strong> Two holidays doubles each employee’s calculated amount.</li>
         <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, including rows from different pay codes or departments.</li>
         <li><strong>Review the results.</strong> Check the employee count, combined source hours, employees capped at 8.00, and several individual employees.</li>
-        <li><strong>Download the import CSV.</strong> The file contains only Co Code, File #, and Hours 3 Amount.</li>
+        <li><strong>Download the import CSV.</strong> The file is named epihne23.csv and contains Co Code, Batch ID, File #, Hours 3 Code, and Hours 3 Amount.</li>
         <li><strong>In ADP, go to Worksheets.</strong></li>
         <li><strong>Select Import File and choose the downloaded CSV.</strong> Review the ADP import preview and any warnings before completing the import.</li>
       </ol>
@@ -119,9 +119,9 @@ export default function HolidayHoursImport() {
         </div>
         <div className="table-scroll">
           <table className="data-table payroll-preview-table">
-            <thead><tr><th>Co Code</th><th>File #</th><th>Combined source hours</th><th>Source rows</th><th>Hours 3 Amount</th></tr></thead>
+            <thead><tr><th>Co Code</th><th>Batch ID</th><th>File #</th><th>Hours 3 Code</th><th>Combined source hours</th><th>Source rows</th><th>Hours 3 Amount</th></tr></thead>
             <tbody>{previewRows.map((row) => <tr key={`${row.companyCode}-${row.fileNumber}`}>
-              <td>{row.companyCode}</td><td>{row.fileNumber}</td><td>{number(row.totalHours)}</td><td>{row.sourceRows}</td><td><strong>{number(row.holidayHours)}</strong></td>
+              <td>HNE</td><td>Holiday</td><td>{row.fileNumber}</td><td>HOL</td><td>{number(row.totalHours)}</td><td>{row.sourceRows}</td><td><strong>{number(row.holidayHours)}</strong></td>
             </tr>)}</tbody>
           </table>
         </div>
