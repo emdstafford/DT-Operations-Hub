@@ -35,6 +35,33 @@ export async function getReportHistory(): Promise<ReportSnapshot[]> {
   return (data ?? []).map((row) => row.data as ReportSnapshot);
 }
 
+type SupervisorPerformanceRow = {
+  supervisor: string;
+  load_count: number | string;
+  total_stops: number | string;
+  completed_stops: number | string;
+  incomplete_stops: number | string;
+  completion_percent: number | string;
+};
+
+export async function getHistorySupervisors(periodStart: string, periodEnd: string): Promise<SummaryRow[]> {
+  const { data, error } = await supabase.rpc("supervisor_performance_filtered", {
+    p_start: periodStart,
+    p_end: periodEnd,
+    p_exclude_august_2026: false,
+  });
+  if (error) throw error;
+  return ((data ?? []) as SupervisorPerformanceRow[]).map((row) => ({
+    key: row.supervisor,
+    label: row.supervisor,
+    loadCount: Number(row.load_count),
+    totalStops: Number(row.total_stops),
+    completedStops: Number(row.completed_stops),
+    incompleteStops: Number(row.incomplete_stops),
+    percentComplete: Number(row.completion_percent),
+  }));
+}
+
 export async function saveReportSnapshot(report: ProcessedReport) {
   const snapshot: ReportSnapshot = {
     id: `${report.periodStart}_${report.periodEnd}`,
