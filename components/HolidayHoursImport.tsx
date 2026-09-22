@@ -6,6 +6,7 @@ import {
   holidayHoursImportCsv,
   type HolidayHoursImportResult,
 } from "@/lib/holidayHoursImport";
+import HolidayHoursHistory from "@/components/HolidayHoursHistory";
 
 function number(value: number, digits = 2) {
   return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -98,7 +99,7 @@ export default function HolidayHoursImport() {
         <strong>Calculation used</strong>
         <span>Total employee hours ÷ 2 ÷ 40 × 8, rounded to two decimals. Each holiday is capped at 8.00 hours. A two-holiday import doubles the result and has a 16.00-hour maximum.</span>
       </div>
-      <p className="privacy-note"><strong>Private processing:</strong> The source file and calculated file remain in this browser. The Hub does not save payroll contents to shared report history.</p>
+      <p className="privacy-note"><strong>Private processing:</strong> The source file, employee rows, and calculated CSV remain in this browser. Only summary totals, holiday names, dates, and audit information are saved when an authorized payroll user chooses Save to history.</p>
     </section>
 
     {error && <section className="panel payroll-error"><strong>File not processed</strong><span>{error}</span></section>}
@@ -128,5 +129,6 @@ export default function HolidayHoursImport() {
         {result.rows.length > previewRows.length && <p className="payroll-preview-note">Showing the first {previewRows.length} employees. The downloaded CSV includes all {result.rows.length.toLocaleString()} employees.</p>}
       </section>
     </>}
+    <HolidayHoursHistory result={result} holidayCount={holidayCount} sourceFile={fileName} />
   </div>;
 }
