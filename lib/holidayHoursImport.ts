@@ -138,8 +138,8 @@ export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 
 
 export function holidayHoursImportCsv(rows: HolidayHoursImportRow[]) {
   const output = [
-    ["Co Code", "File #", "Hours 3 Amount"],
-    ...rows.map((row) => [row.companyCode, row.fileNumber, row.holidayHours.toFixed(2)]),
+    ["Co Code", "Batch ID", "File #", "Hours 3 Code", "Hours 3 Amount"],
+    ...rows.map((row) => ["HNE", "Holiday", row.fileNumber, "HOL", row.holidayHours.toFixed(2)]),
   ];
   return `${output.map((row) => row.map(csvValue).join(",")).join("\r\n")}\r\n`;
 }
