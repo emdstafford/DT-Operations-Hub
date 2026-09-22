@@ -101,10 +101,10 @@ button, input { font: inherit; }
 .empty-state p { max-width: 620px; margin: 0 0 22px; color: var(--muted); line-height: 1.65; }
 .empty-icon { display: grid; place-items: center; width: 66px; height: 66px; border-radius: 13px; color: white; background: var(--navy); font-weight: 800; letter-spacing: .08em; }
 .report-stack { display: grid; gap: 20px; }
-.metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.metric-card { padding: 21px; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.metric-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.metric-card { padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: white; }
 .metric-card span { display: block; color: var(--muted); font-size: .82rem; font-weight: 600; }
-.metric-card strong { display: block; margin-top: 9px; color: var(--navy-deep); font-size: clamp(1.65rem, 3vw, 2.35rem); letter-spacing: -.04em; }
+.metric-card strong { display: block; margin-top: 6px; color: var(--navy-deep); font-size: clamp(1.45rem, 2.4vw, 2rem); letter-spacing: -.035em; }
 .metric-primary { color: white; background: var(--navy); border-color: var(--navy); }
 .metric-primary span, .metric-primary strong { color: white; }
 .notice-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -189,7 +189,7 @@ button, input { font: inherit; }
 .multi-menu input { width:15px; height:15px; accent-color:var(--navy); }
 .clear-filters { justify-self:start; border:0; padding:4px 0; color:var(--navy); background:transparent; font-weight:800; cursor:pointer; }
 .hub-loading { min-height:220px; display:grid; place-items:center; color:var(--muted); }
-.dashboard-email-bar { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:16px 19px; border:1px solid #cbd8e3; border-radius:10px; background:#edf3f8; }
+.dashboard-email-bar { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:11px 14px; border:1px solid #cbd8e3; border-radius:10px; background:#f7f9fb; }
 .dashboard-email-bar strong { display:block; color:var(--navy-deep); }
 .dashboard-email-bar span { display:block; margin-top:4px; color:var(--muted); font-size:.78rem; }
 .dashboard-email-bar button { border:0; }
