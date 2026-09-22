@@ -168,7 +168,7 @@ button, input { font: inherit; }
 .filter-bar .filter-checkbox { align-self:end; min-height:44px; min-width:auto; display:flex; align-items:center; gap:9px; padding:10px 13px; border:1px solid var(--line); border-radius:8px; background:var(--soft); color:var(--navy); }
 .filter-bar .filter-checkbox input { width:16px; height:16px; margin:0; padding:0; accent-color:var(--navy); }
 .hub-header { display:flex; align-items:flex-end; justify-content:space-between; gap:28px; margin-bottom:24px; }
-.hub-header h1 { margin:5px 0 9px; color:var(--navy-deep); font-size:clamp(2rem,4vw,3.3rem); letter-spacing:-.045em; }
+.hub-header h1 { margin:4px 0 7px; color:var(--navy-deep); font-size:clamp(1.65rem,2.6vw,2.25rem); letter-spacing:-.035em; }
 .hub-header p:not(.eyebrow) { max-width:760px; margin:0; color:var(--muted); line-height:1.65; }
 .hub-actions { display:flex; gap:10px; flex:none; }
 .hub-secondary-link { min-height:44px; display:inline-flex; align-items:center; padding:0 18px; border:1px solid var(--line); border-radius:8px; color:var(--navy); background:white; font-weight:700; }
