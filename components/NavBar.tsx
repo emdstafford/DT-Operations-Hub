@@ -12,7 +12,7 @@ const operationsLinks = [
   ["History", "/history"],
 ];
 
-export default function NavBar({ operationsRole, payrollAccess }: { operationsRole: string; payrollAccess: boolean }) {
+export default function NavBar({ operationsRole, payrollAccess, fuelAccess }: { operationsRole: string; payrollAccess: boolean; fuelAccess: boolean }) {
   const pathname = usePathname();
   const operationsAccess = Boolean(operationsRole);
   const canManageReports = operationsRole === "admin" || operationsRole === "uploader";
@@ -30,7 +30,7 @@ export default function NavBar({ operationsRole, payrollAccess }: { operationsRo
   return (
     <header className="site-header">
       <div className="brand-row">
-        <Link href={operationsAccess ? "/" : "/payroll/holiday-hours"} className="brand">
+        <Link href={operationsAccess ? "/" : fuelAccess ? "/fuel" : "/payroll/holiday-hours"} className="brand">
           <Image src="/logo.png" alt="Davenport Transportation" width={68} height={68} priority />
           <div><strong>DT Intelligence Hub</strong><span>Performance intelligence</span></div>
         </Link>
@@ -39,6 +39,7 @@ export default function NavBar({ operationsRole, payrollAccess }: { operationsRo
         {operationsAccess && operationsLinks
           .filter(([, href]) => href === "/" || canManageReports)
           .map(([label, href]) => <Link className={pathname === href ? "active" : ""} href={href} key={href}>{label}</Link>)}
+        {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel Reports</Link>}
         {payrollAccess && <Link className={pathname.startsWith("/payroll/") ? "active" : ""} href="/payroll/holiday-hours">Payroll Tools</Link>}
       </nav>
       <div className="sidebar-user">

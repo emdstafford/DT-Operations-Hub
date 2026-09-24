@@ -16,6 +16,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(true);
   const [operationsRole, setOperationsRole] = useState("");
   const [payrollAccess, setPayrollAccess] = useState(false);
+  const [fuelAccess, setFuelAccess] = useState(false);
   const isPublic = publicPaths.some((path) => pathname.startsWith(path));
 
   useEffect(() => {
@@ -26,35 +27,41 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       if (!nextSession) {
         setOperationsRole("");
         setPayrollAccess(false);
+        setFuelAccess(false);
         setChecking(false);
         if (!isPublic) router.replace("/login");
         return;
       }
 
       const email = nextSession.user.email?.toLowerCase() ?? "";
-      const [operationsResult, payrollResult] = await Promise.all([
+      const [operationsResult, payrollResult, fuelResult] = await Promise.all([
         supabase.from("approved_users").select("email, role").eq("email", email).eq("active", true).maybeSingle(),
         supabase.from("payroll_tool_users").select("email").eq("email", email).eq("active", true).maybeSingle(),
+        supabase.from("fuel_tool_users").select("email").eq("email", email).eq("active", true).maybeSingle(),
       ]);
       if (!active) return;
       const canUseOperations = Boolean(operationsResult.data);
       const canUsePayroll = Boolean(payrollResult.data);
+      const canUseFuel = Boolean(fuelResult.data);
       const role = String(operationsResult.data?.role || "");
       const canManageReports = role === "admin" || role === "uploader";
       const isReportManagementPath = reportManagementPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
       setOperationsRole(role);
       setPayrollAccess(canUsePayroll);
+      setFuelAccess(canUseFuel);
       setChecking(false);
 
-      if (!canUseOperations && !canUsePayroll) {
+      if (!canUseOperations && !canUsePayroll && !canUseFuel) {
         await supabase.auth.signOut();
         if (active) router.replace("/login?error=not-approved");
       } else if (pathname === "/login") {
-        router.replace(canUseOperations ? "/" : "/payroll/holiday-hours");
+        router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : "/payroll/holiday-hours");
       } else if (pathname.startsWith("/payroll/") && !canUsePayroll) {
         router.replace("/");
-      } else if (!pathname.startsWith("/payroll/") && !canUseOperations) {
-        router.replace("/payroll/holiday-hours");
+      } else if (pathname.startsWith("/fuel") && !canUseFuel) {
+        router.replace(canUseOperations ? "/" : "/payroll/holiday-hours");
+      } else if (!pathname.startsWith("/payroll/") && !pathname.startsWith("/fuel") && !canUseOperations) {
+        router.replace(canUseFuel ? "/fuel" : "/payroll/holiday-hours");
       } else if (isReportManagementPath && !canManageReports) {
         router.replace("/");
       }
@@ -74,7 +81,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   if (isPublic) return <>{children}</>;
   if (!session) return null;
   return <div className="app-frame">
-    <NavBar operationsRole={operationsRole} payrollAccess={payrollAccess} />
+    <NavBar operationsRole={operationsRole} payrollAccess={payrollAccess} fuelAccess={fuelAccess} />
     <div className="app-content">{children}</div>
   </div>;
 }
