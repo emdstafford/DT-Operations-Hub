@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { OperationalNote } from "@/components/ContractOperationalNotes";
+import DashboardFuelChecks from "@/components/DashboardFuelChecks";
 import PeriodAnnotations from "@/components/PeriodAnnotations";
 import { supabase } from "@/lib/supabase";
 
@@ -473,6 +474,7 @@ export default function DashboardHub() {
         <section className="panel hub-trend"><div className="panel-heading"><h2>Performance trend</h2><span>{grain === "day" ? "Click a day to see trips" : "Select Day view for trip drill-down"}</span></div><div className="trend-list">{data.trend.map((row) => <div className={`trend-row ${grain === "day" ? "trend-row-clickable" : ""}`} key={row.period_start}><div><button className="trend-day-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{row.period_start}</button><span>{percent(row.completion_percent)}</span></div><div className="trend-track"><i style={{width:`${Math.max(2, Number(row.incomplete_stops) / maxIncomplete * 100)}%`}} /></div><button className="trend-missed-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{number(row.incomplete_stops)} incomplete</button></div>)}</div></section>
         <section className="panel attention-panel"><div className="panel-heading"><h2>Five contracts needing attention</h2><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="attention-list">{data.contracts.slice(0,5).map((row,index) => <button type="button" key={row.contract_number} onClick={() => { setSelectedContracts([row.contract_number || "Unmapped"]); setContractListMode("all"); setDashboardView("investigate"); setInvestigateTab("contracts"); }}><span>{index+1}</span><strong>{row.contract_number}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.incomplete_stops)} incomplete · <b className={`contract-health ${contractHealth(row.completion_percent).className}`}>{contractHealth(row.completion_percent).label}</b></small></button>)}</div></section>
       </section>}
+      {dashboardView === "overview" && <DashboardFuelChecks start={start} end={end} contracts={data.contracts} />}
       {dashboardView === "overview" && <section className="panel supervisor-overview">
         <div className="panel-heading"><h2>Supervisor totals</h2><span>{displayDate(start)} – {displayDate(end)} · Click a supervisor for details</span></div>
         <div className="supervisor-overview-grid">{data.supervisors.map((row) => <button type="button" key={row.supervisor || "Unassigned"} onClick={() => { setSelectedSupervisors([row.supervisor || "Unassigned"]); setDashboardView("investigate"); setInvestigateTab("supervisors"); }}><strong>{row.supervisor || "Unassigned"}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.total_stops)} stops · {number(row.incomplete_stops)} incomplete</small></button>)}</div>
