@@ -4,6 +4,8 @@ export type MileagePlan = {
   effective_end: string | null;
   annual_miles: number;
   assumed_mpg: number;
+  tractor_count?: number | null;
+  straight_truck_count?: number | null;
   alert_above_percent: number;
 };
 

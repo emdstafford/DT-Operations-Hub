@@ -20,6 +20,8 @@ export type FuelMileageRow = {
 type Purchase = { contract_number: string; purchased_gallons: number; purchased_fuel_cost: number };
 const number = (value: number, decimals = 0) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: decimals, minimumFractionDigits: decimals });
 const currency = (value: number) => Number(value || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
+const mixedMpg = (tractors: number, straightTrucks: number) =>
+  (tractors + straightTrucks) / (tractors / 6 + straightTrucks / 10);
 
 export default function FuelMileagePlanner({ start, end, contracts, planOptions, selectedContract, canEdit, onRowsChange }: {
   start: string; end: string; contracts: string[]; planOptions: string[]; selectedContract: string;
@@ -32,6 +34,9 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
   const [effectiveEnd, setEffectiveEnd] = useState("");
   const [annualMiles, setAnnualMiles] = useState("");
   const [mpg, setMpg] = useState("");
+  const [truckType, setTruckType] = useState("custom");
+  const [tractors, setTractors] = useState("");
+  const [straightTrucks, setStraightTrucks] = useState("");
   const [threshold, setThreshold] = useState("15");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -42,16 +47,21 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
   const refresh = useCallback(async () => {
     if (!selected.length || !start || !end) { setPlans([]); setPurchases([]); return; }
     const [planResult, purchaseResult] = await Promise.all([
-      supabase.from("fuel_contract_mileage_plans").select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,alert_above_percent").in("contract_number", selected).lte("effective_start", end).order("effective_start"),
+      supabase.from("fuel_contract_mileage_plans").select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,tractor_count,straight_truck_count,alert_above_percent").in("contract_number", selected).lte("effective_start", end).order("effective_start"),
       supabase.rpc("fuel_contract_purchases_for_estimate", { p_start: start, p_end: end, p_contracts: selected }),
     ]);
-    if (planResult.error || purchaseResult.error) {
+    const needsMigration = planResult.error?.code === "42703" || planResult.error?.code === "PGRST204" || planResult.error?.code === "PGRST200";
+    const legacyPlans = needsMigration
+      ? await supabase.from("fuel_contract_mileage_plans").select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,alert_above_percent").in("contract_number", selected).lte("effective_start", end).order("effective_start")
+      : null;
+    const currentPlans = legacyPlans ?? planResult;
+    if (currentPlans.error || purchaseResult.error) {
       setError("To enable mileage estimates, run fuel_mileage_estimates.sql in Supabase.");
       setPlans([]); setPurchases([]);
       return;
     }
-    setError("");
-    setPlans((planResult.data ?? []) as MileagePlan[]);
+    setError(needsMigration ? "To save vehicle counts, run fuel_vehicle_counts.sql in Supabase. Existing estimates are still available." : "");
+    setPlans((currentPlans.data ?? []) as MileagePlan[]);
     setPurchases((purchaseResult.data ?? []) as Purchase[]);
   // contractKey represents the exact selection; avoid refetching when parent recreates its array.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -80,13 +90,20 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
     const previous = plans.find((item) => item.contract_number === contract && item.effective_start === date);
     setEffectiveEnd(previous?.effective_end ?? "");
     setAnnualMiles(previous ? String(previous.annual_miles) : "");
-    setMpg(previous ? String(previous.assumed_mpg) : "");
+    const savedMpg = previous ? String(previous.assumed_mpg) : "";
+    setMpg(savedMpg);
+    setTractors(previous?.tractor_count != null ? String(previous.tractor_count) : "");
+    setStraightTrucks(previous?.straight_truck_count != null ? String(previous.straight_truck_count) : "");
+    setTruckType(previous?.tractor_count && previous?.straight_truck_count ? "mixed" : savedMpg === "6" ? "tractor" : savedMpg === "10" ? "straight" : "custom");
     setThreshold(previous ? String(previous.alert_above_percent) : "15");
   }
 
   async function savePlan() {
-    const miles = Number(annualMiles), assumedMpg = Number(mpg), alert = Number(threshold);
-    if (!canEdit || !planContract || !effectiveStart || !Number.isFinite(miles) || miles <= 0 || !Number.isFinite(assumedMpg) || assumedMpg <= 0 || !Number.isFinite(alert) || alert < 0 || alert > 200 || (effectiveEnd && effectiveEnd < effectiveStart)) {
+    const miles = Number(annualMiles), alert = Number(threshold);
+    const tractorCount = Number(tractors), straightCount = Number(straightTrucks);
+    const validMix = truckType !== "mixed" || (tractors !== "" && straightTrucks !== "" && Number.isInteger(tractorCount) && Number.isInteger(straightCount) && tractorCount > 0 && straightCount > 0);
+    const assumedMpg = truckType === "mixed" && validMix ? mixedMpg(tractorCount, straightCount) : Number(mpg);
+    if (!canEdit || !planContract || !effectiveStart || !Number.isFinite(miles) || miles <= 0 || !validMix || !Number.isFinite(assumedMpg) || assumedMpg <= 0 || !Number.isFinite(alert) || alert < 0 || alert > 200 || (effectiveEnd && effectiveEnd < effectiveStart)) {
       setError("Choose a contract, valid effective dates, annual miles, MPG above zero, and a review threshold from 0% to 200%.");
       return;
     }
@@ -95,8 +112,10 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
     const { error: saveError } = await supabase.from("fuel_contract_mileage_plans").upsert({
       contract_number: planContract, effective_start: effectiveStart, effective_end: effectiveEnd || null,
       annual_miles: miles, assumed_mpg: assumedMpg, alert_above_percent: alert, updated_by: user.user?.id,
+      tractor_count: truckType === "mixed" ? tractorCount : truckType === "tractor" ? 1 : truckType === "straight" ? 0 : null,
+      straight_truck_count: truckType === "mixed" ? straightCount : truckType === "straight" ? 1 : truckType === "tractor" ? 0 : null,
     }, { onConflict: "contract_number,effective_start" });
-    if (saveError) setError(saveError.code === "23P01" ? "These dates overlap another mileage plan for this contract. End the earlier plan before adding this one." : saveError.message);
+    if (saveError) setError(saveError.code === "23P01" ? "These dates overlap another mileage plan for this contract. End the earlier plan before adding this one." : ["42703", "PGRST204"].includes(saveError.code) ? "Run fuel_vehicle_counts.sql in Supabase before saving vehicle counts." : saveError.message);
     else { setMessage(`Saved mileage plan for ${planContract}.`); await refresh(); }
     setSaving(false);
   }
@@ -109,11 +128,26 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
       <label>Effective from<input type="date" value={effectiveStart} onChange={(event) => choosePlan(planContract, event.target.value)} /></label>
       <label>Effective through (optional)<input type="date" value={effectiveEnd} onChange={(event) => setEffectiveEnd(event.target.value)} /></label>
       <label>Planned miles per year<input type="number" min="0.01" step="0.1" value={annualMiles} onChange={(event) => setAnnualMiles(event.target.value)} /></label>
-      <label>Estimated miles per gallon<input type="number" min="0.01" step="0.1" value={mpg} onChange={(event) => setMpg(event.target.value)} /></label>
+      <label>Truck type starting point<select value={truckType} onChange={(event) => {
+        const type = event.target.value;
+        setTruckType(type);
+        if (type === "tractor") setMpg("6");
+        if (type === "straight") setMpg("10");
+      }}><option value="custom">Enter a custom MPG</option><option value="tractor">Tractor (6 MPG)</option><option value="straight">Straight truck (10 MPG)</option><option value="mixed">Both types (enter counts)</option></select></label>
+      {truckType === "mixed" && <>
+        <label>Number of tractors<input type="number" min="1" step="1" value={tractors} onChange={(event) => setTractors(event.target.value)} /></label>
+        <label>Number of straight trucks<input type="number" min="1" step="1" value={straightTrucks} onChange={(event) => setStraightTrucks(event.target.value)} /></label>
+        {Number(tractors) > 0 && Number(straightTrucks) > 0 && <p>Estimated fleet average: {number(mixedMpg(Number(tractors), Number(straightTrucks)), 2)} MPG, assuming each truck drives similar miles.</p>}
+      </>}
+      {truckType !== "mixed" && <label>Estimated miles per gallon (editable)<input type="number" min="0.01" step="0.1" value={mpg} onChange={(event) => {
+        const value = event.target.value;
+        setMpg(value);
+        if ((truckType === "tractor" && value !== "6") || (truckType === "straight" && value !== "10")) setTruckType("custom");
+      }} /></label>}
       <label>Flag when over expected by (%)<input type="number" min="0" max="200" step="0.1" value={threshold} onChange={(event) => setThreshold(event.target.value)} /></label>
       <button type="button" className="primary-link" disabled={saving} onClick={() => void savePlan()}>{saving ? "Saving…" : "Save mileage plan"}</button>
     </div><p>For a service change, set the previous plan’s end date, then add the new annual miles with its own effective start date. You can select an existing start date to revise its values.</p></details>}
-    {plans.length > 0 && <details className="fuel-mileage-editor"><summary>Saved plan dates ({plans.length})</summary><div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>From</th><th>Through</th><th>Annual miles</th><th>MPG</th><th>Review above</th><th></th></tr></thead><tbody>{plans.map((plan) => <tr key={`${plan.contract_number}-${plan.effective_start}`}><td>{plan.contract_number}</td><td>{plan.effective_start}</td><td>{plan.effective_end || "Current"}</td><td>{number(plan.annual_miles,1)}</td><td>{number(plan.assumed_mpg,1)}</td><td>{number(plan.alert_above_percent,1)}%</td><td>{canEdit && <button className="hub-secondary-link" type="button" onClick={() => choosePlan(plan.contract_number,plan.effective_start)}>Edit</button>}</td></tr>)}</tbody></table></div></details>}
+    {plans.length > 0 && <details className="fuel-mileage-editor"><summary>Saved plan dates ({plans.length})</summary><div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>From</th><th>Through</th><th>Annual miles</th><th>Tractors</th><th>Straight trucks</th><th>MPG</th><th>Review above</th><th></th></tr></thead><tbody>{plans.map((plan) => <tr key={`${plan.contract_number}-${plan.effective_start}`}><td>{plan.contract_number}</td><td>{plan.effective_start}</td><td>{plan.effective_end || "Current"}</td><td>{number(plan.annual_miles,1)}</td><td>{plan.tractor_count ?? "—"}</td><td>{plan.straight_truck_count ?? "—"}</td><td>{number(plan.assumed_mpg,2)}</td><td>{number(plan.alert_above_percent,1)}%</td><td>{canEdit && <button className="hub-secondary-link" type="button" onClick={() => choosePlan(plan.contract_number,plan.effective_start)}>Edit</button>}</td></tr>)}</tbody></table></div></details>}
     <div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Planned miles</th><th>Expected gallons</th><th>Purchased gallons</th><th>Difference</th><th>Fuel spend</th><th>Status</th></tr></thead><tbody>{rows.map((row) => <tr key={row.contract} className={row.status === "review" ? "fuel-policy-alert-row" : ""}><td className="font-semibold text-navy">{row.contract}</td><td>{row.status === "incomplete" ? "—" : number(row.plannedMiles,1)}</td><td>{row.status === "incomplete" ? "—" : number(row.expectedGallons,1)}</td><td>{number(row.purchasedGallons,1)}</td><td>{row.status === "incomplete" ? "—" : `${row.variancePercent >= 0 ? "+" : ""}${number(row.variancePercent,1)}%`}</td><td>{currency(row.purchasedFuelCost)}</td><td>{row.status === "incomplete" ? `Plan needed (${row.coveredDays}/${row.totalDays} days)` : row.status === "review" ? `Needs review (>${number(row.alertAbovePercent,1)}%)` : "Within estimate"}</td></tr>)}</tbody></table></div>
     <p className="fuel-mileage-note">A fuel variance measures purchases against an MPG estimate; it does not confirm actual miles driven, misuse, or contract profit. DEF and fees are excluded. Changing an MPG assumption updates the estimate for all dates in that plan.</p>
   </section>;
