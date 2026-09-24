@@ -35,6 +35,10 @@ function monthName(value: string) {
   });
 }
 
+function supervisorNames(values: string[] | null | undefined) {
+  return [...new Set((values ?? []).flatMap((value) => value.split("/")).map((value) => value.trim()).filter((value) => value && value !== "Unassigned"))];
+}
+
 export default function MonthlyContractPrintReport() {
   const currentYear = Number(new Date().toISOString().slice(0, 4));
   const [year, setYear] = useState(currentYear);
@@ -84,7 +88,7 @@ export default function MonthlyContractPrintReport() {
         completed_stops: Number(source.completed_stops),
         incomplete_stops: Number(source.incomplete_stops),
         completion_percent: Number(source.completion_percent),
-        supervisors: Array.isArray(source.supervisors) ? source.supervisors : [],
+        supervisors: supervisorNames(source.supervisors),
       };
       const contract = row.contract_number || "Unmapped";
       const months = grouped.get(contract) ?? [];
@@ -140,7 +144,7 @@ export default function MonthlyContractPrintReport() {
               <div>
                 <p>DT Intelligence Hub · {year}</p>
                 <h1>Contract {packet.contract}</h1>
-                <strong>Supervisor{packet.supervisors.length === 1 ? "" : "s"}: {packet.supervisors.join(" / ")}</strong>
+                <strong>Supervisor{packet.supervisors.length === 1 ? "" : "s"}: {packet.supervisors.join(", ")}</strong>
               </div>
             </header>
 
@@ -154,10 +158,10 @@ export default function MonthlyContractPrintReport() {
             <table className="data-table contract-month-table">
               <thead><tr><th>Month</th><th>Supervisor</th><th>Loads</th><th>Total</th><th>Completed</th><th>Incomplete</th><th>Completion</th></tr></thead>
               <tbody>{packet.months.map((row) => {
-                const supervisors = row.supervisors?.filter((name) => name && name !== "Unassigned") ?? [];
+                const supervisors = supervisorNames(row.supervisors);
                 return <tr key={row.period_start}>
                   <th>{monthName(row.period_start)}</th>
-                  <td>{supervisors.length ? supervisors.join(" / ") : "Unassigned"}</td>
+                  <td>{supervisors.length ? supervisors.join(", ") : "Unassigned"}</td>
                   <td>{number(row.load_count)}</td>
                   <td>{number(row.total_stops)}</td>
                   <td>{number(row.completed_stops)}</td>
@@ -165,7 +169,7 @@ export default function MonthlyContractPrintReport() {
                   <td><strong>{percent(row.completion_percent)}</strong></td>
                 </tr>;
               })}</tbody>
-              <tfoot><tr><th>Year total</th><th>{packet.supervisors.join(" / ")}</th><th>{number(packet.totals.loads)}</th><th>{number(packet.totals.total)}</th><th>{number(packet.totals.completed)}</th><th>{number(packet.totals.incomplete)}</th><th>{percent(overallCompletion)}</th></tr></tfoot>
+              <tfoot><tr><th>Year total</th><th>{packet.supervisors.join(", ")}</th><th>{number(packet.totals.loads)}</th><th>{number(packet.totals.total)}</th><th>{number(packet.totals.completed)}</th><th>{number(packet.totals.incomplete)}</th><th>{percent(overallCompletion)}</th></tr></tfoot>
             </table>
           </article>;
         })}
