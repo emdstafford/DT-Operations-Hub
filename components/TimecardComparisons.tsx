@@ -51,8 +51,12 @@ export default function TimecardComparisons({ entries, start, end, sourceName, p
         setSaving(true);
         const { data: user } = await supabase.auth.getUser();
         if (!user.user) throw new Error("Sign in again to save this timecard summary.");
-        const { data: existing, error: existingError } = await supabase.from("timecard_summary_history").select("id,payroll_name,pay_date").eq("summary_hash", hash).maybeSingle();
+        const { data: existing, error: existingError } = await supabase.from("timecard_summary_history").select("id,payroll_name,archived_at").eq("summary_hash", hash).maybeSingle();
         if (existingError) throw existingError;
+        if (existing?.archived_at) {
+          const { error: restoreError } = await supabase.from("timecard_summary_history").update({ archived_at: null, archived_by: null }).eq("id", existing.id);
+          if (restoreError) throw restoreError;
+        }
         if (!existing) {
           const { error: insertError } = await supabase.from("timecard_summary_history").insert({
             payroll_name: payrollName, pay_date: end, period_start: start, period_end: end, source_file: sourceName, summary_hash: hash,
@@ -66,11 +70,11 @@ export default function TimecardComparisons({ entries, start, end, sourceName, p
         }
         const { data, error: historyError } = await supabase.from("timecard_summary_history")
           .select("id,payroll_name,pay_date,period_start,period_end,source_file,saved_at,summary")
-          .lt("period_end", start).order("period_end", { ascending: false }).order("saved_at", { ascending: false }).limit(1).maybeSingle();
+          .is("archived_at", null).lt("period_end", start).order("period_end", { ascending: false }).order("saved_at", { ascending: false }).limit(1).maybeSingle();
         if (historyError) throw historyError;
         if (!active) return;
         setPrevious((data as SavedReport | null) ?? null);
-        setStatus(existing ? `Duplicate upload skipped. These totals are already saved as ${existing.payroll_name}.` : "Hour totals saved for future comparisons.");
+        setStatus(existing?.archived_at ? `${existing.payroll_name} was already saved and has been restored from the archive.` : existing ? `Duplicate upload skipped. These totals are already saved as ${existing.payroll_name}.` : "Hour totals saved for future comparisons.");
       } catch (cause) {
         if (active) { setError(cause instanceof Error && cause.message.includes("timecard_summary_history") ? "History setup needed: run timecard_summary_history.sql in Supabase. Printing still works." : cause instanceof Error ? cause.message : "Could not save timecard totals."); setStatus(""); }
       } finally { if (active) setSaving(false); }

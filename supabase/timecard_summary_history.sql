@@ -35,6 +35,9 @@ create table if not exists public.timecard_summary_history (
 );
 create index if not exists timecard_summary_period_idx
   on public.timecard_summary_history (pay_date desc, saved_at desc);
+alter table public.timecard_summary_history
+  add column if not exists archived_at timestamptz,
+  add column if not exists archived_by uuid references auth.users(id);
 alter table public.timecard_summary_history enable row level security;
 drop policy if exists "payroll users read timecard summaries" on public.timecard_summary_history;
 create policy "payroll users read timecard summaries"
@@ -46,7 +49,7 @@ create policy "payroll users save timecard summaries"
   with check (public.is_payroll_tool_user() and saved_by = auth.uid());
 revoke all on public.timecard_summary_history from anon;
 revoke all on public.timecard_summary_history from authenticated;
-grant select, insert on public.timecard_summary_history to authenticated;
+grant select, insert, update (archived_at, archived_by), delete on public.timecard_summary_history to authenticated;
 notify pgrst, 'reload schema';
 
 -- One shared comparison baseline, chosen by payroll after historical files are loaded.
@@ -73,4 +76,25 @@ create policy "payroll users change timecard baseline"
 revoke all on public.timecard_comparison_baseline from anon;
 revoke all on public.timecard_comparison_baseline from authenticated;
 grant select, insert, update on public.timecard_comparison_baseline to authenticated;
+
+drop policy if exists "payroll users archive timecard summaries" on public.timecard_summary_history;
+create policy "payroll users archive timecard summaries"
+  on public.timecard_summary_history for update to authenticated
+  using (public.is_payroll_tool_user() and not exists (
+    select 1 from public.timecard_comparison_baseline baseline where baseline.report_id = timecard_summary_history.id
+  ))
+  with check (public.is_payroll_tool_user() and (
+    (archived_at is null and archived_by is null) or
+    (archived_at is not null and archived_by = auth.uid())
+  ) and not exists (
+    select 1 from public.timecard_comparison_baseline baseline where baseline.report_id = timecard_summary_history.id
+  ));
+
+drop policy if exists "emily deletes timecard summaries" on public.timecard_summary_history;
+create policy "emily deletes timecard summaries"
+  on public.timecard_summary_history for delete to authenticated
+  using (public.is_payroll_tool_user() and lower(auth.jwt() ->> 'email') = 'estafford@dtexpress.net'
+    and not exists (
+      select 1 from public.timecard_comparison_baseline baseline where baseline.report_id = timecard_summary_history.id
+    ));
 notify pgrst, 'reload schema';
