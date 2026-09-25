@@ -27,7 +27,7 @@ export default function SupervisorReportOverview({ supervisors, supervisorContra
 }) {
   const bottomContracts = new Set(showRankings ? contracts.slice(0, 10).map((row) => row.contract_number) : []);
   return <section className="panel supervisor-report-overview">
-    <div className="panel-heading"><div><p className="eyebrow">Gary&apos;s report at a glance</p><h2>Supervisors and their contracts</h2><span>{supervisors.length} supervisors · Tap a name to see its contract totals and saved USPS notes.</span></div></div>
+    <div className="panel-heading"><div><p className="eyebrow">Supervisor performance</p><h2>Supervisors and their contracts</h2><span>{supervisors.length} supervisors · Tap a name to see its contract totals and saved USPS notes.</span></div></div>
     {supervisors.length ? <div className="supervisor-report-list">{supervisors.map((supervisor, index) => {
       const name = supervisor.supervisor || "Unassigned";
       const assigned = supervisorContracts.filter((row) => row.supervisor === supervisor.supervisor);
