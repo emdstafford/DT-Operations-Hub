@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 
-type Period = "previous" | "current";
 type Field = "last" | "first" | "contract" | "inTime" | "outTime" | "hours" | "payCode";
 type Columns = Record<Field, number>;
 type Source = { name: string; sheets: Record<string, string[][]>; sheet: string; headerRow: number; columns: Columns };
@@ -59,74 +58,71 @@ function parse(source: Source | null, range: Range): Result {
 }
 const total = (rows: Shift[]) => rows.reduce((sum, row) => sum + row.hundredths, 0);
 
-function PeriodRows({ title, contract, employee, rows }: { title: string; contract: string; employee: string; rows: Shift[] }) {
-  return <section className="timecard-period"><h4>{title} <span>{hoursLabel(total(rows))} hours</span></h4>{rows.length ? <table className="data-table"><thead><tr className="timecard-print-context"><th colSpan={4}>Contract {contract} · {employee} · {title}</th></tr><tr><th>In time</th><th>Out time</th><th>Hours</th><th>Pay Code</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.inTime}-${index}`}><td>{row.inTime}</td><td>{row.outTime || "—"}</td><td>{hoursLabel(row.hundredths)}</td><td>{row.payCode || "—"}</td></tr>)}</tbody><tfoot><tr><th colSpan={2}>{title} total</th><th>{hoursLabel(total(rows))}</th><th /></tr></tfoot></table> : <p>No hours for this contract in this period.</p>}</section>;
+function TimecardRows({ contract, employee, rows }: { contract: string; employee: string; rows: Shift[] }) {
+  return <section className="timecard-period"><table className="data-table"><thead><tr className="timecard-print-context"><th colSpan={4}>Contract {contract} · {employee}</th></tr><tr><th>In time</th><th>Out time</th><th>Hours</th><th>Pay Code</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.inTime}-${index}`}><td>{row.inTime}</td><td>{row.outTime || "—"}</td><td>{hoursLabel(row.hundredths)}</td><td>{row.payCode || "—"}</td></tr>)}</tbody><tfoot><tr><th colSpan={2}>Employee total</th><th>{hoursLabel(total(rows))}</th><th /></tr></tfoot></table></section>;
 }
 
 export default function TimecardPacket() {
-  const [files, setFiles] = useState<Record<Period, Source | null>>({ previous: null, current: null });
-  const [ranges, setRanges] = useState<Record<Period, Range>>({ previous: emptyRange(), current: emptyRange() });
+  const [file, setFile] = useState<Source | null>(null);
+  const [range, setRange] = useState<Range>(emptyRange());
   const [error, setError] = useState("");
-  const results = useMemo(() => ({ previous: parse(files.previous, ranges.previous), current: parse(files.current, ranges.current) }), [files, ranges]);
-  const ready = (["previous", "current"] as Period[]).every((period) => files[period] && validColumns(files[period]) && ranges[period].start && ranges[period].end && ranges[period].start <= ranges[period].end && results[period].invalid === 0 && results[period].rows.length > 0);
+  const result = useMemo(() => parse(file, range), [file, range]);
+  const ready = !!file && validColumns(file) && !!range.start && !!range.end && range.start <= range.end && result.invalid === 0 && result.rows.length > 0;
   const contracts = useMemo(() => {
-    const groups = new Map<string, Map<string, { previous: Shift[]; current: Shift[] }>>();
-    for (const period of ["previous", "current"] as Period[]) for (const row of results[period].rows) {
+    const groups = new Map<string, Map<string, Shift[]>>();
+    for (const row of result.rows) {
       if (!groups.has(row.contract)) groups.set(row.contract, new Map());
       const people = groups.get(row.contract)!;
       const person = `${row.last}\u0000${row.first}`;
-      if (!people.has(person)) people.set(person, { previous: [], current: [] });
-      people.get(person)![period].push(row);
+      if (!people.has(person)) people.set(person, []);
+      people.get(person)!.push(row);
     }
     return [...groups].sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true })).map(([contract, people]) => ({
       contract,
-      people: [...people].sort(([a], [b]) => a.localeCompare(b)).map(([name, periods]) => ({ name: name.replace("\u0000", ", "), previous: periods.previous.sort((a, b) => a.inTime.localeCompare(b.inTime)), current: periods.current.sort((a, b) => a.inTime.localeCompare(b.inTime)) })),
+      people: [...people].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name: name.replace("\u0000", ", "), rows: rows.sort((a, b) => a.inTime.localeCompare(b.inTime)) })),
     }));
-  }, [results]);
-  function updateSource(period: Period, patch: Partial<Source>) { setFiles((state) => ({ ...state, [period]: state[period] ? { ...state[period], ...patch } : null })); }
-  async function readFile(period: Period, file?: File) {
-    if (!file) return;
+  }, [result.rows]);
+  function updateFile(patch: Partial<Source>) { setFile((current) => current ? { ...current, ...patch } : null); }
+  async function readFile(upload?: File) {
+    if (!upload) return;
     setError("");
     try {
-      if (!/\.(csv|xlsx|xls)$/i.test(file.name)) throw new Error("Choose an Excel or CSV timecard report.");
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false });
+      if (!/\.(csv|xlsx|xls)$/i.test(upload.name)) throw new Error("Choose an Excel or CSV timecard report.");
+      const workbook = XLSX.read(await upload.arrayBuffer(), { type: "array", cellDates: false });
       const sheets: Record<string, string[][]> = {};
       for (const name of workbook.SheetNames) sheets[name] = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], { header: 1, defval: "", raw: false }).map((row) => row.map((value) => String(value ?? "")));
       const sheet = workbook.SheetNames.find((name) => sheets[name].some((row) => row.some((cell) => cell.trim())));
       if (!sheet) throw new Error("The report contains no readable rows.");
       const headerRow = sheets[sheet].slice(0, 20).map((row, index) => ({ index, matched: fields.filter((field) => detect(row, field) >= 0).length })).sort((a, b) => b.matched - a.matched)[0]?.index ?? 0;
-      const source: Source = { name: file.name, sheets, sheet, headerRow, columns: detectColumns(sheets[sheet][headerRow]) };
-      const all = parse(source, emptyRange()).rows.map((row) => row.date).sort();
-      setFiles((state) => ({ ...state, [period]: source }));
-      setRanges((state) => ({ ...state, [period]: all.length ? { start: all[0], end: all[all.length - 1] } : emptyRange() }));
+      const next: Source = { name: upload.name, sheets, sheet, headerRow, columns: detectColumns(sheets[sheet][headerRow]) };
+      const all = parse(next, emptyRange()).rows.map((row) => row.date).sort();
+      setFile(next);
+      setRange(all.length ? { start: all[0], end: all[all.length - 1] } : emptyRange());
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to read this report."); }
   }
+  const grid = file?.sheets[file.sheet] ?? [];
+  const headings = grid[file?.headerRow ?? 0] ?? [];
   return <div className="report-stack timecard-stack">
-    <section className="panel timecard-intro no-print"><strong>Compare two pay periods</strong><p>Choose the previous and current timecard reports. If a single report covers both periods, choose it in both places and adjust the dates. Files stay in this browser tab and clear when you refresh or close it.</p></section>
+    <section className="panel timecard-intro no-print"><strong>One report, grouped by contract</strong><p>Choose the timecard report for this pay period. The file stays in this browser tab and clears when you refresh or close it. Gary can compare the printed packet with his notes from last time.</p></section>
     {error && <div className="alert alert-error no-print">{error}</div>}
-    {(["previous", "current"] as Period[]).map((period) => {
-      const source = files[period];
-      const grid = source?.sheets[source.sheet] ?? [];
-      const headings = grid[source?.headerRow ?? 0] ?? [];
-      return <section className="panel timecard-settings no-print" key={period}>
-        <div className="panel-heading"><div><h2>{period === "previous" ? "Previous pay period" : "Current pay period"}</h2><span>{source?.name || "Choose a report"}</span></div><label className="primary-link timecard-file-button">Choose report<input type="file" accept=".csv,.xlsx,.xls" onChange={(event) => void readFile(period, event.target.files?.[0])} /></label></div>
-        {source && <><div className="timecard-fields">
-          <label>Worksheet<select value={source.sheet} onChange={(event) => updateSource(period, { sheet: event.target.value, headerRow: 0, columns: detectColumns(source.sheets[event.target.value][0] ?? []) })}>{Object.keys(source.sheets).map((name) => <option key={name}>{name}</option>)}</select></label>
-          <label>Header row<select value={source.headerRow} onChange={(event) => { const headerRow = Number(event.target.value); updateSource(period, { headerRow, columns: detectColumns(grid[headerRow] ?? []) }); }}>{grid.slice(0, 20).map((row, index) => <option key={index} value={index}>Row {index + 1}: {row.filter(Boolean).slice(0, 3).join(" · ").slice(0, 70)}</option>)}</select></label>
-          {fields.map((field) => <label key={field}>{fieldLabels[field]}<select value={source.columns[field]} onChange={(event) => updateSource(period, { columns: { ...source.columns, [field]: Number(event.target.value) } })}><option value={-1}>Choose column</option>{headings.map((name, index) => <option key={index} value={index}>{name || `Column ${index + 1}`}</option>)}</select></label>)}
-          <label>Period from<input type="date" value={ranges[period].start} onChange={(event) => setRanges((state) => ({ ...state, [period]: { ...state[period], start: event.target.value } }))} /></label>
-          <label>Period through<input type="date" value={ranges[period].end} onChange={(event) => setRanges((state) => ({ ...state, [period]: { ...state[period], end: event.target.value } }))} /></label>
-        </div><div className="timecard-status"><span>{results[period].rows.length.toLocaleString()} rows · {hoursLabel(total(results[period].rows))} hours</span><span>{results[period].pto} PTO rows excluded</span>{results[period].outside > 0 && <span>{results[period].outside} rows outside selected dates</span>}{results[period].invalid > 0 && <strong>{results[period].invalid} rows need a readable name, contract, In time, or Hours. Check column choices before printing.</strong>}</div></>}
-      </section>;
-    })}
-    <section className="panel timecard-actions no-print"><button className="primary-link" disabled={!ready} onClick={() => window.print()}>Print by contract</button><span>{ready ? `${contracts.length} contract packets. Each starts on a new page.` : "Choose both reports and confirm their columns and dates. Rows must be readable before printing."}</span></section>
+    <section className="panel timecard-settings no-print">
+      <div className="panel-heading"><div><h2>Timecard report</h2><span>{file?.name || "Choose a report"}</span></div><label className="primary-link timecard-file-button">Choose report<input type="file" accept=".csv,.xlsx,.xls" onChange={(event) => void readFile(event.target.files?.[0])} /></label></div>
+      {file && <><div className="timecard-period-fields">
+        <label>Period from<input type="date" value={range.start} onChange={(event) => setRange((current) => ({ ...current, start: event.target.value }))} /></label>
+        <label>Period through<input type="date" value={range.end} onChange={(event) => setRange((current) => ({ ...current, end: event.target.value }))} /></label>
+      </div><details className="timecard-column-options"><summary>Check file columns</summary><div className="timecard-fields">
+        <label>Worksheet<select value={file.sheet} onChange={(event) => updateFile({ sheet: event.target.value, headerRow: 0, columns: detectColumns(file.sheets[event.target.value][0] ?? []) })}>{Object.keys(file.sheets).map((name) => <option key={name}>{name}</option>)}</select></label>
+        <label>Header row<select value={file.headerRow} onChange={(event) => { const headerRow = Number(event.target.value); updateFile({ headerRow, columns: detectColumns(grid[headerRow] ?? []) }); }}>{grid.slice(0, 20).map((row, index) => <option key={index} value={index}>Row {index + 1}: {row.filter(Boolean).slice(0, 3).join(" · ").slice(0, 70)}</option>)}</select></label>
+        {fields.map((field) => <label key={field}>{fieldLabels[field]}<select value={file.columns[field]} onChange={(event) => updateFile({ columns: { ...file.columns, [field]: Number(event.target.value) } })}><option value={-1}>Choose column</option>{headings.map((name, index) => <option key={index} value={index}>{name || `Column ${index + 1}`}</option>)}</select></label>)}
+      </div></details><div className="timecard-status"><span>{result.rows.length.toLocaleString()} rows · {hoursLabel(total(result.rows))} hours</span><span>{result.pto} PTO rows excluded</span>{result.outside > 0 && <span>{result.outside} rows outside selected dates</span>}{result.invalid > 0 && <strong>{result.invalid} rows need a readable name, contract, In time, or Hours. Check file columns before printing.</strong>}</div></>}
+    </section>
+    <section className="panel timecard-actions no-print"><button className="primary-link" disabled={!ready} onClick={() => window.print()}>Print by contract</button><span>{ready ? `${contracts.length} contracts. Each starts on a new page.` : "Choose one report and confirm its dates. All rows must be readable before printing."}</span></section>
     {ready && <div className="timecard-packet"><div className="timecard-screen-heading no-print"><h2>Packet preview</h2><p>Check the hours and contract assignments before giving the packet to Gary.</p></div>{contracts.map(({ contract, people }) => {
-      const previous = people.flatMap((person) => person.previous);
-      const current = people.flatMap((person) => person.current);
-      return <section className="timecard-contract" key={contract}><header><div><p>Davenport Transportation · Timecard review</p><h2>Contract {contract}</h2><span>Previous: {dateLabel(ranges.previous.start)} – {dateLabel(ranges.previous.end)} · Current: {dateLabel(ranges.current.start)} – {dateLabel(ranges.current.end)}</span></div><strong>{people.length} employees</strong></header>
-        <div className="timecard-contract-totals"><div><span>Current hours</span><strong>{hoursLabel(total(current))}</strong></div><div><span>Previous hours</span><strong>{hoursLabel(total(previous))}</strong></div><div><span>Change</span><strong>{hoursLabel(total(current) - total(previous))}</strong></div></div>
-        {people.map((person) => <div className="timecard-person" key={person.name}><h3>{person.name} <span>Current {hoursLabel(total(person.current))} · Previous {hoursLabel(total(person.previous))} hours</span></h3><PeriodRows title="Current period" contract={contract} employee={person.name} rows={person.current} /><PeriodRows title="Previous period" contract={contract} employee={person.name} rows={person.previous} /></div>)}
-        <footer>Reviewed by: ____________________ &nbsp; Date: ______________</footer>
+      const contractRows = people.flatMap((person) => person.rows);
+      return <section className="timecard-contract" key={contract}><header><div><p>Davenport Transportation · Timecard review</p><h2>Contract {contract}</h2><span>{dateLabel(range.start)} – {dateLabel(range.end)}</span></div><strong>{people.length} employees</strong></header>
+        <div className="timecard-contract-totals"><div><span>Contract hours</span><strong>{hoursLabel(total(contractRows))}</strong></div><div><span>Employees</span><strong>{people.length}</strong></div><div><span>Time entries</span><strong>{contractRows.length.toLocaleString()}</strong></div></div>
+        {people.map((person) => <div className="timecard-person" key={person.name}><h3>{person.name} <span>{hoursLabel(total(person.rows))} hours</span></h3><TimecardRows contract={contract} employee={person.name} rows={person.rows} /></div>)}
+        <footer><strong>Contract total: {hoursLabel(total(contractRows))} hours</strong><span>Reviewed by: ____________________ &nbsp; Date: ______________</span></footer>
       </section>;
     })}</div>}
   </div>;

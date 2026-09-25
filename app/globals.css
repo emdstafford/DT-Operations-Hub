@@ -556,6 +556,12 @@ button, input { font: inherit; }
 .timecard-intro p{margin:4px 0 0;color:var(--muted);font-size:.81rem}
 .timecard-file-button{flex:none;min-height:38px;font-size:.85rem}
 .timecard-file-button input{display:none}
+.timecard-period-fields{display:flex;gap:12px;padding:16px 20px 10px}
+.timecard-period-fields label{display:grid;gap:5px;min-width:160px;color:var(--navy);font-size:.75rem;font-weight:800}
+.timecard-period-fields input{min-height:42px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;color:var(--ink);background:#fff}
+.timecard-column-options{border-top:1px solid var(--line)}
+.timecard-column-options>summary{padding:12px 20px;color:var(--navy);font-size:.82rem;font-weight:800;cursor:pointer}
+.timecard-column-options .timecard-fields{padding-top:0}
 .timecard-import{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 20px}
 .timecard-import h2,.timecard-screen-heading h2{margin:0;color:var(--navy-deep);font-size:1.15rem}
 .timecard-import p,.timecard-screen-heading p{margin:5px 0 0;color:var(--muted);font-size:.82rem}
@@ -592,8 +598,9 @@ button, input { font: inherit; }
 .timecard-print-context{display:none}
 .timecard-contract .data-table{table-layout:fixed;overflow-wrap:anywhere}
 .timecard-contract footer{margin-top:20px;border-top:1px solid var(--line);padding-top:10px;color:var(--navy);font-size:.8rem}
+.timecard-contract footer{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
 @media(max-width:800px){.timecard-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.payroll-tools-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:560px){.timecard-import,.timecard-actions{align-items:stretch;flex-direction:column}.timecard-fields,.payroll-tools-grid{grid-template-columns:1fr}.timecard-import .primary-link,.timecard-actions button{text-align:center}.timecard-settings .panel-heading{align-items:stretch;flex-direction:column;gap:8px;padding:12px 15px}}
+@media(max-width:560px){.timecard-import,.timecard-actions{align-items:stretch;flex-direction:column}.timecard-fields,.payroll-tools-grid{grid-template-columns:1fr}.timecard-period-fields{flex-direction:column}.timecard-import .primary-link,.timecard-actions button{text-align:center}.timecard-settings .panel-heading{align-items:stretch;flex-direction:column;gap:8px;padding:12px 15px}}
 @media print{
   @page timecard{size:letter landscape;margin:.5in}
   .timecard-page{width:100%;margin:0;padding:0}
