@@ -24,6 +24,8 @@ type Check = {
   expectedGallons: number;
   purchasedGallons: number;
   variancePercent: number;
+  coveredDays: number;
+  totalDays: number;
   status: "over" | "plan-needed";
 };
 
@@ -42,6 +44,8 @@ export default function DashboardFuelChecks({ start, end, contracts }: {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [allowed, setAllowed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<"over" | "plan-needed">("over");
+  const [showAll, setShowAll] = useState(false);
   const contractNumbers = useMemo(() => [...new Set(contracts.map((row) => row.contract_number || "").filter(Boolean))], [contracts]);
   const contractKey = contractNumbers.join("|");
 
@@ -50,6 +54,7 @@ export default function DashboardFuelChecks({ start, end, contracts }: {
     void (async () => {
       if (!contractNumbers.length) { setLoading(false); return; }
       setLoading(true);
+      setAllowed(false);
       const [planResult, purchaseResult] = await Promise.all([
         supabase.from("fuel_contract_mileage_plans")
           .select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,tractor_count,straight_truck_count,alert_above_percent")
@@ -86,6 +91,8 @@ export default function DashboardFuelChecks({ start, end, contracts }: {
       expectedGallons: estimate.expectedGallons,
       purchasedGallons,
       variancePercent,
+      coveredDays: estimate.coveredDays,
+      totalDays: estimate.totalDays,
       status: !complete ? "plan-needed" : variancePercent > estimate.alertAbovePercent ? "over" : null,
     };
   }).filter((row): row is Check => row.status !== null)
@@ -94,23 +101,27 @@ export default function DashboardFuelChecks({ start, end, contracts }: {
   if (!allowed) return null;
   const over = checks.filter((row) => row.status === "over");
   const planNeeded = checks.filter((row) => row.status === "plan-needed");
-  const shown = [...over, ...planNeeded].slice(0, 8);
+  const activeView = view;
+  const matching = activeView === "over" ? over : planNeeded;
+  const shown = showAll ? matching : matching.slice(0, 5);
 
   return <section className="panel dashboard-fuel-checks">
-    <div className="panel-heading"><div><p className="eyebrow">Restricted fuel view</p><h2>Contract &amp; fuel checks</h2><span>{start} – {end} · Only approved fuel users see this section</span></div><Link className="hub-secondary-link" href="/fuel">Open Fuel Reports</Link></div>
+    <div className="panel-heading"><div><p className="eyebrow">Fuel and operations</p><h2>Contracts to check</h2><span>{start} – {end} · Visible to approved fuel users</span></div><Link className="hub-secondary-link" href="/fuel">Fuel Reports →</Link></div>
     {loading ? <div className="hub-loading">Checking contract fuel estimates…</div> : <>
-      <div className="fuel-check-summary">
-        <div className={over.length ? "fuel-check-alert" : ""}><span>Over expected fuel</span><strong>{over.length}</strong></div>
-        <div className={planNeeded.length ? "fuel-check-warning" : ""}><span>Plans needed</span><strong>{planNeeded.length}</strong></div>
-        <div><span>Contracts checked</span><strong>{contractNumbers.length}</strong></div>
+      <div className="fuel-check-summary" role="group" aria-label="Fuel checks">
+        <button type="button" className={activeView === "over" ? "active fuel-check-alert" : ""} onClick={() => { setView("over"); setShowAll(false); }} aria-pressed={activeView === "over"}><strong>{over.length}</strong><span>Over fuel estimate</span></button>
+        <button type="button" className={activeView === "plan-needed" ? "active fuel-check-warning" : ""} onClick={() => { setView("plan-needed"); setShowAll(false); }} aria-pressed={activeView === "plan-needed"}><strong>{planNeeded.length}</strong><span>Need a mileage plan</span></button>
+        <div><strong>{contractNumbers.length}</strong><span>Contracts in this view</span></div>
       </div>
       {shown.length ? <div className="fuel-check-list">{shown.map((row) => <article key={row.contract} className={`fuel-check-row fuel-check-${row.status}`}>
-        <div><Link href={`/contracts/${encodeURIComponent(row.contract)}`}>{row.contract}</Link><span>{row.status === "over" ? "Fuel over estimate" : "Mileage plan needed"}</span></div>
-        <div><span>USPS completion</span><strong>{percent(row.completion)}</strong><small>{number(row.incomplete)} incomplete</small></div>
-        <div><span>Purchased gallons</span><strong>{number(row.purchasedGallons, 1)}</strong></div>
-        <div><span>{row.status === "over" ? "Expected / difference" : "Fuel estimate"}</span><strong>{row.status === "over" ? `${number(row.expectedGallons, 1)} / +${number(row.variancePercent, 1)}%` : "Not available"}</strong></div>
-      </article>)}</div> : <div className="fuel-check-clear"><strong>No fuel-estimate alerts for these dates.</strong><span>All visible contracts have complete plans and are within their saved review thresholds.</span></div>}
-      {checks.length > shown.length && <p className="fuel-check-more">Showing the first {shown.length} of {checks.length} checks. Open Fuel Reports to review every contract.</p>}
+        <div className="fuel-check-identity"><Link href={`/contracts/${encodeURIComponent(row.contract)}`}>{row.contract} →</Link><span>{activeView === "over" ? "Fuel purchase review" : "Set up fuel estimate"}</span></div>
+        <div className="fuel-check-reason"><span>{activeView === "over" ? "Above estimate" : "Plan covers"}</span><strong>{activeView === "over" ? `+${number(row.variancePercent, 1)}%` : `${number(row.coveredDays)} of ${number(row.totalDays)} days`}</strong></div>
+        <div className="fuel-check-detail"><span>{activeView === "over" ? "Fuel gallons · bought / expected" : "Fuel gallons purchased"}</span><strong>{activeView === "over" ? `${number(row.purchasedGallons, 1)} / ${number(row.expectedGallons, 1)}` : number(row.purchasedGallons, 1)}</strong></div>
+        <div className="fuel-check-detail"><span>USPS completion</span><strong>{percent(row.completion)}</strong><small>{number(row.incomplete)} incomplete stops</small></div>
+      </article>)}</div> : <div className="fuel-check-clear"><strong>{activeView === "over" ? "No contracts are over their fuel estimate." : "Every contract has a mileage plan for these dates."}</strong><span>{activeView === "over" ? "Select “Need a mileage plan” to see contracts without full coverage." : "Select “Over fuel estimate” to see contracts above their saved threshold."}</span></div>}
+      {matching.length > shown.length && <button type="button" className="fuel-check-expand" onClick={() => setShowAll(true)}>Show all {number(matching.length)} contracts ↓</button>}
+      {showAll && matching.length > 5 && <button type="button" className="fuel-check-expand" onClick={() => setShowAll(false)}>Show fewer ↑</button>}
+      <p className="fuel-check-more">Fuel is an estimate based on planned miles and MPG. Purchases can move between date ranges when a truck refuels.</p>
     </>}
   </section>;
 }
