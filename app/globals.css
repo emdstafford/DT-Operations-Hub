@@ -471,3 +471,47 @@ button, input { font: inherit; }
 @media(max-width:790px){.supervisor-report-list{grid-template-columns:1fr}.dashboard-attention-summary .attention-list{grid-template-columns:1fr}}
 @media(max-width:420px){.supervisor-report-numbers small{white-space:normal}.supervisor-report-contract{grid-template-columns:minmax(0,1fr) auto}.supervisor-report-contract>span{grid-column:1}.supervisor-report-contract>strong{grid-column:2;grid-row:1/3}.supervisor-report-notes{grid-column:1/-1}}
 .dashboard-fuel-purchases{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;border-top:1px solid var(--line);padding:12px 18px}.dashboard-fuel-purchases>div{display:grid;gap:3px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:#f7f9fb}.dashboard-fuel-purchases span{color:var(--muted);font-size:.71rem;font-weight:700}.dashboard-fuel-purchases strong{color:var(--navy-deep);font-size:1.1rem}@media(max-width:440px){.dashboard-fuel-purchases strong{font-size:.95rem}}
+
+/* Dashboard density: show the date, key numbers, and contract issues sooner. */
+.dashboard-page{padding-top:22px}
+.dashboard-page .hub-header{align-items:center;gap:16px;margin-bottom:16px}
+.dashboard-page .hub-header h1{margin:2px 0 0;font-size:clamp(1.45rem,2vw,1.85rem)}
+.dashboard-page .report-stack{gap:12px}
+.dashboard-page .executive-period{padding:14px 17px}
+.dashboard-page .quick-period-heading{align-items:center;gap:12px;margin-bottom:10px}
+.dashboard-page .quick-period-heading h2{font-size:clamp(1.1rem,1.8vw,1.4rem)}
+.dashboard-page .quick-period-controls{gap:12px}
+.dashboard-page .period-buttons{padding:3px}
+.dashboard-page .period-buttons button{min-height:38px;padding:0 13px}
+.dashboard-page .executive-date-fields input{min-height:38px}
+.dashboard-page .advanced-dashboard-filters{margin-top:10px;padding-top:9px}
+.dashboard-page .metric-grid{gap:9px}
+.dashboard-page .metric-card{min-width:0;padding:11px 14px}
+.dashboard-page .metric-card strong{margin-top:4px;font-size:clamp(1.35rem,2vw,1.8rem)}
+.dashboard-page .metric-card-action small{margin-top:3px}
+.dashboard-page .dashboard-email-bar{gap:10px;padding:8px 12px}
+.dashboard-page .dashboard-email-bar span{margin-top:2px}
+.dashboard-page .dashboard-report-buttons{gap:7px}
+.dashboard-page .dashboard-report-buttons button{min-height:38px;padding:0 12px;font-size:.86rem}
+.dashboard-page .dashboard-view-switch{gap:5px;padding:4px}
+.dashboard-page .dashboard-view-switch button{padding:7px 12px}
+.dashboard-page .dashboard-view-switch button span{display:none}
+.dashboard-page .dashboard-attention-summary .panel-heading{padding-top:12px;padding-bottom:10px}
+.dashboard-page .dashboard-attention-summary .attention-list a{padding-top:7px;padding-bottom:7px}
+@media(max-width:900px){
+  .dashboard-page .quick-period-heading{align-items:flex-start;flex-direction:column;gap:4px}
+  .dashboard-page .quick-period-controls{align-items:stretch;flex-direction:column}
+  .dashboard-page .executive-date-fields{justify-content:flex-start}
+}
+@media(max-width:640px){
+  .dashboard-page{padding-top:14px}
+  .dashboard-page .hub-header{align-items:flex-start;gap:10px;margin-bottom:12px}
+  .dashboard-page .executive-period{padding:12px}
+  .dashboard-page .quick-period-heading h2{font-size:1.18rem}
+  .dashboard-page .period-buttons button{min-height:40px;padding:0 7px}
+  .dashboard-page .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .dashboard-page .metric-card{padding:10px 11px}
+  .dashboard-page .metric-card strong{font-size:1.45rem}
+  .dashboard-page .dashboard-report-buttons{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dashboard-page .dashboard-report-buttons button:last-child{grid-column:1/-1}
+}

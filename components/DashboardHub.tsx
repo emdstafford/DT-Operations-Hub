@@ -89,7 +89,17 @@ export default function DashboardHub() {
       supabase.from("report_history").select("period_start,period_end").eq("report_type","usps_loads").order("period_end",{ascending:false}).limit(1).maybeSingle(),
       supabase.rpc("contract_options"), supabase.rpc("supervisor_options"),
     ]);
-    if (latest.data) { setStart(latest.data.period_start); setEnd(latest.data.period_end); setLatestAvailableEnd(latest.data.period_end); }
+    if (latest.data) {
+      const { period_start: periodStart, period_end: periodEnd } = latest.data;
+      setStart(periodStart);
+      setEnd(periodEnd);
+      setLatestAvailableEnd(periodEnd);
+      const first = new Date(`${periodStart}T12:00:00Z`);
+      const last = new Date(`${periodEnd}T12:00:00Z`);
+      const days = Math.round((last.getTime() - first.getTime()) / 86400000);
+      const isFullMonth = first.getUTCDate() === 1 && first.getUTCMonth() === last.getUTCMonth() && last.getUTCDate() === new Date(Date.UTC(last.getUTCFullYear(), last.getUTCMonth() + 1, 0)).getUTCDate();
+      setRangeMode(periodStart === periodEnd ? "day" : days === 6 && first.getUTCDay() === 6 ? "week" : isFullMonth ? "month" : "custom");
+    }
     setContractOptions((contracts.data ?? []).map((row: { contract_number: string }) => row.contract_number));
     setSupervisorOptions(["Unassigned", ...(supervisors.data ?? []).map((row: { supervisor: string }) => row.supervisor).filter((name: string) => name && name !== "Unassigned")]);
     setInitialized(true);
