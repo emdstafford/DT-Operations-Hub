@@ -50,6 +50,17 @@ export default function LoginPage() {
     setLoading(false);
   }
 
+  async function resetPassword() {
+    const normalized = validEmail();
+    if (!normalized) return;
+    setLoading(true); setMessage("");
+    const { error } = await supabase.auth.resetPasswordForEmail(normalized, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/account/password`,
+    });
+    setMessage(error ? error.message : "If that address has a DT account, a password reset link will arrive by email. Check your inbox and junk folder.");
+    setLoading(false);
+  }
+
   return (
     <main className="login-screen">
       <video className="login-video" autoPlay muted loop playsInline aria-hidden="true">
@@ -69,6 +80,7 @@ export default function LoginPage() {
           <input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required />
           <button className="login-primary" type="submit" disabled={loading}>{loading ? "Signing in…" : "Sign in"}</button>
           <button className="login-link-button" type="button" onClick={sendEmailLink} disabled={loading}>Email me a secure link instead</button>
+          <button className="login-text-button" type="button" onClick={resetPassword} disabled={loading}>Forgot password? Email me a reset link</button>
         </form>
         {message && <p className="login-message" role="status">{message}</p>}
         <p className="login-footnote">Only approved DT Express accounts can enter.</p>

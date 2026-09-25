@@ -42,6 +42,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess }: { 
       </nav>
       <div className="sidebar-user">
         <div className="header-status"><span className="status-dot" /><span>{employee || "DT Express employee"}</span></div>
+        {employee && <Link className="nav-button account-password-link" href="/account/password">Change password</Link>}
         {employee && <button className="nav-button" onClick={signOut}>Sign Out</button>}
       </div>
     </header>

@@ -63,7 +63,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         router.replace(canUseOperations ? "/" : "/payroll");
       } else if (!pathname.startsWith("/payroll") && !pathname.startsWith("/fuel") && !canUseOperations) {
         router.replace(canUseFuel ? "/fuel" : "/payroll");
-      } else if (role === "dashboard_fuel_viewer" && pathname !== "/" && !pathname.startsWith("/fuel")) {
+      } else if (role === "dashboard_fuel_viewer" && pathname !== "/" && !pathname.startsWith("/fuel") && pathname !== "/account/password") {
         router.replace("/");
       } else if (isReportManagementPath && !canManageReports) {
         router.replace("/");
