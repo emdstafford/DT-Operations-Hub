@@ -597,9 +597,10 @@ button, input { font: inherit; }
 .timecard-unassigned-row input{padding:7px 9px;border:1px solid var(--line);border-radius:5px}
 .timecard-unassigned-row button{padding:7px 10px;border:1px solid var(--navy);background:white;color:var(--navy);border-radius:5px;cursor:pointer}
 .timecard-unassigned-row button:disabled{opacity:.5}
-.timecard-contract-totals{display:grid;grid-template-columns:minmax(0,2.5fr) minmax(0,.8fr) minmax(0,.8fr);gap:8px;margin-top:12px}
-.timecard-contract-totals>div{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:#edf3f8}
-.timecard-contract-totals .timecard-contract-hours{display:block;min-width:0}.timecard-contract-hours>strong{margin-left:9px}.timecard-contract-hours .timecard-compare-inline{display:block;margin-top:4px}
+.timecard-contract-totals{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:8px}
+.timecard-contract-totals>div{display:flex;align-items:center;gap:8px;padding:6px 9px;background:#edf3f8}
+.timecard-contract-totals .timecard-contract-hours{display:flex;flex-wrap:wrap;min-width:0}.timecard-contract-hours .timecard-compare-inline{margin-left:auto}
+.timecard-contract-totals .timecard-entry-count{white-space:nowrap}
 .timecard-contract-totals span{color:var(--muted);font-size:.76rem}
 .timecard-contract-totals strong{color:var(--navy-deep)}
 .timecard-person{margin-top:16px}
@@ -617,7 +618,7 @@ button, input { font: inherit; }
 .timecard-contract footer{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
 @media(max-width:800px){.timecard-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.payroll-tools-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.timecard-import,.timecard-actions{align-items:stretch;flex-direction:column}.timecard-fields,.payroll-tools-grid{grid-template-columns:1fr}.timecard-period-fields{flex-direction:column}.timecard-import .primary-link,.timecard-actions button{text-align:center}.timecard-settings .panel-heading{align-items:stretch;flex-direction:column;gap:8px;padding:12px 15px}}
-@media(max-width:560px){.timecard-contract-totals{grid-template-columns:1fr 1fr}.timecard-contract-totals .timecard-contract-hours{grid-column:1/-1}}
+@media(max-width:560px){.timecard-contract-totals{grid-template-columns:1fr}.timecard-contract-totals .timecard-contract-hours{grid-column:1/-1}}
 @media print{
   @page timecard{size:letter portrait;margin:.5in}
   .timecard-page{width:100%;margin:0;padding:0}
@@ -625,7 +626,7 @@ button, input { font: inherit; }
   .timecard-page .timecard-contract{page:timecard;border:0;border-radius:0;padding:0;background:#fff;box-shadow:none;break-before:page}
   .timecard-page .timecard-contract:first-of-type{break-before:auto}
   .timecard-page .timecard-person h3{break-after:avoid}
-  .timecard-page .timecard-compare-inline{font-size:7pt}.timecard-page .timecard-person h3{font-size:9pt;margin:9px 0 4px}.timecard-page .timecard-contract-totals{grid-template-columns:minmax(0,2.5fr) minmax(0,.8fr) minmax(0,.8fr)}
+  .timecard-page .timecard-contract>header{padding-bottom:6px}.timecard-page .timecard-contract>header h2{font-size:13pt;margin:2px 0}.timecard-page .timecard-supervisor-heading{gap:1px}.timecard-page .timecard-supervisor-heading strong{font-size:10pt}.timecard-page .timecard-compare-inline{font-size:7pt}.timecard-page .timecard-person{margin-top:10px}.timecard-page .timecard-person h3{font-size:9pt;margin:6px 0 3px}.timecard-page .timecard-contract-totals{grid-template-columns:minmax(0,1fr) auto;margin-top:6px}.timecard-page .timecard-contract-totals>div{padding:4px 7px}.timecard-page .timecard-contract footer{margin-top:9px;padding-top:5px}
   .timecard-page .timecard-contract .table-scroll{max-height:none;overflow:visible}
   .timecard-page .timecard-contract .data-table{width:100%;min-width:0;font-size:8pt}
   .timecard-page .timecard-contract .data-table th,.timecard-page .timecard-contract .data-table td{padding:5px 6px}
