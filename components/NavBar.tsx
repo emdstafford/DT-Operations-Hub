@@ -26,7 +26,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess }: { 
   return (
     <header className="site-header">
       <div className="brand-row">
-        <Link href={operationsAccess ? "/" : fuelAccess ? "/fuel" : "/payroll/holiday-hours"} className="brand">
+        <Link href={operationsAccess ? "/" : fuelAccess ? "/fuel" : "/payroll"} className="brand">
           <Image src="/logo.png" alt="Davenport Transportation" width={68} height={68} priority />
           <div><strong>DT Intelligence Hub</strong><span>Performance intelligence</span></div>
         </Link>
@@ -36,7 +36,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess }: { 
         {operationsAccess && <Link className={pathname === "/" ? "active" : ""} href="/">Dashboard</Link>}
         {operationsAccess && <Link className={pathname.startsWith("/contracts") ? "active" : ""} href="/contracts">Contracts</Link>}
         {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel</Link>}
-        {payrollAccess && <Link className={pathname.startsWith("/payroll/") ? "active" : ""} href="/payroll/holiday-hours">Payroll</Link>}
+        {payrollAccess && <Link className={pathname.startsWith("/payroll") ? "active" : ""} href="/payroll">Payroll</Link>}
         {operationsAccess && canManageReports && <Link className={pathname.startsWith("/schedule-builder") ? "active" : ""} href="/schedule-builder">Schedule</Link>}
         {operationsAccess && canManageReports && <Link className={pathname.startsWith("/history") ? "active" : ""} href="/history">History</Link>}
       </nav>

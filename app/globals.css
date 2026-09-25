@@ -542,3 +542,69 @@ button, input { font: inherit; }
     .fuel-page .fuel-gary-actions .dashboard-report-buttons button:last-child{grid-column:1/-1}
   }
 }
+
+/* Local-only payroll timecard packets. Each contract starts a fresh print sheet. */
+.payroll-tools-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.payroll-tool-card{display:flex;flex-direction:column;align-items:flex-start;gap:9px;padding:20px;transition:border-color .15s ease,box-shadow .15s ease}
+.payroll-tool-card:hover{border-color:#aabccc;box-shadow:0 6px 20px rgb(7 35 63 / 8%)}
+.payroll-tool-card span{color:var(--muted);font-size:.71rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.payroll-tool-card h2{margin:0;color:var(--navy-deep);font-size:1.1rem}
+.payroll-tool-card p{flex:1;margin:0;color:var(--muted);font-size:.85rem;line-height:1.5}
+.payroll-tool-card strong{color:var(--navy);font-size:.8rem}
+.timecard-intro{padding:15px 20px}
+.timecard-intro strong{color:var(--navy-deep)}
+.timecard-intro p{margin:4px 0 0;color:var(--muted);font-size:.81rem}
+.timecard-file-button{flex:none;min-height:38px;font-size:.85rem}
+.timecard-file-button input{display:none}
+.timecard-import{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 20px}
+.timecard-import h2,.timecard-screen-heading h2{margin:0;color:var(--navy-deep);font-size:1.15rem}
+.timecard-import p,.timecard-screen-heading p{margin:5px 0 0;color:var(--muted);font-size:.82rem}
+.timecard-import input[type=file]{display:none}
+.timecard-settings .panel-heading span{display:block;margin-top:4px}
+.timecard-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:17px 20px}
+.timecard-fields label{display:grid;gap:5px;min-width:0;color:var(--navy);font-size:.75rem;font-weight:800}
+.timecard-fields input,.timecard-fields select{width:100%;min-height:42px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;color:var(--ink);background:#fff}
+.timecard-status{display:flex;flex-wrap:wrap;gap:6px 16px;padding:0 20px 12px;color:var(--muted);font-size:.8rem}
+.timecard-status strong{color:#742430}
+.timecard-actions{display:flex;align-items:center;gap:14px;border-top:1px solid var(--line);padding:13px 20px}
+.timecard-actions button{border:0;white-space:nowrap}
+.timecard-actions button:disabled{opacity:.48;cursor:not-allowed}
+.timecard-actions span{color:var(--muted);font-size:.77rem}
+.timecard-packet{display:grid;gap:16px}
+.timecard-screen-heading{padding:0 2px}
+.timecard-contract{border:1px solid var(--line);border-radius:9px;padding:19px 20px;background:#fff}
+.timecard-contract>header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:2px solid var(--navy);padding-bottom:12px}
+.timecard-contract>header p{margin:0;color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.08em}
+.timecard-contract>header h2{margin:4px 0;color:var(--navy-deep);font-size:1.4rem}
+.timecard-contract>header span,.timecard-contract>header strong{color:var(--muted);font-size:.78rem}
+.timecard-contract-totals{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.timecard-contract-totals>div{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:#edf3f8}
+.timecard-contract-totals span{color:var(--muted);font-size:.76rem}
+.timecard-contract-totals strong{color:var(--navy-deep)}
+.timecard-person{margin-top:16px}
+.timecard-person h3{margin:0 0 7px;color:var(--navy-deep);font-size:1rem}
+.timecard-person h3 span{margin-left:8px;color:var(--muted);font-size:.76rem;font-weight:600}
+.timecard-person h4{margin:11px 0 6px;color:var(--navy);font-size:.8rem}
+.timecard-person h4 span{margin-left:7px;color:var(--muted);font-weight:600}
+.timecard-person p{margin:5px 0 12px;color:var(--muted);font-size:.78rem}
+.timecard-period .data-table th:nth-child(3),.timecard-period .data-table td:nth-child(3){text-align:right}
+.timecard-period .data-table tfoot th{background:#edf3f8;color:var(--navy-deep)}
+.timecard-print-context{display:none}
+.timecard-contract .data-table{table-layout:fixed;overflow-wrap:anywhere}
+.timecard-contract footer{margin-top:20px;border-top:1px solid var(--line);padding-top:10px;color:var(--navy);font-size:.8rem}
+@media(max-width:800px){.timecard-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.payroll-tools-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.timecard-import,.timecard-actions{align-items:stretch;flex-direction:column}.timecard-fields,.payroll-tools-grid{grid-template-columns:1fr}.timecard-import .primary-link,.timecard-actions button{text-align:center}.timecard-settings .panel-heading{align-items:stretch;flex-direction:column;gap:8px;padding:12px 15px}}
+@media print{
+  @page timecard{size:letter landscape;margin:.5in}
+  .timecard-page{width:100%;margin:0;padding:0}
+  .timecard-page .timecard-stack{display:block}
+  .timecard-page .timecard-contract{page:timecard;border:0;border-radius:0;padding:0;background:#fff;box-shadow:none;break-before:page}
+  .timecard-page .timecard-contract:first-of-type{break-before:auto}
+  .timecard-page .timecard-person h3{break-after:avoid}
+  .timecard-page .timecard-contract .table-scroll{max-height:none;overflow:visible}
+  .timecard-page .timecard-contract .data-table{width:100%;min-width:0;font-size:8pt}
+  .timecard-page .timecard-contract .data-table th,.timecard-page .timecard-contract .data-table td{padding:5px 6px}
+  .timecard-page .timecard-contract .data-table thead{display:table-header-group}
+  .timecard-page .timecard-print-context{display:table-row}
+  .timecard-page .timecard-contract footer{break-inside:avoid}
+}

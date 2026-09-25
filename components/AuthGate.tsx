@@ -55,13 +55,13 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         await supabase.auth.signOut();
         if (active) router.replace("/login?error=not-approved");
       } else if (pathname === "/login") {
-        router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : "/payroll/holiday-hours");
-      } else if (pathname.startsWith("/payroll/") && !canUsePayroll) {
-        router.replace("/");
+        router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : "/payroll");
+      } else if (pathname.startsWith("/payroll") && !canUsePayroll) {
+        router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : "/login");
       } else if (pathname.startsWith("/fuel") && !canUseFuel) {
-        router.replace(canUseOperations ? "/" : "/payroll/holiday-hours");
-      } else if (!pathname.startsWith("/payroll/") && !pathname.startsWith("/fuel") && !canUseOperations) {
-        router.replace(canUseFuel ? "/fuel" : "/payroll/holiday-hours");
+        router.replace(canUseOperations ? "/" : "/payroll");
+      } else if (!pathname.startsWith("/payroll") && !pathname.startsWith("/fuel") && !canUseOperations) {
+        router.replace(canUseFuel ? "/fuel" : "/payroll");
       } else if (isReportManagementPath && !canManageReports) {
         router.replace("/");
       }
