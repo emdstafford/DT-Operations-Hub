@@ -16,6 +16,7 @@ grant execute on function public.is_payroll_tool_user() to authenticated;
 create table if not exists public.timecard_summary_history (
   id uuid primary key default gen_random_uuid(),
   payroll_name text not null check (length(trim(payroll_name)) > 0),
+  -- Internal sort date, set from the final timecard date; staff enter payroll name only.
   pay_date date not null,
   period_start date not null,
   period_end date not null,

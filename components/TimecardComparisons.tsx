@@ -29,7 +29,7 @@ export function totals(rows: TimecardSummaryEntry[], kind: "driver" | "contract"
   return map;
 }
 
-export default function TimecardComparisons({ entries, start, end, sourceName, payrollName, payDate }: { entries: TimecardSummaryEntry[]; start: string; end: string; sourceName: string; payrollName: string; payDate: string }) {
+export default function TimecardComparisons({ entries, start, end, sourceName, payrollName }: { entries: TimecardSummaryEntry[]; start: string; end: string; sourceName: string; payrollName: string }) {
   const [previous, setPrevious] = useState<SavedReport | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -55,7 +55,7 @@ export default function TimecardComparisons({ entries, start, end, sourceName, p
         if (existingError) throw existingError;
         if (!existing) {
           const { error: insertError } = await supabase.from("timecard_summary_history").insert({
-            payroll_name: payrollName, pay_date: payDate, period_start: start, period_end: end, source_file: sourceName, summary_hash: hash,
+            payroll_name: payrollName, pay_date: end, period_start: start, period_end: end, source_file: sourceName, summary_hash: hash,
             employee_count: new Set(current.map((entry) => entry.employeeId)).size,
             contract_count: new Set(current.map((entry) => entry.contract)).size,
             total_hundredths: current.reduce((sum, row) => sum + row.hundredths, 0),
@@ -66,22 +66,22 @@ export default function TimecardComparisons({ entries, start, end, sourceName, p
         }
         const { data, error: historyError } = await supabase.from("timecard_summary_history")
           .select("id,payroll_name,pay_date,period_start,period_end,source_file,saved_at,summary")
-          .lt("pay_date", payDate).order("pay_date", { ascending: false }).order("saved_at", { ascending: false }).limit(1).maybeSingle();
+          .lt("period_end", start).order("period_end", { ascending: false }).order("saved_at", { ascending: false }).limit(1).maybeSingle();
         if (historyError) throw historyError;
         if (!active) return;
         setPrevious((data as SavedReport | null) ?? null);
-        setStatus(existing ? `Duplicate upload skipped. These totals are already saved as ${existing.payroll_name} (${day(existing.pay_date)}).` : "Hour totals saved for future comparisons.");
+        setStatus(existing ? `Duplicate upload skipped. These totals are already saved as ${existing.payroll_name}.` : "Hour totals saved for future comparisons.");
       } catch (cause) {
         if (active) { setError(cause instanceof Error && cause.message.includes("timecard_summary_history") ? "History setup needed: run timecard_summary_history.sql in Supabase. Printing still works." : cause instanceof Error ? cause.message : "Could not save timecard totals."); setStatus(""); }
       } finally { if (active) setSaving(false); }
     })();
     return () => { active = false; };
-  }, [signature, start, end, sourceName, payrollName, payDate, current]);
+  }, [signature, start, end, sourceName, payrollName, current]);
 
   const drivers = useMemo(() => compare(totals(previous?.summary ?? [], "driver"), totals(current, "driver")), [previous, current]);
   const contracts = useMemo(() => compare(totals(previous?.summary ?? [], "contract"), totals(current, "contract")), [previous, current]);
   return <section className="panel timecard-comparisons no-print">
-    <div className="panel-heading"><div><h2>Compare with previous pay period</h2><span>{previous ? `${previous.payroll_name} (${day(previous.pay_date)}) → ${payrollName} (${day(payDate)})` : `${payrollName} · ${day(payDate)} · Timecards ${day(start)}–${day(end)}`}</span></div></div>
+    <div className="panel-heading"><div><h2>Compare with previous pay period</h2><span>{previous ? `${previous.payroll_name} (${day(previous.period_start)}–${day(previous.period_end)}) → ${payrollName} (${day(start)}–${day(end)})` : `${payrollName} · Timecards ${day(start)}–${day(end)}`}</span></div></div>
     {saving && <p role="status">Saving totals…</p>}{status && <p className="fuel-success timecard-history-message" role="status">{status}</p>}{error && <p className="alert alert-error" role="alert">{error}</p>}
     {!previous && !saving && !error && <p>No earlier, non-overlapping timecard report is saved yet. The next upload will show changes here.</p>}
     {previous && <><p className="timecard-comparison-note">Hours can change because assignments or schedules change. “New” and “missing” mean a person or contract appears in only one of these two reports; check the source before treating a difference as an error.</p>

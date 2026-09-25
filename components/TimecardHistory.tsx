@@ -7,7 +7,7 @@ import { ComparisonTable, compare, totals, type SavedReport } from "@/components
 type HistoryRow = SavedReport & { employee_count: number; contract_count: number; total_hundredths: number };
 const hour = (hundredths: number) => (hundredths / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const formatDate = (value: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
-const version = (row: HistoryRow) => `${row.payroll_name} · ${formatDate(row.pay_date)} · saved ${new Date(row.saved_at).toLocaleDateString("en-US")}`;
+const version = (row: HistoryRow) => `${row.payroll_name} · ${formatDate(row.period_start)}–${formatDate(row.period_end)} · saved ${new Date(row.saved_at).toLocaleDateString("en-US")}`;
 
 export default function TimecardHistory() {
   const [reports, setReports] = useState<HistoryRow[]>([]);
@@ -30,11 +30,11 @@ export default function TimecardHistory() {
     const { data, error: historyError } = history;
     if (!active) return;
     if (historyError) setError(historyError.message.includes("timecard_summary_history") ? "Run timecard_summary_history.sql in Supabase to enable private payroll comparisons." : historyError.message);
-    else { const items = (data ?? []) as HistoryRow[]; setReports(items); const seenDates = new Set<string>(); setSelectedIds(items.filter((item) => { if (seenDates.has(item.pay_date)) return false; seenDates.add(item.pay_date); return true; }).map((item) => item.id)); if (items.length) {
+    else { const items = (data ?? []) as HistoryRow[]; setReports(items); const seenPayrolls = new Set<string>(); setSelectedIds(items.filter((item) => { const key = item.payroll_name.trim().toLowerCase(); if (seenPayrolls.has(key)) return false; seenPayrolls.add(key); return true; }).map((item) => item.id)); if (items.length) {
       const savedBaseline = items.find((item) => item.id === baseline.data?.report_id);
       setBaselineId(savedBaseline?.id || ""); setBaselineChoice(savedBaseline?.id || items[items.length - 1].id);
       setAfterId(items[0].id);
-      setBeforeId(savedBaseline?.id ?? items.find((item) => item.pay_date < items[0].pay_date)?.id ?? items[1]?.id ?? "");
+      setBeforeId(savedBaseline?.id ?? items.find((item) => item.period_end < items[0].period_start)?.id ?? items[1]?.id ?? "");
     } if (baseline.error) setBaselineMessage("Baseline setting unavailable. Run the updated timecard_summary_history.sql in Supabase."); }
     setLoading(false);
   })(); return () => { active = false; }; }, []);
@@ -45,7 +45,7 @@ export default function TimecardHistory() {
   const contracts = useMemo(() => before && after ? compare(totals(before.summary, "contract"), totals(after.summary, "contract")) : [], [before, after]);
   const driverRows = drivers.filter((row) => row.label.toLowerCase().includes(search.trim().toLowerCase()));
   const contractRows = contracts.filter((row) => row.label.toLowerCase().includes(search.trim().toLowerCase()));
-  const sequence = [...reports].filter((item) => selectedIds.includes(item.id)).sort((a, b) => a.pay_date.localeCompare(b.pay_date) || a.saved_at.localeCompare(b.saved_at));
+  const sequence = [...reports].filter((item) => selectedIds.includes(item.id)).sort((a, b) => a.period_end.localeCompare(b.period_end) || a.saved_at.localeCompare(b.saved_at));
   const baseline = reports.find((item) => item.id === baselineId);
   const selectedEntries = sequence.flatMap((item) => item.summary);
   const combinedDriver = totals(selectedEntries, "driver");
@@ -71,8 +71,8 @@ export default function TimecardHistory() {
     {!loading && !error && !reports.length && <section className="panel"><p>No payroll summaries saved yet. Open Timecard Report and upload a file to start.</p></section>}
     {!!reports.length && <>
       <section className="panel timecard-history-summary"><div className="panel-heading"><div><h2>Saved payrolls</h2><span>{reports.length} saved versions · {sequence.length} selected · Raw time punches stay in the browser.</span></div></div>
-        <details className="timecard-history-pick"><summary>Choose payrolls to show ({sequence.length} selected)</summary><div className="timecard-history-picker-actions"><button type="button" onClick={() => setSelectedIds(reports.map((item) => item.id))}>Select all</button><button type="button" onClick={() => setSelectedIds([])}>Clear selection</button></div><div className="timecard-history-options">{reports.map((item) => <label key={item.id}><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => setSelectedIds(selectedIds.includes(item.id) ? selectedIds.filter((id) => id !== item.id) : [...selectedIds, item.id])} />{version(item)}</label>)}</div></details>
-        <div className="table-scroll"><table className="data-table"><thead><tr><th>Payroll</th><th>Timecard dates</th><th>Drivers</th><th>Contracts</th><th>Total hours</th><th>Change vs prior saved payroll</th></tr></thead><tbody>{sequence.map((row, index) => { const previous = [...sequence.slice(0, index)].reverse().find((item) => item.pay_date < row.pay_date); const delta = previous ? Number(row.total_hundredths) - Number(previous.total_hundredths) : null; return <tr key={row.id}><td>{row.payroll_name} · {formatDate(row.pay_date)}</td><td>{formatDate(row.period_start)}–{formatDate(row.period_end)}</td><td>{row.employee_count}</td><td>{row.contract_count}</td><td>{hour(Number(row.total_hundredths))}</td><td>{delta === null ? "First saved period" : `${delta > 0 ? "+" : ""}${hour(delta)}`}</td></tr>; })}</tbody></table></div>
+        <details className="timecard-history-pick"><summary>Choose payrolls to show ({sequence.length} selected)</summary><div className="timecard-history-picker-actions"><button type="button" onClick={() => setSelectedIds(reports.map((item) => item.id))}>Select every saved version</button><button type="button" onClick={() => setSelectedIds([])}>Clear selection</button></div><div className="timecard-history-options">{reports.map((item) => <label key={item.id}><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => setSelectedIds(selectedIds.includes(item.id) ? selectedIds.filter((id) => id !== item.id) : [...selectedIds, item.id])} />{version(item)}</label>)}</div></details>
+        <div className="table-scroll"><table className="data-table"><thead><tr><th>Payroll</th><th>Timecard dates</th><th>Drivers</th><th>Contracts</th><th>Total hours</th><th>Change vs prior saved payroll</th></tr></thead><tbody>{sequence.map((row, index) => { const previous = [...sequence.slice(0, index)].reverse().find((item) => item.period_end < row.period_start); const delta = previous ? Number(row.total_hundredths) - Number(previous.total_hundredths) : null; return <tr key={row.id}><td>{row.payroll_name}</td><td>{formatDate(row.period_start)}–{formatDate(row.period_end)}</td><td>{row.employee_count}</td><td>{row.contract_count}</td><td>{hour(Number(row.total_hundredths))}</td><td>{delta === null ? "First saved period" : `${delta > 0 ? "+" : ""}${hour(delta)}`}</td></tr>; })}</tbody></table></div>
       </section>
       <section className="panel timecard-comparisons"><div className="panel-heading"><div><h2>Compare two payrolls</h2><span>Select any saved payrolls, including corrected versions of the same period.</span></div></div>
         <div className="timecard-baseline"><label>First payroll in the new system<select value={baselineChoice} onChange={(event) => setBaselineChoice(event.target.value)}>{reports.map((row) => <option key={row.id} value={row.id}>{version(row)}</option>)}</select></label><button type="button" className="hub-secondary-link" onClick={() => void setBaseline()}>Save shared baseline</button></div>
