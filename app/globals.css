@@ -599,14 +599,15 @@ button, input { font: inherit; }
 .timecard-unassigned-row button:disabled{opacity:.5}
 .timecard-contract-totals{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:8px}
 .timecard-contract-totals>div{display:flex;align-items:center;gap:8px;padding:6px 9px;background:#edf3f8}
-.timecard-contract-totals .timecard-contract-hours{display:flex;flex-wrap:wrap;min-width:0}.timecard-contract-hours .timecard-compare-inline{margin-left:auto}
+.timecard-contract-totals .timecard-contract-hours{display:flex;align-items:center;gap:14px;min-width:0}.timecard-contract-hours .timecard-compare-inline{margin-left:auto}
 .timecard-contract-totals .timecard-entry-count{white-space:nowrap}
 .timecard-contract-totals span{color:var(--muted);font-size:.76rem}
 .timecard-contract-totals strong{color:var(--navy-deep)}
 .timecard-person{margin-top:16px}
-.timecard-person h3{margin:0 0 7px;color:var(--navy-deep);font-size:1rem}
+.timecard-person h3{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 7px;padding:6px 8px;background:#edf3f8;color:var(--navy-deep);font-size:.82rem}
+.timecard-driver-name{font-weight:800;white-space:nowrap}
 .timecard-person h3>span:not(.timecard-compare-inline){margin-left:8px;color:var(--muted);font-size:.76rem;font-weight:600}
-.timecard-compare-inline{display:inline;font-size:.72rem;color:var(--muted);font-weight:500;line-height:1.35}.timecard-person h3>.timecard-compare-inline{margin-left:12px}.timecard-compare-inline>span{white-space:nowrap}.timecard-compare-inline>span:not(:first-child)::before{content:" · ";color:#637789;font-weight:400}.timecard-compare-inline b{font-weight:700;color:var(--navy-deep)}.timecard-compare-inline .timecard-hours-down b{color:#872a37}.timecard-compare-inline .timecard-hours-up b{color:#174e27}
+.timecard-compare-inline{display:flex;align-items:center;gap:14px;white-space:nowrap;font-size:inherit;color:var(--navy-deep);font-weight:600;line-height:1.35}.timecard-compare-inline>span{white-space:nowrap}.timecard-compare-inline b{font-weight:800;color:var(--navy-deep)}.timecard-compare-inline .timecard-hours-down b{color:#872a37}.timecard-compare-inline .timecard-hours-up b{color:#174e27}
 .timecard-person h4{margin:11px 0 6px;color:var(--navy);font-size:.8rem}
 .timecard-person h4 span{margin-left:7px;color:var(--muted);font-weight:600}
 .timecard-person p{margin:5px 0 12px;color:var(--muted);font-size:.78rem}
@@ -619,6 +620,7 @@ button, input { font: inherit; }
 @media(max-width:800px){.timecard-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.payroll-tools-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.timecard-import,.timecard-actions{align-items:stretch;flex-direction:column}.timecard-fields,.payroll-tools-grid{grid-template-columns:1fr}.timecard-period-fields{flex-direction:column}.timecard-import .primary-link,.timecard-actions button{text-align:center}.timecard-settings .panel-heading{align-items:stretch;flex-direction:column;gap:8px;padding:12px 15px}}
 @media(max-width:560px){.timecard-contract-totals{grid-template-columns:1fr}.timecard-contract-totals .timecard-contract-hours{grid-column:1/-1}}
+@media screen and (max-width:1000px){.timecard-person h3,.timecard-contract-hours{flex-wrap:wrap}.timecard-compare-inline{flex-wrap:wrap;white-space:normal}}
 @media print{
   @page timecard{size:letter portrait;margin:.5in}
   .timecard-page{width:100%;margin:0;padding:0}
@@ -626,7 +628,7 @@ button, input { font: inherit; }
   .timecard-page .timecard-contract{page:timecard;border:0;border-radius:0;padding:0;background:#fff;box-shadow:none;break-before:page}
   .timecard-page .timecard-contract:first-of-type{break-before:auto}
   .timecard-page .timecard-person h3{break-after:avoid}
-  .timecard-page .timecard-contract>header{padding-bottom:6px}.timecard-page .timecard-contract>header h2{font-size:13pt;margin:2px 0}.timecard-page .timecard-supervisor-heading{gap:1px}.timecard-page .timecard-supervisor-heading strong{font-size:10pt}.timecard-page .timecard-compare-inline{font-size:7pt}.timecard-page .timecard-person{margin-top:10px}.timecard-page .timecard-person h3{font-size:9pt;margin:6px 0 3px}.timecard-page .timecard-contract-totals{grid-template-columns:minmax(0,1fr) auto;margin-top:6px}.timecard-page .timecard-contract-totals>div{padding:4px 7px}.timecard-page .timecard-contract footer{margin-top:9px;padding-top:5px}
+  .timecard-page .timecard-contract>header{padding-bottom:6px}.timecard-page .timecard-contract>header h2{font-size:13pt;margin:2px 0}.timecard-page .timecard-supervisor-heading{gap:1px}.timecard-page .timecard-supervisor-heading strong{font-size:10pt}.timecard-page .timecard-person{margin-top:10px}.timecard-page .timecard-person h3{font-size:8pt;margin:6px 0 3px;padding:3px 6px;print-color-adjust:exact;-webkit-print-color-adjust:exact}.timecard-page .timecard-contract-totals{grid-template-columns:minmax(0,1fr) auto;margin-top:6px}.timecard-page .timecard-contract-totals>div{padding:4px 7px}.timecard-page .timecard-contract-totals .timecard-contract-hours{font-size:8pt}.timecard-page .timecard-compare-inline{font-size:inherit;gap:7px}.timecard-page .timecard-contract footer{margin-top:9px;padding-top:5px}
   .timecard-page .timecard-contract .table-scroll{max-height:none;overflow:visible}
   .timecard-page .timecard-contract .data-table{width:100%;min-width:0;font-size:8pt}
   .timecard-page .timecard-contract .data-table th,.timecard-page .timecard-contract .data-table td{padding:5px 6px}
