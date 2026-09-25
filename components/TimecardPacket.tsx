@@ -9,7 +9,8 @@ type Field = "last" | "first" | "contract" | "inTime" | "outTime" | "hours" | "p
 type Columns = Record<Field, number>;
 type Source = { name: string; sheets: Record<string, string[][]>; sheet: string; headerRow: number; columns: Columns; dateColumn: number; employeeIdColumn: number };
 type Shift = { contract: string; last: string; first: string; employeeId: string; date: string; inTime: string; outTime: string; payCode: string; hundredths: number };
-type Result = { rows: Shift[]; invalid: number; pto: number };
+type InvalidRow = { line: number; name: string; contract: string; date: string; hours: string; reason: string };
+type Result = { rows: Shift[]; invalid: number; invalidRows: InvalidRow[]; pto: number };
 type Assignment = { contract_number: string; supervisor: string; start_date: string; end_date: string | null };
 type CurrentAssignment = { contract_number: string; supervisor: string };
 const fields: Field[] = ["last", "first", "contract", "inTime", "outTime", "hours", "payCode"];
@@ -44,10 +45,11 @@ function workDate(value: string): string | null {
 }
 function parse(source: Source | null): Result {
   const rows: Shift[] = [];
-  let invalid = 0, pto = 0;
-  if (!source || !validColumns(source)) return { rows, invalid, pto };
+  const invalidRows: InvalidRow[] = [];
+  let pto = 0;
+  if (!source || !validColumns(source)) return { rows, invalid: 0, invalidRows, pto };
   const col = source.columns;
-  for (const cells of source.sheets[source.sheet].slice(source.headerRow + 1)) {
+  for (const [index, cells] of source.sheets[source.sheet].slice(source.headerRow + 1).entries()) {
     if (!cells.some((cell) => cell.trim())) continue;
     if ((cells[col.payCode] ?? "").trim().toUpperCase() === "PTO") { pto++; continue; }
     const date = workDate(cells[col.inTime] ?? "") ?? (source.dateColumn >= 0 ? workDate(cells[source.dateColumn] ?? "") : null);
@@ -56,11 +58,12 @@ function parse(source: Source | null): Result {
     const contract = (cells[col.contract] ?? "").trim();
     const last = (cells[col.last] ?? "").trim();
     const first = (cells[col.first] ?? "").trim();
-    if (!date || !contract || !last || !first || !hourText || !/^[-+]?\d+(?:\.\d{1,2})?$/.test(hourText) || !Number.isFinite(hours)) { invalid++; continue; }
+    const reason = !last || !first ? "Name missing" : !contract ? "Contract missing" : !date ? "Work date unreadable" : !hourText || !/^[-+]?\d+(?:\.\d{1,2})?$/.test(hourText) || !Number.isFinite(hours) ? "Hours unreadable" : "";
+    if (reason) { invalidRows.push({ line: source.headerRow + index + 2, name: `${first} ${last}`.trim(), contract, date: source.dateColumn >= 0 ? (cells[source.dateColumn] ?? "") : (cells[col.inTime] ?? ""), hours: hourText, reason }); continue; }
     const employeeId = (cells[source.employeeIdColumn] ?? "").trim() || `name:${last.toLowerCase()}|${first.toLowerCase()}`;
-    rows.push({ contract, last, first, employeeId, date, inTime: (cells[col.inTime] ?? "").trim(), outTime: (cells[col.outTime] ?? "").trim(), payCode: (cells[col.payCode] ?? "").trim(), hundredths: Math.round(hours * 100) });
+    rows.push({ contract, last, first, employeeId, date: date!, inTime: (cells[col.inTime] ?? "").trim(), outTime: (cells[col.outTime] ?? "").trim(), payCode: (cells[col.payCode] ?? "").trim(), hundredths: Math.round(hours * 100) });
   }
-  return { rows, invalid, pto };
+  return { rows, invalid: invalidRows.length, invalidRows, pto };
 }
 const total = (rows: Shift[]) => rows.reduce((sum, row) => sum + row.hundredths, 0);
 const approvedWithoutSupervisor = new Set(["01SHDR", "011VAN"]);
@@ -90,13 +93,17 @@ export default function TimecardPacket() {
   const [payrollName, setPayrollName] = useState("");
   const [confirmedPayrollName, setConfirmedPayrollName] = useState("");
   const [error, setError] = useState("");
+  const [excludeUnreadable, setExcludeUnreadable] = useState(false);
   const result = useMemo(() => parse(file), [file]);
-  const ready = !!file && validColumns(file) && result.invalid === 0 && result.rows.length > 0;
+  const ready = !!file && validColumns(file) && (result.invalid === 0 || excludeUnreadable) && result.rows.length > 0;
+  useEffect(() => { setExcludeUnreadable(false); }, [file]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [currentAssignments, setCurrentAssignments] = useState<CurrentAssignment[]>([]);
   const [supervisorStatus, setSupervisorStatus] = useState<"loading" | "ready" | "error">("loading");
   const [assignmentName, setAssignmentName] = useState<Record<string, string>>({});
   const [assignmentSaving, setAssignmentSaving] = useState("");
+  const [assignmentErrors, setAssignmentErrors] = useState<Record<string, string>>({});
+  const [supervisorChoices, setSupervisorChoices] = useState<string[]>([]);
   const [previousPayroll, setPreviousPayroll] = useState<SavedReport | null>(null);
   const [firstPayroll, setFirstPayroll] = useState<SavedReport | null>(null);
   const [comparisonStatus, setComparisonStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -118,6 +125,7 @@ export default function TimecardPacket() {
   async function readFile(upload?: File) {
     if (!upload) return;
     setError("");
+    setExcludeUnreadable(false);
     try {
       if (!/\.(csv|xlsx|xls)$/i.test(upload.name)) throw new Error("Choose an Excel or CSV timecard report.");
       const workbook = XLSX.read(await upload.arrayBuffer(), { type: "array", cellDates: false });
@@ -143,6 +151,13 @@ export default function TimecardPacket() {
       setCurrentAssignments((current.data ?? []) as CurrentAssignment[]);
       setSupervisorStatus("ready");
     })();
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    let active = true;
+    void supabase.rpc("supervisor_options").then(({ data }) => {
+      if (active) setSupervisorChoices((data ?? []).map((row: { supervisor: string }) => row.supervisor));
+    });
     return () => { active = false; };
   }, []);
   function supervisorsFor(contract: string, rows: Shift[]) {
@@ -197,18 +212,21 @@ export default function TimecardPacket() {
     contract, employeeId: person.employeeId, name: person.name, hundredths: total(person.rows),
   })).filter((entry) => entry.hundredths > 0)), [contracts]);
   const unassigned = supervisorStatus === "ready" ? printContracts.filter(({ contract, people }) => !approvedWithoutSupervisor.has(contract.trim().toUpperCase()) && !supervisorsFor(contract, people.flatMap((person) => person.rows)).length) : [];
+  const knownSupervisors = [...new Set([...supervisorChoices, ...assignments.map((item) => item.supervisor), ...currentAssignments.map((item) => item.supervisor)].map((name) => name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   async function assignSupervisor(contract: string, rows: Shift[]) {
     const supervisor = (assignmentName[contract] || "").trim();
     const dates = rows.map((row) => row.date).sort();
-    if (!supervisor || !dates.length) { setError("Enter the supervisor's name to save an assignment."); return; }
-    setAssignmentSaving(contract); setError("");
-    const result = await supabase.rpc("assign_timecard_contract_supervisor", { p_contract: contract, p_supervisor: supervisor, p_start: dates[0], p_end: dates[dates.length - 1] });
-    if (result.error) setError(result.error.code === "PGRST202" ? "Run supabase/timecard_supervisor_assignments.sql in Supabase to enable date-specific assignments." : result.error.message);
-    else {
-      setAssignments((current) => [...current, { contract_number: contract, supervisor, start_date: dates[0], end_date: dates[dates.length - 1] }]);
-      setAssignmentName((current) => ({ ...current, [contract]: "" }));
-    }
-    setAssignmentSaving("");
+    if (!knownSupervisors.includes(supervisor) || !dates.length) { setAssignmentErrors((current) => ({ ...current, [contract]: "Choose a supervisor from the list." })); return; }
+    setAssignmentSaving(contract); setAssignmentErrors((current) => ({ ...current, [contract]: "" }));
+    try {
+      const result = await supabase.rpc("assign_timecard_contract_supervisor", { p_contract: contract, p_supervisor: supervisor, p_start: dates[0], p_end: dates[dates.length - 1] });
+      if (result.error) setAssignmentErrors((current) => ({ ...current, [contract]: result.error.code === "42501" ? "Payroll access for historical assignments must be enabled in Supabase." : result.error.message }));
+      else {
+        setAssignments((current) => [...current, { contract_number: contract, supervisor, start_date: dates[0], end_date: dates[dates.length - 1] }]);
+        setAssignmentName((current) => ({ ...current, [contract]: "" }));
+      }
+    } catch (reason) { setAssignmentErrors((current) => ({ ...current, [contract]: reason instanceof Error ? reason.message : "Could not save this assignment." })); }
+    finally { setAssignmentSaving(""); }
   }
   return <div className="report-stack timecard-stack">
     <section className="panel timecard-intro no-print"><strong>One report, grouped by contract</strong><p>Choose the timecard report for this pay period. The file stays in this browser tab and clears when you refresh or close it. The printed packet can be compared with notes from the previous pay period.</p></section>
@@ -217,7 +235,8 @@ export default function TimecardPacket() {
       <div className="panel-heading"><div><h2>Timecard report</h2><span>{file?.name || "Choose a report"}</span></div><label className="primary-link timecard-file-button">Choose report<input type="file" accept=".csv,.xlsx,.xls" onChange={(event) => void readFile(event.target.files?.[0])} /></label></div>
       {file && <details className="timecard-column-options" open={!validColumns(file)} key={`${file.name}-${file.sheet}-${file.headerRow}`}><summary>Match file columns {validColumns(file) ? "(review or change)" : "— action needed"}</summary><p>Select the sheet and header row, then match each required field to its column. The file stays in this browser tab.</p><div className="timecard-fields"><label>Sheet<select value={file.sheet} onChange={(event) => setFile((current) => { if (!current) return current; const sheet = event.target.value; const headerRow = 0; const headings = current.sheets[sheet]?.[headerRow] ?? []; return { ...current, sheet, headerRow, columns: detectColumns(headings), dateColumn: detectDate(headings), employeeIdColumn: detectEmployeeId(headings) }; })}>{Object.keys(file.sheets).map((sheet) => <option key={sheet} value={sheet}>{sheet}</option>)}</select></label><label>Header row<select value={file.headerRow} onChange={(event) => setFile((current) => { if (!current) return current; const headerRow = Number(event.target.value); const headings = current.sheets[current.sheet][headerRow] ?? []; return { ...current, headerRow, columns: detectColumns(headings), dateColumn: detectDate(headings), employeeIdColumn: detectEmployeeId(headings) }; })}>{file.sheets[file.sheet].slice(0, 30).map((row, index) => <option key={index} value={index}>Row {index + 1}: {row.filter(Boolean).slice(0, 3).join(" · ").slice(0, 90) || "(blank)"}</option>)}</select></label><label>Work date (if separate from In time)<select value={file.dateColumn} onChange={(event) => setFile((current) => current && ({ ...current, dateColumn: Number(event.target.value) }))}><option value={-1}>Date is included in In time</option>{(file.sheets[file.sheet][file.headerRow] ?? []).map((heading, index) => <option key={index} value={index}>{heading.trim() || `(unnamed column ${index + 1})`} · {String.fromCharCode(65 + index)}</option>)}</select></label><label>Employee ID (optional)<select value={file.employeeIdColumn} onChange={(event) => setFile((current) => current && ({ ...current, employeeIdColumn: Number(event.target.value) }))}><option value={-1}>Match by name</option>{(file.sheets[file.sheet][file.headerRow] ?? []).map((heading, index) => <option key={index} value={index}>{heading.trim() || `(unnamed column ${index + 1})`} · {String.fromCharCode(65 + index)}</option>)}</select></label>{fields.map((field) => <label key={field}>{fieldLabels[field]}<select value={file.columns[field]} onChange={(event) => setFile((current) => current && ({ ...current, columns: { ...current.columns, [field]: Number(event.target.value) } }))}><option value={-1}>Choose column</option>{(file.sheets[file.sheet][file.headerRow] ?? []).map((heading, index) => <option key={index} value={index}>{heading.trim() || `(unnamed column ${index + 1})`} · {String.fromCharCode(65 + index)}</option>)}</select></label>)}</div>{!validColumns(file) && <p role="alert">Match every field to a different column before the report can be printed or saved.</p>}{validColumns(file) && result.rows.length === 0 && <p role="alert">No timecard rows were found. Check the sheet, the Work date (if separate from In time), and Hours columns.</p>}{validColumns(file) && result.invalid > 0 && <p role="alert">{result.invalid} rows could not be read. Check the mapping and data before saving or printing.</p>}</details>}
       <div className="timecard-payroll-fields"><label>Payroll name or number<input type="text" value={payrollName} maxLength={100} placeholder="Example: #39" onChange={(event) => { setPayrollName(event.target.value); setConfirmedPayrollName(""); }} onBlur={() => setConfirmedPayrollName(payrollName.trim())} /></label><span>Use the same number when uploading corrected timecards. The report dates are read from the file.</span></div>
-      {file && <div className="timecard-status"><span>{result.rows.length.toLocaleString()} rows · {hoursLabel(total(result.rows))} hours</span><span>{result.pto} PTO rows excluded</span>{comparisonStatus === "loading" && <span>Looking up previous payroll hours…</span>}{comparisonStatus === "ready" && !firstPayroll && previousPayroll && <strong>To show the first ADP payroll, select it under “First payroll in the new system” on Timecard Comparisons.</strong>}{comparisonStatus === "error" && <strong>Saved payroll comparisons are unavailable. The time entries can still print.</strong>}{file.employeeIdColumn < 0 && <strong>No employee ID column found. Comparisons will match drivers by name.</strong>}{result.invalid > 0 && <strong>{result.invalid} rows need a readable name, contract, work date, or Hours. Check the column matching before printing.</strong>}{supervisorStatus === "error" && <strong>Supervisor assignments could not be loaded; contract headings will show “Supervisor unavailable.”</strong>}{unassigned.length > 0 && <details className="timecard-unassigned"><summary>{unassigned.length} contract{unassigned.length === 1 ? " has" : "s have"} no supervisor assignment for these dates. Review contracts →</summary><p>Assign a supervisor for only the dates found in this file. Existing assignments outside those dates stay in place.</p>{unassigned.map(({contract,people}) => { const rows = people.flatMap((person) => person.rows); const dates = rows.map((row) => row.date).sort(); return <div className="timecard-unassigned-row" key={contract}><strong>{contract} · {dateLabel(dates[0])} – {dateLabel(dates[dates.length-1])}</strong><input aria-label={`Supervisor for ${contract}`} placeholder="Supervisor name" value={assignmentName[contract] || ""} onChange={(event) => setAssignmentName((current) => ({ ...current, [contract]: event.target.value }))} /><button type="button" disabled={!!assignmentSaving} onClick={() => void assignSupervisor(contract, rows)}>{assignmentSaving === contract ? "Saving…" : "Save assignment"}</button></div>; })}</details>}</div>}
+      {file && <div className="timecard-status"><span>{result.rows.length.toLocaleString()} rows · {hoursLabel(total(result.rows))} hours</span><span>{result.pto} PTO rows excluded</span>{comparisonStatus === "loading" && <span>Looking up previous payroll hours…</span>}{comparisonStatus === "ready" && !firstPayroll && previousPayroll && <strong>To show the first ADP payroll, select it under “First payroll in the new system” on Timecard Comparisons.</strong>}{comparisonStatus === "error" && <strong>Saved payroll comparisons are unavailable. The time entries can still print.</strong>}{file.employeeIdColumn < 0 && <strong>No employee ID column found. Comparisons will match drivers by name.</strong>}{result.invalid > 0 && <strong>{result.invalid} rows need review before they can be included.</strong>}{supervisorStatus === "error" && <strong>Supervisor assignments could not be loaded; contract headings will show “Supervisor unavailable.”</strong>}{unassigned.length > 0 && <details className="timecard-unassigned"><summary>{unassigned.length} historical contract{unassigned.length === 1 ? " has" : "s have"} no supervisor assignment for these dates. Review contracts →</summary><p>These contracts may be completed now. Choose who supervised them during the dates in this file. This is separate from reviewing unreadable rows.</p>{unassigned.map(({contract,people}) => { const rows = people.flatMap((person) => person.rows); const dates = rows.map((row) => row.date).sort(); return <div className="timecard-unassigned-row" key={contract}><strong>{contract} · {dateLabel(dates[0])} – {dateLabel(dates[dates.length-1])}</strong><select aria-label={`Supervisor for ${contract}`} value={assignmentName[contract] || ""} onChange={(event) => { setAssignmentName((current) => ({ ...current, [contract]: event.target.value })); setAssignmentErrors((current) => ({ ...current, [contract]: "" })); }}><option value="">Choose supervisor</option>{knownSupervisors.map((name) => <option key={name} value={name}>{name}</option>)}</select><button type="button" disabled={!!assignmentSaving} onClick={() => void assignSupervisor(contract, rows)}>{assignmentSaving === contract ? "Saving…" : "Save assignment"}</button>{assignmentErrors[contract] && <span className="timecard-assignment-error" role="alert">{assignmentErrors[contract]}</span>}</div>; })}</details>}</div>}
+      {file && result.invalid > 0 && <details className="timecard-invalid-review"><summary>Review {result.invalid} unreadable rows before saving →</summary><p>These rows are separate from the supervisor assignments. Check whether they are work entries. Excluding them removes their hours from this report and its saved comparison.</p><div className="table-scroll"><table className="data-table"><thead><tr><th>File row</th><th>Reason</th><th>Employee</th><th>Contract</th><th>Work date</th><th>Hours</th></tr></thead><tbody>{result.invalidRows.slice(0, 100).map((row) => <tr key={row.line}><td>{row.line}</td><td>{row.reason}</td><td>{row.name || "—"}</td><td>{row.contract || "—"}</td><td>{row.date || "—"}</td><td>{row.hours || "—"}</td></tr>)}</tbody></table></div>{result.invalid > 100 && <p>Showing the first 100 rows. Correct the source file to review the rest.</p>}<label className="timecard-exclude-confirm"><input type="checkbox" checked={excludeUnreadable} onChange={(event) => setExcludeUnreadable(event.target.checked)} /> I reviewed these rows and want to exclude all {result.invalid} unreadable rows from this payroll packet and saved totals.</label></details>}
     </section>
     <section className="panel timecard-actions no-print"><button className="primary-link" disabled={!ready || !printContracts.length || supervisorStatus === "loading" || comparisonStatus === "loading"} onClick={() => window.print()}>Print by contract</button><span>{ready ? `${printContracts.length} contracts. Each starts on a new page. 030512, 01SHDR, and 011VAN are omitted from this packet.` : "Choose one report. All rows must be readable before printing."}</span></section>
     {ready && confirmedPayrollName ? <TimecardComparisons entries={historyEntries} start={periodStart} end={periodEnd} sourceName={file?.name || "Timecard report"} payrollName={confirmedPayrollName} /> : ready && <section className="panel no-print timecard-comparisons"><h2>Save and compare payrolls</h2><p>Enter the payroll name or number above, such as #39, to save the hour totals. Reuse it for a corrected report. You can print the timecards now.</p></section>}

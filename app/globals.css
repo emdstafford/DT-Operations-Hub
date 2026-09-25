@@ -594,7 +594,14 @@ button, input { font: inherit; }
 .timecard-unassigned summary{cursor:pointer;font-weight:700;color:var(--navy-deep)}
 .timecard-unassigned p{font-size:.78rem;color:var(--muted)}
 .timecard-unassigned-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:9px}
-.timecard-unassigned-row input{padding:7px 9px;border:1px solid var(--line);border-radius:5px}
+.timecard-unassigned-row select{min-width:180px;padding:7px 9px;border:1px solid var(--line);border-radius:5px;background:#fff;color:var(--navy)}
+.timecard-assignment-error{flex-basis:100%;color:#842838;font-size:.78rem;font-weight:700}
+.timecard-invalid-review{margin:0 20px 16px;padding:12px;border:1px solid #bdcad8;border-radius:7px;background:#f7f9fc}
+.timecard-invalid-review summary{cursor:pointer;font-weight:800;color:var(--navy)}
+.timecard-invalid-review p{font-size:.8rem;color:var(--muted)}
+.timecard-invalid-review .table-scroll{max-height:320px;overflow:auto}
+.timecard-invalid-review .data-table{font-size:.76rem}
+.timecard-exclude-confirm{display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:.82rem;font-weight:700;color:var(--navy-deep)}
 .timecard-unassigned-row button{padding:7px 10px;border:1px solid var(--navy);background:white;color:var(--navy);border-radius:5px;cursor:pointer}
 .timecard-unassigned-row button:disabled{opacity:.5}
 .timecard-contract-totals{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:8px}
