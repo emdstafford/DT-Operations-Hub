@@ -559,6 +559,12 @@ button, input { font: inherit; }
 .timecard-intro p{margin:4px 0 0;color:var(--muted);font-size:.81rem}
 .timecard-file-button{flex:none;min-height:38px;font-size:.85rem}
 .timecard-file-button input{display:none}
+.timecard-batch .panel-heading{align-items:center}
+.timecard-batch>.table-scroll{max-height:440px;overflow:auto}
+.timecard-batch>.table-scroll .data-table{font-size:.78rem}
+.timecard-batch>p{margin:10px 20px;color:var(--muted);font-size:.8rem}
+.timecard-batch>button{margin:2px 20px 16px;cursor:pointer}
+.timecard-batch>button:disabled{opacity:.5;cursor:not-allowed}
 .timecard-period-fields{display:flex;gap:12px;padding:16px 20px 10px}
 .timecard-period-fields label{display:grid;gap:5px;min-width:160px;color:var(--navy);font-size:.75rem;font-weight:800}
 .timecard-period-fields input{min-height:42px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;color:var(--ink);background:#fff}
