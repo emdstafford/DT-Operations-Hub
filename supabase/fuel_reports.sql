@@ -13,8 +13,8 @@ create table if not exists public.fuel_tool_users (
 insert into public.fuel_tool_users (email, can_upload, active) values
   ('estafford@dtexpress.net', true, true),
   ('ccochran@dtexpress.net', true, true),
-  ('rcoffey@dtexpress.net', false, true),
-  ('slunsford@dtexpress.net', false, true)
+  ('rcoffey@dtexpress.net', true, true),
+  ('slunsford@dtexpress.net', true, true)
 on conflict (email) do update
 set can_upload = excluded.can_upload,
     active = excluded.active;
