@@ -721,3 +721,14 @@ button, input { font: inherit; }
  .fuel-report-stack.fuel-print-drivers.fuel-include-driver-contracts .fuel-contract-totals{display:block!important}
  .fuel-monthly-report-table th:nth-child(n+2),.fuel-monthly-report-table td:nth-child(n+2){text-align:right}
 }
+
+/* Exact product-category breakdown in the fuel contract printout. */
+.fuel-report-cost-note{margin:0 18px 10px;color:var(--muted);font-size:.75rem}
+.fuel-breakdown-notice{margin:12px 18px;border:1px solid #cbd8e3;border-radius:7px;padding:9px 12px;color:var(--navy);background:#edf3f8;font-size:.78rem}
+.fuel-contract-breakdown-table th:nth-child(n+2),.fuel-contract-breakdown-table td:nth-child(n+2){text-align:right}
+@media print{
+ .fuel-report-cost-note{margin:0 0 6px;font-size:8pt}
+ .fuel-breakdown-notice{margin:8px 0;font-size:8pt}
+ .fuel-contract-breakdown-table{min-width:0!important;font-size:7.4pt!important}
+ .fuel-contract-breakdown-table th,.fuel-contract-breakdown-table td{padding:5px 4px!important}
+}

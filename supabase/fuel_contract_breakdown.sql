@@ -1,64 +1,6 @@
--- Monthly supervisor reporting and employee fuel controls.
--- Run this entire file once after fuel_reports.sql.
-
-create table if not exists public.fuel_employee_rules (
-  person_name text primary key,
-  gasoline_authorized boolean not null default false,
-  monthly_spend_limit numeric check (monthly_spend_limit is null or monthly_spend_limit >= 0),
-  notes text,
-  updated_by uuid default auth.uid(),
-  updated_at timestamptz not null default now()
-);
-
-alter table public.fuel_employee_rules enable row level security;
-
-drop policy if exists "fuel users read employee rules" on public.fuel_employee_rules;
-create policy "fuel users read employee rules" on public.fuel_employee_rules
-for select to authenticated using (public.is_fuel_user());
-
-drop policy if exists "fuel uploaders add employee rules" on public.fuel_employee_rules;
-create policy "fuel uploaders add employee rules" on public.fuel_employee_rules
-for insert to authenticated with check (public.can_upload_fuel() and updated_by = auth.uid());
-
-drop policy if exists "fuel uploaders update employee rules" on public.fuel_employee_rules;
-create policy "fuel uploaders update employee rules" on public.fuel_employee_rules
-for update to authenticated using (public.can_upload_fuel())
-with check (public.can_upload_fuel() and updated_by = auth.uid());
-
-revoke all on public.fuel_employee_rules from anon;
-grant select, insert, update on public.fuel_employee_rules to authenticated;
-
-create or replace function public.fuel_filter_options_v2()
-returns jsonb
-language plpgsql
-stable
-security definer
-set search_path = public
-as $$
-declare result jsonb;
-begin
-  if not public.is_fuel_user() then
-    raise exception 'Approved fuel-report account required' using errcode = '42501';
-  end if;
-
-  select jsonb_build_object(
-    'period_start', (select min(transaction_date) from public.fuel_transactions),
-    'period_end', (select max(transaction_date) from public.fuel_transactions),
-    'contracts', coalesce((select jsonb_agg(contract_number order by contract_number) from (select distinct contract_number from public.fuel_transactions where contract_number <> '') x), '[]'::jsonb),
-    'people', coalesce((select jsonb_agg(person_name order by person_name) from (select distinct person_name from public.fuel_transactions where person_name <> '') x), '[]'::jsonb),
-    'stations', coalesce((select jsonb_agg(merchant_name order by merchant_name) from (select distinct merchant_name from public.fuel_transactions where merchant_name <> '') x), '[]'::jsonb),
-    'supervisors', coalesce((
-      select jsonb_agg(supervisor order by supervisor)
-      from (
-        select distinct supervisor from public.contract_supervisors where supervisor is not null and supervisor <> ''
-        union
-        select distinct supervisor from public.contract_assignment_periods where supervisor is not null and supervisor <> ''
-      ) x
-    ), '[]'::jsonb)
-  ) into result;
-  return result;
-end;
-$$;
+-- Run once in the Supabase SQL Editor to add exact diesel and gasoline
+-- gallons/cost to the existing date-filtered fuel dashboard response.
+-- No rows are changed. Existing fuel access checks remain in force.
 
 create or replace function public.fuel_dashboard_v2(
   p_start date,
@@ -203,7 +145,5 @@ begin
 end;
 $$;
 
-grant execute on function public.fuel_filter_options_v2() to authenticated;
 grant execute on function public.fuel_dashboard_v2(date,date,text,text,text,text,text,text) to authenticated;
-
 notify pgrst, 'reload schema';
