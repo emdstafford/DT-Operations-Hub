@@ -6,17 +6,13 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-const operationsLinks = [
-  ["Dashboard", "/"],
-  ["Schedule Builder", "/schedule-builder"],
-  ["History", "/history"],
-];
-
 export default function NavBar({ operationsRole, payrollAccess, fuelAccess }: { operationsRole: string; payrollAccess: boolean; fuelAccess: boolean }) {
   const pathname = usePathname();
   const operationsAccess = Boolean(operationsRole);
   const canManageReports = operationsRole === "admin" || operationsRole === "uploader";
   const [employee, setEmployee] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => setMenuOpen(false), [pathname]);
   useEffect(() => {
     function updateEmployee(email?: string, name?: string) {
       setEmployee(String(name || email || ""));
@@ -35,12 +31,14 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess }: { 
           <div><strong>DT Intelligence Hub</strong><span>Performance intelligence</span></div>
         </Link>
       </div>
-      <nav className="main-nav" aria-label="Primary navigation">
-        {operationsAccess && operationsLinks
-          .filter(([, href]) => href === "/" || canManageReports)
-          .map(([label, href]) => <Link className={pathname === href ? "active" : ""} href={href} key={href}>{label}</Link>)}
-        {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel Reports</Link>}
-        {payrollAccess && <Link className={pathname.startsWith("/payroll/") ? "active" : ""} href="/payroll/holiday-hours">Payroll Tools</Link>}
+      <button type="button" className="mobile-nav-toggle" aria-controls="primary-navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? "Close" : "Menu"}</button>
+      <nav id="primary-navigation" className={`main-nav${menuOpen ? " is-open" : ""}`} aria-label="Primary navigation" onClick={() => setMenuOpen(false)}>
+        {operationsAccess && <Link className={pathname === "/" ? "active" : ""} href="/">Dashboard</Link>}
+        {operationsAccess && <Link className={pathname.startsWith("/contracts") ? "active" : ""} href="/contracts">Contracts</Link>}
+        {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel</Link>}
+        {payrollAccess && <Link className={pathname.startsWith("/payroll/") ? "active" : ""} href="/payroll/holiday-hours">Payroll</Link>}
+        {operationsAccess && canManageReports && <Link className={pathname.startsWith("/schedule-builder") ? "active" : ""} href="/schedule-builder">Schedule</Link>}
+        {operationsAccess && canManageReports && <Link className={pathname.startsWith("/history") ? "active" : ""} href="/history">History</Link>}
       </nav>
       <div className="sidebar-user">
         <div className="header-status"><span className="status-dot" /><span>{employee || "DT Express employee"}</span></div>
