@@ -80,11 +80,19 @@ export default function FuelReports() {
   }, [start, today]);
 
   useEffect(() => { void (async () => {
+    const query = new URLSearchParams(window.location.search);
+    const selectedContract = query.get("contract") ?? "";
+    const selectedStart = query.get("start") ?? "";
+    const selectedEnd = query.get("end") ?? "";
     const { data: userData } = await supabase.auth.getUser();
     const email = userData.user?.email?.toLowerCase() ?? "";
     const { data: access } = await supabase.from("fuel_tool_users").select("can_upload").eq("email", email).eq("active", true).maybeSingle();
     setCanUpload(Boolean(access?.can_upload));
     await loadOptions(true);
+    if (selectedContract) setContract(selectedContract);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(selectedStart)) setStart(selectedStart);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(selectedEnd)) setEnd(selectedEnd);
+    if (query.get("view") === "mileage") setView("mileage");
   })(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

@@ -24,6 +24,7 @@ type Check = {
   expectedGallons: number;
   purchasedGallons: number;
   variancePercent: number;
+  alertAbovePercent: number;
   coveredDays: number;
   totalDays: number;
   status: "over" | "plan-needed";
@@ -91,6 +92,7 @@ export default function DashboardFuelChecks({ start, end, contracts }: {
       expectedGallons: estimate.expectedGallons,
       purchasedGallons,
       variancePercent,
+      alertAbovePercent: estimate.alertAbovePercent,
       coveredDays: estimate.coveredDays,
       totalDays: estimate.totalDays,
       status: !complete ? "plan-needed" : variancePercent > estimate.alertAbovePercent ? "over" : null,
@@ -114,8 +116,8 @@ export default function DashboardFuelChecks({ start, end, contracts }: {
         <div><strong>{contractNumbers.length}</strong><span>Contracts in this view</span></div>
       </div>
       {shown.length ? <div className="fuel-check-list">{shown.map((row) => <article key={row.contract} className={`fuel-check-row fuel-check-${row.status}`}>
-        <div className="fuel-check-identity"><Link href={`/contracts/${encodeURIComponent(row.contract)}`}>{row.contract} →</Link><span>{activeView === "over" ? "Fuel purchase review" : "Set up fuel estimate"}</span></div>
-        <div className="fuel-check-reason"><span>{activeView === "over" ? "Above estimate" : "Plan covers"}</span><strong>{activeView === "over" ? `+${number(row.variancePercent, 1)}%` : `${number(row.coveredDays)} of ${number(row.totalDays)} days`}</strong></div>
+        <div className="fuel-check-identity"><Link href={`/fuel?contract=${encodeURIComponent(row.contract)}&start=${start}&end=${end}&view=mileage`}>{row.contract} · Fuel report →</Link><span><Link href={`/contracts/${encodeURIComponent(row.contract)}?start=${start}&end=${end}`}>USPS contract details</Link></span></div>
+        <div className="fuel-check-reason"><span>{activeView === "over" ? "Above estimate" : "Plan covers"}</span><strong>{activeView === "over" ? `+${number(row.variancePercent, 1)}%` : `${number(row.coveredDays)} of ${number(row.totalDays)} days`}</strong>{activeView === "over" && <small>Review above {number(row.alertAbovePercent, 1)}%</small>}</div>
         <div className="fuel-check-detail"><span>{activeView === "over" ? "Fuel gallons · bought / expected" : "Fuel gallons purchased"}</span><strong>{activeView === "over" ? `${number(row.purchasedGallons, 1)} / ${number(row.expectedGallons, 1)}` : number(row.purchasedGallons, 1)}</strong></div>
         <div className="fuel-check-detail"><span>USPS completion</span><strong>{percent(row.completion)}</strong><small>{number(row.incomplete)} incomplete stops</small></div>
       </article>)}</div> : <div className="fuel-check-clear"><strong>{activeView === "over" ? "No contracts are over their fuel estimate." : "Every contract has a mileage plan for these dates."}</strong><span>{activeView === "over" ? "Select “Need a mileage plan” to see contracts without full coverage." : "Select “Over fuel estimate” to see contracts above their saved threshold."}</span></div>}
