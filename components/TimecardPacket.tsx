@@ -110,60 +110,6 @@ function TimecardRows({ rows }: { rows: Shift[] }) {
 function HoursInline({ current, previous, currentName }: { current: number; previous: { name: string; hours: number } | null; currentName: string }) {
   return <span className="timecard-compare-inline">{previous && <span>Previous {previous.name}: <b>{hoursLabel(previous.hours)}</b></span>}<span>Current {currentName}: <b>{hoursLabel(current)}</b></span>{previous && <span className={current < previous.hours ? "timecard-hours-down" : current > previous.hours ? "timecard-hours-up" : ""}>Change from last payroll: <b>{hoursChange(current, previous.hours)}</b></span>}</span>;
 }
-function summarizeRows(rows: Shift[]): TimecardSummaryEntry[] {
-  const grouped = new Map<string, TimecardSummaryEntry>();
-  for (const row of rows) {
-    const key = `${row.contract}\u0000${row.employeeId}\u0000${row.last}\u0000${row.first}`;
-    const old = grouped.get(key);
-    grouped.set(key, { contract: row.contract, employeeId: row.employeeId, name: `${row.last}, ${row.first}`, hundredths: (old?.hundredths ?? 0) + row.hundredths });
-  }
-  return [...grouped.values()].filter((row) => row.hundredths > 0);
-}
-type BatchFile = { file: File; payroll: string; start: string; end: string; entries: number; hours: number; subtotals: number; unassigned: number; invalid: number; status: string };
-function HistoricalTimecardBatch() {
-  const [files, setFiles] = useState<BatchFile[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  async function choose(selected: FileList | null) {
-    if (!selected) return;
-    setBusy(true); setError("");
-    const checks: BatchFile[] = [];
-    for (const file of Array.from(selected).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))) {
-      try {
-        const source = await sourceFromFile(file);
-        const parsed = parse(source);
-        const dates = parsed.rows.map((row) => row.date).sort();
-        checks.push({ file, payroll: `#${/\b(?:week\s*)?(\d+)\b/i.exec(file.name)?.[1] ?? ""}`, start: dates[0] || "", end: dates.at(-1) || "", entries: parsed.rows.length, hours: total(parsed.rows), subtotals: parsed.subtotals, unassigned: parsed.unassigned, invalid: parsed.invalid, status: validColumns(source) ? "Ready to review" : "Column matching needed; open this file individually" });
-      } catch (cause) { checks.push({ file, payroll: "", start: "", end: "", entries: 0, hours: 0, subtotals: 0, unassigned: 0, invalid: 1, status: cause instanceof Error ? cause.message : "Could not read file" }); }
-    }
-    setFiles(checks); setBusy(false);
-  }
-  async function saveAll() {
-    setBusy(true); setError("");
-    const { data: user } = await supabase.auth.getUser();
-    if (!user.user) { setError("Sign in again before saving historical payrolls."); setBusy(false); return; }
-    for (const item of files) {
-      if (!item.start || !item.end || !item.payroll.match(/^#\d+$/) || item.invalid) continue;
-      try {
-        const parsed = parse(await sourceFromFile(item.file));
-        if (parsed.invalid || parsed.rows.length !== item.entries) throw new Error("File changed or has unreadable work rows. Review individually.");
-        const entries = summarizeRows(parsed.rows);
-        const signature = JSON.stringify({ start: item.start, end: item.end, entries: [...entries].sort((a, b) => `${a.contract}|${a.employeeId}`.localeCompare(`${b.contract}|${b.employeeId}`)) });
-        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(signature));
-        const hash = [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
-        const { data: existing, error: lookupError } = await supabase.from("timecard_summary_history").select("id,payroll_name").eq("summary_hash", hash).maybeSingle();
-        if (lookupError) throw lookupError;
-        if (existing) { setFiles((current) => current.map((row) => row.file === item.file ? { ...row, status: `Already saved as ${existing.payroll_name}` } : row)); continue; }
-        const { error: insertError } = await supabase.from("timecard_summary_history").insert({ payroll_name: item.payroll, pay_date: item.end, period_start: item.start, period_end: item.end, source_file: item.file.name, summary_hash: hash, employee_count: new Set(entries.map((entry) => entry.employeeId)).size, contract_count: new Set(entries.map((entry) => entry.contract)).size, total_hundredths: entries.reduce((sum, entry) => sum + entry.hundredths, 0), summary: entries, saved_by: user.user.id });
-        if (insertError && insertError.code !== "23505") throw insertError;
-        setFiles((current) => current.map((row) => row.file === item.file ? { ...row, status: insertError ? "Already saved" : "Saved" } : row));
-      } catch (cause) { setFiles((current) => current.map((row) => row.file === item.file ? { ...row, status: cause instanceof Error ? cause.message : "Save failed" } : row)); }
-    }
-    setBusy(false);
-  }
-  return <section className="panel timecard-batch no-print"><div className="panel-heading"><div><h2>Import past payrolls together</h2><span>Select all seven WEEK files at once. Only hour totals by person and contract are saved; punches stay in your browser.</span></div><label className="primary-link timecard-file-button">Choose files<input type="file" multiple accept=".csv,.xlsx,.xls" onChange={(event) => void choose(event.target.files)} /></label></div>{busy && <p role="status">Reading or saving payroll files…</p>}{error && <p className="alert alert-error" role="alert">{error}</p>}{files.length > 0 && <><div className="table-scroll"><table className="data-table"><thead><tr><th>File</th><th>Payroll</th><th>Work dates</th><th>Time entries</th><th>Hours</th><th>Subtotal lines skipped</th><th>Unassigned department entries</th><th>Status</th></tr></thead><tbody>{files.map((item) => <tr key={item.file.name}><td>{item.file.name}</td><td>{item.payroll}</td><td>{item.start ? `${item.start} – ${item.end}` : "—"}</td><td>{item.entries.toLocaleString()}</td><td>{hoursLabel(item.hours)}</td><td>{item.subtotals}</td><td>{item.unassigned}</td><td>{item.invalid ? `${item.invalid} rows need review` : item.status}</td></tr>)}</tbody></table></div><p>Subtotal lines are already represented by the individual time entries. Entries without a department stay in a separate Unassigned department group.</p><button className="primary-link" type="button" disabled={busy || files.some((item) => !item.start || item.invalid || !/^#\d+$/.test(item.payroll))} onClick={() => void saveAll()}>Save reviewed payroll totals</button></>}</section>;
-}
-
 export default function TimecardPacket() {
   const [file, setFile] = useState<Source | null>(null);
   const [payrollName, setPayrollName] = useState("");
@@ -298,7 +244,6 @@ export default function TimecardPacket() {
   }
   return <div className="report-stack timecard-stack">
     <section className="panel timecard-intro no-print"><strong>One report, grouped by contract</strong><p>Choose the timecard report for this pay period. The file stays in this browser tab and clears when you refresh or close it. The printed packet can be compared with notes from the previous pay period.</p></section>
-    <HistoricalTimecardBatch />
     {error && <div className="alert alert-error no-print">{error}</div>}
     <section className="panel timecard-settings no-print">
       <div className="panel-heading"><div><h2>Timecard report</h2><span>{file?.name || "Choose a report"}</span></div><label className="primary-link timecard-file-button">Choose report<input type="file" accept=".csv,.xlsx,.xls" onChange={(event) => void readFile(event.target.files?.[0])} /></label></div>
