@@ -103,7 +103,7 @@ export default function TimecardPacket() {
   const grid = file?.sheets[file.sheet] ?? [];
   const headings = grid[file?.headerRow ?? 0] ?? [];
   return <div className="report-stack timecard-stack">
-    <section className="panel timecard-intro no-print"><strong>One report, grouped by contract</strong><p>Choose the timecard report for this pay period. The file stays in this browser tab and clears when you refresh or close it. Gary can compare the printed packet with his notes from last time.</p></section>
+    <section className="panel timecard-intro no-print"><strong>One report, grouped by contract</strong><p>Choose the timecard report for this pay period. The file stays in this browser tab and clears when you refresh or close it. The printed packet can be compared with notes from the previous pay period.</p></section>
     {error && <div className="alert alert-error no-print">{error}</div>}
     <section className="panel timecard-settings no-print">
       <div className="panel-heading"><div><h2>Timecard report</h2><span>{file?.name || "Choose a report"}</span></div><label className="primary-link timecard-file-button">Choose report<input type="file" accept=".csv,.xlsx,.xls" onChange={(event) => void readFile(event.target.files?.[0])} /></label></div>
@@ -117,7 +117,7 @@ export default function TimecardPacket() {
       </div></details><div className="timecard-status"><span>{result.rows.length.toLocaleString()} rows · {hoursLabel(total(result.rows))} hours</span><span>{result.pto} PTO rows excluded</span>{result.outside > 0 && <span>{result.outside} rows outside selected dates</span>}{result.invalid > 0 && <strong>{result.invalid} rows need a readable name, contract, In time, or Hours. Check file columns before printing.</strong>}</div></>}
     </section>
     <section className="panel timecard-actions no-print"><button className="primary-link" disabled={!ready} onClick={() => window.print()}>Print by contract</button><span>{ready ? `${contracts.length} contracts. Each starts on a new page.` : "Choose one report and confirm its dates. All rows must be readable before printing."}</span></section>
-    {ready && <div className="timecard-packet"><div className="timecard-screen-heading no-print"><h2>Packet preview</h2><p>Check the hours and contract assignments before giving the packet to Gary.</p></div>{contracts.map(({ contract, people }) => {
+    {ready && <div className="timecard-packet"><div className="timecard-screen-heading no-print"><h2>Packet preview</h2><p>Check the hours and contract assignments before printing the packet.</p></div>{contracts.map(({ contract, people }) => {
       const contractRows = people.flatMap((person) => person.rows);
       return <section className="timecard-contract" key={contract}><header><div><p>Davenport Transportation · Timecard review</p><h2>Contract {contract}</h2><span>{dateLabel(range.start)} – {dateLabel(range.end)}</span></div><strong>{people.length} employees</strong></header>
         <div className="timecard-contract-totals"><div><span>Contract hours</span><strong>{hoursLabel(total(contractRows))}</strong></div><div><span>Employees</span><strong>{people.length}</strong></div><div><span>Time entries</span><strong>{contractRows.length.toLocaleString()}</strong></div></div>

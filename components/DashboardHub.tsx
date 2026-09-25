@@ -299,11 +299,11 @@ export default function DashboardHub() {
     window.setTimeout(() => setCopied(false), 1800);
   }
 
-  function printGaryReport() {
+  function printSupervisorContractReport() {
     const report = filteredEmail(data, start, end, selectedSupervisors, selectedContracts, isEntireReport, true, false, operationalNotes);
     const printWindow = window.open("", "_blank");
     if (!printWindow) { setError("Allow pop-ups for DT Intelligence Hub to print the report."); return; }
-    printWindow.document.write(`<!doctype html><html><head><title>Gary Report ${start} to ${end}</title><style>@page{size:portrait;margin:.4in}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{margin:0;background:white}table{font-size:9px}th,td{padding:5px 6px!important}h2,h3{break-after:avoid}thead{display:table-header-group}section{break-inside:avoid;page-break-inside:avoid}</style></head><body>${report.html}<script>window.onload=()=>{window.print()}<\/script></body></html>`);
+    printWindow.document.write(`<!doctype html><html><head><title>Supervisor and Contract Report ${start} to ${end}</title><style>@page{size:portrait;margin:.4in}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{margin:0;background:white}table{font-size:9px}th,td{padding:5px 6px!important}h2,h3{break-after:avoid}thead{display:table-header-group}section{break-inside:avoid;page-break-inside:avoid}</style></head><body>${report.html}<script>window.onload=()=>{window.print()}<\/script></body></html>`);
     printWindow.document.close();
   }
 
@@ -422,7 +422,7 @@ export default function DashboardHub() {
     <PeriodAnnotations start={start} end={end} />
     {error && <div className="alert alert-error">{error.includes("dashboard_hub_filtered") ? "The dashboard database update still needs to be installed in Supabase." : error}</div>}
     {loading ? <section className="hub-loading">Loading your operations picture…</section> : <>
-      {!dashboardFuelOnly && <section className="dashboard-email-bar"><div><strong>Report actions</strong><span>{displayDate(start)} – {displayDate(end)}{selectedSupervisors.length || selectedContracts.length ? " with selected filters" : " · Company-wide"}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => void printPerformanceReview()} disabled={reviewLoading}>{reviewLoading ? "Building review…" : "Performance Review"}</button><button className="hub-secondary-link" onClick={printGaryReport}>Gary’s Report</button><button className="primary-link" onClick={copyEmail}>{copied ? "Email report copied!" : "Copy Email Report"}</button></div></section>}
+      {!dashboardFuelOnly && <section className="dashboard-email-bar"><div><strong>Report actions</strong><span>{displayDate(start)} – {displayDate(end)}{selectedSupervisors.length || selectedContracts.length ? " with selected filters" : " · Company-wide"}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => void printPerformanceReview()} disabled={reviewLoading}>{reviewLoading ? "Building review…" : "Print Performance Review"}</button><button className="hub-secondary-link" onClick={printSupervisorContractReport}>Print Supervisor &amp; Contract Report</button><button className="primary-link" onClick={copyEmail}>{copied ? "Email report copied!" : "Copy Email Report"}</button></div></section>}
       <section className="metric-grid">
         <article className="metric-card metric-primary"><span>Completion</span><strong>{percent(data.totals.completion_percent)}</strong></article>
         <article className="metric-card"><span>Total stops</span><strong>{number(data.totals.total_stops)}</strong></article>
