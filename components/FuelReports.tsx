@@ -60,6 +60,7 @@ export default function FuelReports() {
   const [category, setCategory] = useState("");
   const [view, setView] = useState<View>("contracts");
   const [data, setData] = useState<FuelData>(emptyData);
+  const [fuelRevision, setFuelRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<ProcessedFuelReport | null>(null);
@@ -124,7 +125,7 @@ export default function FuelReports() {
       setLoading(false);
     })();
     return () => { active = false; };
-  }, [start, end, grain, supervisor, contract, person, station, category]);
+  }, [start, end, grain, supervisor, contract, person, station, category, fuelRevision]);
 
   async function selectFile(file?: File) {
     if (!file) return;
@@ -241,6 +242,12 @@ export default function FuelReports() {
     window.setTimeout(() => window.print(), 100);
   }
 
+  function reviewGasolinePerson(value: string) {
+    selectRulePerson(value);
+    setView("controls");
+    window.setTimeout(() => document.getElementById("fuel-employee-controls")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
   function selectRulePerson(value: string) {
     setRulePerson(value);
     const existing = employeeRules.find((rule) => rule.person_name === value);
@@ -265,6 +272,7 @@ export default function FuelReports() {
     else {
       setUploadMessage(`${rulePerson}'s fuel controls were saved.`);
       await loadEmployeeRules();
+      setFuelRevision((previous) => previous + 1);
     }
     setSavingRule(false);
   }
@@ -311,11 +319,11 @@ export default function FuelReports() {
 
       {view === "trend" && <section className="panel overflow-hidden"><div className="panel-heading"><h2>{grain === "month" ? "Monthly" : grain === "day" ? "Daily" : "Weekly"} fuel trend</h2><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Period starting</th><th>Transactions</th><th>Fuel gallons</th><th>Total spend</th></tr></thead><tbody>{data.trend.map((row) => <tr key={row.period_start}><td className="font-semibold text-navy">{displayDate(row.period_start)}</td><td>{number(row.transactions)}</td><td>{number(row.fuel_gallons,1)}</td><td><strong>{currency(row.total_spend)}</strong></td></tr>)}</tbody></table></div></section>}
 
-      {view === "gasoline" && <section className="panel overflow-hidden"><div className="panel-heading"><div><h2>Gasoline purchases for review</h2><span>Authorized car drivers are identified; all others remain flagged for review.</span></div><strong className="fuel-gas-total">{currency(data.totals.gasoline_spend)}</strong></div>{data.gasoline_alerts.length ? <div className="table-scroll fuel-table-scroll"><table className="data-table"><thead><tr><th>Status</th><th>Date</th><th>Employee</th><th>Contract</th><th>Vehicle</th><th>Station</th><th>Product</th><th>Gallons</th><th>PPG</th><th>Cost</th></tr></thead><tbody>{data.gasoline_alerts.map((row,index) => <tr className={row.gasoline_authorized ? "" : "fuel-policy-alert-row"} key={`${row.transaction_date}-${row.person_name}-${row.net_cost}-${index}`}><td><span className={row.gasoline_authorized ? "fuel-policy-ok" : "fuel-policy-warning"}>{row.gasoline_authorized ? "Authorized" : "Review"}</span></td><td>{displayDate(row.transaction_date)}</td><td className="font-semibold text-navy">{row.person_name}</td><td>{row.contract_number}</td><td>{row.vehicle_number || "—"}</td><td>{row.merchant_name}<small className="fuel-location">{[row.merchant_city,row.merchant_state].filter(Boolean).join(", ")}</small></td><td>{row.product_description}</td><td>{number(row.unit_gallons,2)}</td><td>{currency(row.price_per_unit)}</td><td><strong>{currency(row.net_cost)}</strong></td></tr>)}</tbody></table></div> : <div className="location-empty">No gasoline purchases match the selected filters.</div>}</section>}
+      {view === "gasoline" && <section className="panel overflow-hidden"><div className="panel-heading"><div><h2>Gasoline purchases for review</h2><span>Authorized car drivers are identified; all others remain flagged for review.</span></div><strong className="fuel-gas-total">{currency(data.totals.gasoline_spend)}</strong></div>{data.gasoline_alerts.length ? <div className="table-scroll fuel-table-scroll"><table className="data-table"><thead><tr><th>Status</th><th>Date</th><th>Employee</th><th>Contract</th><th>Vehicle</th><th>Station</th><th>Product</th><th>Gallons</th><th>PPG</th><th>Cost</th></tr></thead><tbody>{data.gasoline_alerts.map((row,index) => <tr className={row.gasoline_authorized ? "" : "fuel-policy-alert-row"} key={`${row.transaction_date}-${row.person_name}-${row.net_cost}-${index}`}><td><button type="button" className={`fuel-review-person ${row.gasoline_authorized ? "fuel-policy-ok" : "fuel-policy-warning"}`} onClick={() => reviewGasolinePerson(row.person_name)} title={`Open fuel controls for ${row.person_name}`}>{row.gasoline_authorized ? "Authorized · Edit →" : "Review →"}</button></td><td>{displayDate(row.transaction_date)}</td><td className="font-semibold text-navy"><button type="button" className="fuel-review-person fuel-person-link" onClick={() => reviewGasolinePerson(row.person_name)}>{row.person_name}</button></td><td>{row.contract_number}</td><td>{row.vehicle_number || "—"}</td><td>{row.merchant_name}<small className="fuel-location">{[row.merchant_city,row.merchant_state].filter(Boolean).join(", ")}</small></td><td>{row.product_description}</td><td>{number(row.unit_gallons,2)}</td><td>{currency(row.price_per_unit)}</td><td><strong>{currency(row.net_cost)}</strong></td></tr>)}</tbody></table></div> : <div className="location-empty">No gasoline purchases match the selected filters.</div>}</section>}
 
       {view === "spend-alerts" && <section className="panel overflow-hidden"><div className="panel-heading"><div><h2>Monthly spending alerts</h2><span>Employees whose selected-month spending exceeded their saved limit.</span></div></div>{data.spend_alerts.length ? <div className="table-scroll"><table className="data-table"><thead><tr><th>Month</th><th>Employee</th><th>Monthly spend</th><th>Limit</th><th>Over limit</th></tr></thead><tbody>{data.spend_alerts.map((row) => <tr className="fuel-policy-alert-row" key={`${row.person_name}-${row.period_start}`}><td>{displayDate(row.period_start)}</td><td className="font-semibold text-navy">{row.person_name}</td><td>{currency(row.total_spend)}</td><td>{currency(row.monthly_spend_limit)}</td><td><strong>{currency(row.overage)}</strong></td></tr>)}</tbody></table></div> : <div className="location-empty">No employees exceeded a saved monthly limit in this date range.</div>}</section>}
 
-      {view === "controls" && <section className="panel fuel-controls-panel"><div className="panel-heading"><div><h2>Employee fuel controls</h2><span>Mark legitimate gasoline users and set optional monthly spending limits.</span></div></div>{canUpload && <div className="fuel-rule-form"><label>Employee<select value={rulePerson} onChange={(event) => selectRulePerson(event.target.value)}><option value="">Select employee</option>{options.people.map((item) => <option key={item}>{item}</option>)}</select></label><label className="fuel-rule-check"><input type="checkbox" checked={gasolineAuthorized} onChange={(event) => setGasolineAuthorized(event.target.checked)} /> Authorized to purchase gasoline</label><label>Monthly spending limit<input type="number" min="0" step="25" placeholder="No limit" value={monthlyLimit} onChange={(event) => setMonthlyLimit(event.target.value)} /></label><label>Notes<input type="text" placeholder="Car, route, or approval details" value={ruleNotes} onChange={(event) => setRuleNotes(event.target.value)} /></label><button className="primary-link" disabled={!rulePerson || savingRule} onClick={() => void saveEmployeeRule()}>{savingRule ? "Saving…" : "Save controls"}</button></div>}<div className="table-scroll"><table className="data-table"><thead><tr><th>Employee</th><th>Gasoline</th><th>Monthly limit</th><th>Notes</th></tr></thead><tbody>{employeeRules.map((rule) => <tr key={rule.person_name}><td className="font-semibold text-navy">{rule.person_name}</td><td>{rule.gasoline_authorized ? "Authorized" : "Not authorized"}</td><td>{rule.monthly_spend_limit == null ? "No limit" : currency(rule.monthly_spend_limit)}</td><td>{rule.notes || "—"}</td></tr>)}</tbody></table></div></section>}
+      {view === "controls" && <section id="fuel-employee-controls" className="panel fuel-controls-panel"><div className="panel-heading"><div><h2>Employee fuel controls</h2><span>Mark legitimate gasoline users and set optional monthly spending limits.</span></div></div>{canUpload && <div className="fuel-rule-form"><label>Employee<select value={rulePerson} onChange={(event) => selectRulePerson(event.target.value)}><option value="">Select employee</option>{options.people.map((item) => <option key={item}>{item}</option>)}</select></label><label className="fuel-rule-check"><input type="checkbox" checked={gasolineAuthorized} onChange={(event) => setGasolineAuthorized(event.target.checked)} /> Authorized to purchase gasoline</label><label>Monthly spending limit<input type="number" min="0" step="25" placeholder="No limit" value={monthlyLimit} onChange={(event) => setMonthlyLimit(event.target.value)} /></label><label>Notes<input type="text" placeholder="Car, route, or approval details" value={ruleNotes} onChange={(event) => setRuleNotes(event.target.value)} /></label><button className="primary-link" disabled={!rulePerson || savingRule} onClick={() => void saveEmployeeRule()}>{savingRule ? "Saving…" : "Save controls"}</button></div>}<div className="table-scroll"><table className="data-table"><thead><tr><th>Employee</th><th>Gasoline</th><th>Monthly limit</th><th>Notes</th></tr></thead><tbody>{employeeRules.map((rule) => <tr key={rule.person_name}><td className="font-semibold text-navy"><button type="button" className="fuel-review-person fuel-person-link" onClick={() => selectRulePerson(rule.person_name)}>{rule.person_name}</button></td><td>{rule.gasoline_authorized ? "Authorized" : "Not authorized"}</td><td>{rule.monthly_spend_limit == null ? "No limit" : currency(rule.monthly_spend_limit)}</td><td>{rule.notes || "—"}</td></tr>)}</tbody></table></div></section>}
     </>}
   </div>;
 }

@@ -618,3 +618,5 @@ button, input { font: inherit; }
   .timecard-page .timecard-print-context{display:table-row}
   .timecard-page .timecard-contract footer{break-inside:avoid}
 }
+
+.fuel-review-person{border:0;background:none;color:var(--navy);font:inherit;font-weight:700;cursor:pointer;text-align:left;padding:4px 6px;border-radius:5px}.fuel-review-person:hover,.fuel-review-person:focus-visible{text-decoration:underline;outline:2px solid var(--navy)}.fuel-review-person.fuel-policy-warning{color:#742430}.fuel-review-person.fuel-policy-ok{color:#174e27}.fuel-person-link{padding-left:0}.fuel-controls-panel{scroll-margin-top:20px}

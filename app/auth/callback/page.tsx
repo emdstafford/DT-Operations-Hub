@@ -17,7 +17,9 @@ export default function AuthCallbackPage() {
     }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setMessage("No sign-in session was received. Please request a new email link."); return; }
-    router.replace(params.get("next") || "/history");
+    const next = params.get("next") || "/";
+    const { data: access } = await supabase.from("approved_users").select("role").eq("email", user.email?.toLowerCase() ?? "").eq("active", true).maybeSingle();
+    router.replace(next === "/" && access?.role === "dashboard_fuel_viewer" ? "/fuel" : next);
     router.refresh();
   })(); }, [router]);
 

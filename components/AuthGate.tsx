@@ -56,7 +56,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         await supabase.auth.signOut();
         if (active) router.replace("/login?error=not-approved");
       } else if (pathname === "/login") {
-        router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : "/payroll");
+        router.replace(role === "dashboard_fuel_viewer" ? "/fuel" : canUseOperations ? "/" : canUseFuel ? "/fuel" : "/payroll");
       } else if (pathname.startsWith("/payroll") && !canUsePayroll) {
         router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : "/login");
       } else if (pathname.startsWith("/fuel") && !canUseFuel) {

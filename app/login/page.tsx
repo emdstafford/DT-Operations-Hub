@@ -30,7 +30,10 @@ export default function LoginPage() {
     setMessage("");
     const { error } = await supabase.auth.signInWithPassword({ email: normalized, password });
     if (error) setMessage(error.message);
-    else window.location.assign("/");
+    else {
+      const { data: access } = await supabase.from("approved_users").select("role").eq("email", normalized).eq("active", true).maybeSingle();
+      window.location.assign(access?.role === "dashboard_fuel_viewer" ? "/fuel" : "/");
+    }
     setLoading(false);
   }
 
