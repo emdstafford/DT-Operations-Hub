@@ -96,8 +96,8 @@ export default function TimecardComparisons({ entries, start, end, sourceName, p
   </section>;
 }
 export function ComparisonTable({ title, rows, showAll }: { title: string; rows: Comparison[]; showAll: boolean }) {
-  return <div className="timecard-comparison-table"><h3>{title} · {rows.length} changed</h3>
-    <div className="table-scroll"><table className="data-table"><thead><tr><th>{title.startsWith("Driver") ? "Driver" : "Contract"}</th><th>Previous hours</th><th>Current hours</th><th>Change</th><th>Status</th></tr></thead><tbody>{(showAll ? rows : rows.slice(0, 25)).map((row) => <tr key={row.key}><td>{row.label}</td><td>{fmt(row.previous)}</td><td>{fmt(row.current)}</td><td className={row.delta < 0 ? "timecard-hours-down" : "timecard-hours-up"}>{row.delta > 0 ? "+" : ""}{fmt(row.delta)}</td><td>{row.kind === "new" ? "New" : row.kind === "missing" ? "Missing" : row.delta < 0 ? "Down" : "Up"}</td></tr>)}</tbody></table></div>
+  return <div className="timecard-comparison-table"><h3>{title} · {rows.length} {title.startsWith("Driver") ? "drivers" : "contracts"} with changed hours</h3>
+    <div className="table-scroll"><table className="data-table"><thead><tr><th>{title.startsWith("Driver") ? "Driver" : "Contract"}</th><th>Previous hours</th><th>Current hours</th><th>Direction</th><th>Hours difference</th></tr></thead><tbody>{(showAll ? rows : rows.slice(0, 25)).map((row) => <tr key={row.key}><td>{row.label}</td><td>{fmt(row.previous)}</td><td>{fmt(row.current)}</td><td>{row.kind === "new" ? "New" : row.kind === "missing" ? "Missing" : row.delta < 0 ? "Down" : "Up"}</td><td className={row.delta < 0 ? "timecard-hours-down" : "timecard-hours-up"}>{row.delta > 0 ? "+" : ""}{fmt(row.delta)}</td></tr>)}</tbody></table></div>
     {!rows.length && <p>No hours changed between these reports.</p>}
   </div>;
 }

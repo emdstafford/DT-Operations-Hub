@@ -17,6 +17,7 @@ export default function TimecardHistory() {
   const [afterId, setAfterId] = useState("");
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [printAll, setPrintAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [baselineId, setBaselineId] = useState("");
   const [baselineChoice, setBaselineChoice] = useState("");
@@ -109,27 +110,35 @@ export default function TimecardHistory() {
     }
     setBusyId("");
   }
+  function printComparison() {
+    if (!before || !after || beforeId === afterId) return;
+    setPrintAll(true);
+    const reset = () => { setPrintAll(false); window.removeEventListener("afterprint", reset); };
+    window.addEventListener("afterprint", reset);
+    window.setTimeout(() => window.print(), 100);
+  }
   return <div className="report-stack timecard-history">
     {loading && <section className="panel"><p>Loading saved payroll summaries…</p></section>}
     {error && <section className="alert alert-error">{error}</section>}
     {!loading && !error && !reports.length && <section className="panel"><p>No payroll summaries saved yet. Open Timecard Report and upload a file to start.</p></section>}
     {!!reports.length && <>
-      <section className="panel timecard-history-summary"><div className="panel-heading"><div><h2>Saved payrolls</h2><span>{activeReports.length} active versions · {sequence.length} selected · Raw time punches stay in the browser.</span></div></div>
+      <section className="panel timecard-history-summary"><div className="panel-heading"><div><h2>Saved payrolls</h2><span>{activeReports.length} active versions · {sequence.length} selected · Raw time punches stay in the browser.</span></div><button type="button" className="primary-link" disabled={!before || !after || beforeId === afterId} onClick={printComparison}>Print comparison</button></div>
         {actionMessage && <p className="timecard-action-status" role="status">{actionMessage}</p>}
         <details className="timecard-history-pick"><summary>Choose payrolls to show ({sequence.length} selected)</summary><div className="timecard-history-picker-actions"><button type="button" onClick={() => setSelectedIds(activeReports.map((item) => item.id))}>Select every active version</button><button type="button" onClick={() => setSelectedIds([])}>Clear selection</button></div><div className="timecard-history-options">{activeReports.map((item) => <label key={item.id}><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => setSelectedIds(selectedIds.includes(item.id) ? selectedIds.filter((id) => id !== item.id) : [...selectedIds, item.id])} />{version(item)}</label>)}</div></details>
         <div className="table-scroll"><table className="data-table"><thead><tr><th>Payroll</th><th>Timecard dates</th><th>Drivers</th><th>Contracts</th><th>Total hours</th><th>Change vs prior saved payroll</th></tr></thead><tbody>{sequence.map((row, index) => { const previous = [...sequence.slice(0, index)].reverse().find((item) => item.period_end < row.period_start); const delta = previous ? Number(row.total_hundredths) - Number(previous.total_hundredths) : null; return <tr key={row.id}><td>{row.payroll_name}</td><td>{formatDate(row.period_start)}–{formatDate(row.period_end)}</td><td>{row.employee_count}</td><td>{row.contract_count}</td><td>{hour(Number(row.total_hundredths))}</td><td>{delta === null ? "First saved period" : `${delta > 0 ? "+" : ""}${hour(delta)}`}</td></tr>; })}</tbody></table></div>
         <div className="timecard-versions"><h3>Manage saved versions</h3><p>Archive an upload entered by mistake. Archived versions stay available to restore; they do not count toward reports. Only Emily can permanently delete one.</p>{activeReports.map((row) => <div className="timecard-version-row" key={row.id}><span>{version(row)} · {hour(Number(row.total_hundredths))} hours {row.id === baselineId ? "· First payroll baseline" : ""}</span><div><button type="button" disabled={!!busyId || row.id === baselineId} onClick={() => void changeArchive(row, false)}>Archive</button>{canDelete && <button type="button" className="timecard-delete" disabled={!!busyId || row.id === baselineId} onClick={() => void deleteReport(row)}>Delete</button>}</div></div>)}</div>
         {!!archivedReports.length && <details className="timecard-history-pick"><summary>Archived payroll uploads ({archivedReports.length})</summary><div className="timecard-history-options">{archivedReports.map((row) => <div className="timecard-version-row" key={row.id}><span>{version(row)} · {hour(Number(row.total_hundredths))} hours</span><div><button type="button" disabled={!!busyId} onClick={() => void changeArchive(row, true)}>Restore</button>{canDelete && <button type="button" className="timecard-delete" disabled={!!busyId} onClick={() => void deleteReport(row)}>Delete</button>}</div></div>)}</div></details>}
       </section>
-      {!!activeReports.length && <section className="panel timecard-comparisons"><div className="panel-heading"><div><h2>Compare two payrolls</h2><span>Select any active payrolls, including corrected versions of the same period.</span></div></div>
+      {!!activeReports.length && <section className="panel timecard-comparisons timecard-print-comparison"><div className="panel-heading"><div><h2>Compare two payrolls</h2><span>Select any active payrolls, including corrected versions of the same period.</span></div><button type="button" className="hub-secondary-link" disabled={!before || !after || beforeId === afterId} onClick={printComparison}>Print comparison</button></div>
+        <div className="timecard-print-title print-only"><p>Davenport Transportation · Payroll hour comparison</p><h1>{before?.payroll_name} → {after?.payroll_name}</h1><span>{before && after ? `${formatDate(before.period_start)}–${formatDate(before.period_end)} compared with ${formatDate(after.period_start)}–${formatDate(after.period_end)}` : ""}</span></div>
         <div className="timecard-baseline"><label>First payroll in the new system<select value={baselineChoice} onChange={(event) => setBaselineChoice(event.target.value)}>{activeReports.map((row) => <option key={row.id} value={row.id}>{version(row)}</option>)}</select></label><button type="button" className="hub-secondary-link" onClick={() => void setBaseline()}>Save shared baseline</button></div>
         {baselineMessage && <p role="status">{baselineMessage}</p>}
         <div className="timecard-payroll-fields"><label>Earlier payroll<select value={beforeId} onChange={(event) => setBeforeId(event.target.value)}><option value="">Choose payroll</option>{activeReports.map((row) => <option key={row.id} value={row.id}>{version(row)}</option>)}</select></label><label>Later payroll<select value={afterId} onChange={(event) => setAfterId(event.target.value)}><option value="">Choose payroll</option>{activeReports.map((row) => <option key={row.id} value={row.id}>{version(row)}</option>)}</select></label></div>
         <label className="timecard-history-search">Find driver or contract<input type="search" value={search} placeholder="Name or contract number" onChange={(event) => setSearch(event.target.value)} /></label>
         {!before || !after || beforeId === afterId ? <p>Choose two different active versions to see changes.</p> : <>
           <p className="timecard-comparison-note">{before && after ? `${before.payroll_name} → ${after.payroll_name}. Hour differences may reflect schedules, staffing, or corrections; review the source before treating a change as an error.` : ""}</p>
-          <ComparisonTable title="Driver hours" rows={driverRows} showAll={showAll} />
-          <ComparisonTable title="Contract hours" rows={contractRows} showAll={showAll} />
+          <ComparisonTable title="Driver hours" rows={driverRows} showAll={showAll || printAll} />
+          <ComparisonTable title="Contract hours" rows={contractRows} showAll={showAll || printAll} />
           {(driverRows.length > 25 || contractRows.length > 25) && <button type="button" className="hub-secondary-link" onClick={() => setShowAll(!showAll)}>{showAll ? "Show largest changes only" : "Show all changes"}</button>}
         </>}
       </section>}

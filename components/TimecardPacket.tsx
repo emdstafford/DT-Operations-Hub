@@ -58,6 +58,7 @@ function parse(source: Source | null): Result {
   return { rows, invalid, pto };
 }
 const total = (rows: Shift[]) => rows.reduce((sum, row) => sum + row.hundredths, 0);
+const approvedWithoutSupervisor = new Set(["01SHDR", "011VAN"]);
 
 function clock(value: string) {
   const match = /(?:^|\s)(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i.exec(value.trim());
@@ -82,6 +83,8 @@ export default function TimecardPacket() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [currentAssignments, setCurrentAssignments] = useState<CurrentAssignment[]>([]);
   const [supervisorStatus, setSupervisorStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [assignmentName, setAssignmentName] = useState<Record<string, string>>({});
+  const [assignmentSaving, setAssignmentSaving] = useState("");
   const contracts = useMemo(() => {
     const groups = new Map<string, Map<string, Shift[]>>();
     for (const row of result.rows) {
@@ -141,21 +144,34 @@ export default function TimecardPacket() {
   const historyEntries = useMemo<TimecardSummaryEntry[]>(() => contracts.flatMap(({ contract, people }) => people.map((person) => ({
     contract, employeeId: person.employeeId, name: person.name, hundredths: total(person.rows),
   })).filter((entry) => entry.hundredths > 0)), [contracts]);
-  const unassigned = supervisorStatus === "ready" ? contracts.filter(({ contract, people }) => !supervisorsFor(contract, people.flatMap((person) => person.rows)).length).length : 0;
+  const unassigned = supervisorStatus === "ready" ? contracts.filter(({ contract, people }) => !approvedWithoutSupervisor.has(contract.trim().toUpperCase()) && !supervisorsFor(contract, people.flatMap((person) => person.rows)).length) : [];
+  async function assignSupervisor(contract: string, rows: Shift[]) {
+    const supervisor = (assignmentName[contract] || "").trim();
+    const dates = rows.map((row) => row.date).sort();
+    if (!supervisor || !dates.length) { setError("Enter the supervisor's name to save an assignment."); return; }
+    setAssignmentSaving(contract); setError("");
+    const result = await supabase.rpc("assign_timecard_contract_supervisor", { p_contract: contract, p_supervisor: supervisor, p_start: dates[0], p_end: dates[dates.length - 1] });
+    if (result.error) setError(result.error.code === "PGRST202" ? "Run supabase/timecard_supervisor_assignments.sql in Supabase to enable date-specific assignments." : result.error.message);
+    else {
+      setAssignments((current) => [...current, { contract_number: contract, supervisor, start_date: dates[0], end_date: dates[dates.length - 1] }]);
+      setAssignmentName((current) => ({ ...current, [contract]: "" }));
+    }
+    setAssignmentSaving("");
+  }
   return <div className="report-stack timecard-stack">
     <section className="panel timecard-intro no-print"><strong>One report, grouped by contract</strong><p>Choose the timecard report for this pay period. The file stays in this browser tab and clears when you refresh or close it. The printed packet can be compared with notes from the previous pay period.</p></section>
     {error && <div className="alert alert-error no-print">{error}</div>}
     <section className="panel timecard-settings no-print">
       <div className="panel-heading"><div><h2>Timecard report</h2><span>{file?.name || "Choose a report"}</span></div><label className="primary-link timecard-file-button">Choose report<input type="file" accept=".csv,.xlsx,.xls" onChange={(event) => void readFile(event.target.files?.[0])} /></label></div>
       <div className="timecard-payroll-fields"><label>Payroll name or number<input type="text" value={payrollName} maxLength={100} placeholder="Example: #39" onChange={(event) => { setPayrollName(event.target.value); setConfirmedPayrollName(""); }} onBlur={() => setConfirmedPayrollName(payrollName.trim())} /></label><span>Use the same number when uploading corrected timecards. The report dates are read from the file.</span></div>
-      {file && <div className="timecard-status"><span>{result.rows.length.toLocaleString()} rows · {hoursLabel(total(result.rows))} hours</span><span>{result.pto} PTO rows excluded</span>{file.employeeIdColumn < 0 && <strong>No employee ID column found. Comparisons will match drivers by name.</strong>}{result.invalid > 0 && <strong>{result.invalid} rows need a readable name, contract, In time, or Hours. Correct the file before printing.</strong>}{supervisorStatus === "error" && <strong>Supervisor assignments could not be loaded; contract headings will show “Supervisor unavailable.”</strong>}{unassigned > 0 && <strong>{unassigned} contract{unassigned === 1 ? " has" : "s have"} no supervisor assignment for these dates.</strong>}</div>}
+      {file && <div className="timecard-status"><span>{result.rows.length.toLocaleString()} rows · {hoursLabel(total(result.rows))} hours</span><span>{result.pto} PTO rows excluded</span>{file.employeeIdColumn < 0 && <strong>No employee ID column found. Comparisons will match drivers by name.</strong>}{result.invalid > 0 && <strong>{result.invalid} rows need a readable name, contract, In time, or Hours. Correct the file before printing.</strong>}{supervisorStatus === "error" && <strong>Supervisor assignments could not be loaded; contract headings will show “Supervisor unavailable.”</strong>}{unassigned.length > 0 && <details className="timecard-unassigned"><summary>{unassigned.length} contract{unassigned.length === 1 ? " has" : "s have"} no supervisor assignment for these dates. Review contracts →</summary><p>Assign a supervisor for only the dates found in this file. Existing assignments outside those dates stay in place.</p>{unassigned.map(({contract,people}) => { const rows = people.flatMap((person) => person.rows); const dates = rows.map((row) => row.date).sort(); return <div className="timecard-unassigned-row" key={contract}><strong>{contract} · {dateLabel(dates[0])} – {dateLabel(dates[dates.length-1])}</strong><input aria-label={`Supervisor for ${contract}`} placeholder="Supervisor name" value={assignmentName[contract] || ""} onChange={(event) => setAssignmentName((current) => ({ ...current, [contract]: event.target.value }))} /><button type="button" disabled={!!assignmentSaving} onClick={() => void assignSupervisor(contract, rows)}>{assignmentSaving === contract ? "Saving…" : "Save assignment"}</button></div>; })}</details>}</div>}
     </section>
     <section className="panel timecard-actions no-print"><button className="primary-link" disabled={!ready || supervisorStatus === "loading"} onClick={() => window.print()}>Print by contract</button><span>{ready ? `${contracts.length} contracts. Each starts on a new page.` : "Choose one report. All rows must be readable before printing."}</span></section>
     {ready && confirmedPayrollName ? <TimecardComparisons entries={historyEntries} start={periodStart} end={periodEnd} sourceName={file?.name || "Timecard report"} payrollName={confirmedPayrollName} /> : ready && <section className="panel no-print timecard-comparisons"><h2>Save and compare payrolls</h2><p>Enter the payroll name or number above, such as #39, to save the hour totals. Reuse it for a corrected report. You can print the timecards now.</p></section>}
     {ready && <div className="timecard-packet"><div className="timecard-screen-heading no-print"><h2>Packet preview</h2><p>Check the hours and contract assignments before printing the packet.</p></div>{contracts.map(({ contract, people }) => {
       const contractRows = people.flatMap((person) => person.rows);
       const supervisors = supervisorsFor(contract, contractRows);
-      return <section className="timecard-contract" key={contract}><header><div><p>Davenport Transportation · Timecard review</p><h2>Contract {contract}</h2><span>Supervisor{supervisors.length === 1 ? "" : "s"}: {supervisors.length ? supervisors.join(", ") : supervisorStatus === "loading" ? "Loading…" : supervisorStatus === "error" ? "Unavailable" : "Not assigned for this period"}</span><br /><span>{payrollName.trim() ? `${payrollName.trim()} · ` : ""}{dateLabel(periodStart)} – {dateLabel(periodEnd)}</span></div><strong>{people.length} employees</strong></header>
+      return <section className="timecard-contract" key={contract}><header><div><p>Davenport Transportation · Timecard review</p><h2>Contract {contract}</h2><span>{payrollName.trim() ? `${payrollName.trim()} · ` : ""}{dateLabel(periodStart)} – {dateLabel(periodEnd)}</span></div><div className="timecard-supervisor-heading"><span>{approvedWithoutSupervisor.has(contract.trim().toUpperCase()) && !supervisors.length ? "No supervisor required" : `Supervisor${supervisors.length === 1 ? "" : "s"}`}</span><strong>{supervisors.length ? supervisors.join(", ") : approvedWithoutSupervisor.has(contract.trim().toUpperCase()) ? "Approved" : supervisorStatus === "loading" ? "Loading…" : supervisorStatus === "error" ? "Unavailable" : "Not assigned"}</strong><small>{people.length} employees</small></div></header>
         <div className="timecard-contract-totals"><div><span>Contract hours</span><strong>{hoursLabel(total(contractRows))}</strong></div><div><span>Employees</span><strong>{people.length}</strong></div><div><span>Time entries</span><strong>{contractRows.length.toLocaleString()}</strong></div></div>
         {people.map((person) => <div className="timecard-person" key={person.name}><h3>{person.name} <span>Total hours = {hoursLabel(total(person.rows))}</span></h3><TimecardRows rows={person.rows} /></div>)}
         <footer><strong>Contract total: {hoursLabel(total(contractRows))} hours</strong><span>Reviewed by: ____________________ &nbsp; Date: ______________</span></footer>
