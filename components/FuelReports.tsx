@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAccessRole } from "@/components/AccessRole";
 import FuelMileagePlanner, { type FuelMileageRow } from "@/components/FuelMileagePlanner";
 import { processFuelReport, type ProcessedFuelReport } from "@/lib/processFuelReport";
 import { supabase } from "@/lib/supabase";
@@ -41,6 +42,7 @@ function fuelPreset(mode: "day" | "week" | "month", anchor: string) {
 }
 
 export default function FuelReports() {
+  const dashboardFuelOnly = useAccessRole() === "dashboard_fuel_viewer";
   const today = new Date().toISOString().slice(0, 10);
   const [canUpload, setCanUpload] = useState(false);
   const [options, setOptions] = useState<Options>({ period_start: null, period_end: null, contracts: [], people: [], stations: [], supervisors: [] });
@@ -288,7 +290,7 @@ export default function FuelReports() {
     </section>
 
     {loading ? <section className="hub-loading">Loading fuel activity…</section> : <>
-      <section className="panel fuel-gary-actions no-print"><div><p className="eyebrow">Report actions</p><strong>{reportTitle}</strong><span>{displayDate(start)} – {displayDate(end)} · {reportContext}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => { setView("report"); downloadSupervisorCsv(); }}>Download CSV</button><button className="hub-secondary-link" onClick={() => void copySupervisorEmail()}>{emailCopied ? "Email report copied!" : "Copy Email Report"}</button><button className="primary-link" onClick={printFuelReport}>Print Gary&apos;s Fuel Report</button></div></section>
+      {!dashboardFuelOnly && <section className="panel fuel-gary-actions no-print"><div><p className="eyebrow">Report actions</p><strong>{reportTitle}</strong><span>{displayDate(start)} – {displayDate(end)} · {reportContext}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => { setView("report"); downloadSupervisorCsv(); }}>Download CSV</button><button className="hub-secondary-link" onClick={() => void copySupervisorEmail()}>{emailCopied ? "Email report copied!" : "Copy Email Report"}</button><button className="primary-link" onClick={printFuelReport}>Print Gary&apos;s Fuel Report</button></div></section>}
       <section className="fuel-metric-grid"><article className="metric-card metric-primary"><span>Total spend</span><strong>{currency(data.totals.total_spend)}</strong></article><article className="metric-card"><span>Fuel gallons</span><strong>{number(data.totals.fuel_gallons, 1)}</strong></article><article className="metric-card"><span>Fuel transactions</span><strong>{number(data.totals.transactions)}</strong></article><article className="metric-card"><span>Average price per gallon</span><strong>{currency(data.totals.average_price_per_gallon)}</strong></article><button className="metric-card metric-card-action fuel-alert-card" onClick={() => setView("gasoline")}><span>Gasoline spend</span><strong>{currency(data.totals.gasoline_spend)}</strong><small>{number(data.totals.gasoline_lines)} lines · Review →</small></button></section>
       <nav className="fuel-view-tabs" aria-label="Fuel report view"><button className={view === "contracts" ? "active" : ""} onClick={() => { setContract(""); setView("contracts"); }}>Contracts</button><button className={view === "report" ? "active" : ""} onClick={() => setView("report")}>Full report</button><button className={view === "mileage" ? "active" : ""} onClick={() => setView("mileage")}>Fuel estimate</button><button className={view === "people" ? "active" : ""} onClick={() => setView("people")}>Employees</button><details className="fuel-more-views"><summary>More reports</summary><div><button className={view === "stations" ? "active" : ""} onClick={() => setView("stations")}>Stations</button><button className={view === "products" ? "active" : ""} onClick={() => setView("products")}>Fuel types</button><button className={view === "trend" ? "active" : ""} onClick={() => setView("trend")}>Trend</button><button className={view === "gasoline" ? "active fuel-warning-tab" : "fuel-warning-tab"} onClick={() => setView("gasoline")}>Gasoline review</button><button className={view === "spend-alerts" ? "active fuel-warning-tab" : "fuel-warning-tab"} onClick={() => setView("spend-alerts")}>Spend alerts ({data.spend_alerts.length})</button><button className={view === "controls" ? "active" : ""} onClick={() => setView("controls")}>Employee fuel controls</button></div></details></nav>
       {view === "report" && <section className="panel fuel-supervisor-report">

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import NavBar from "@/components/NavBar";
+import { AccessRole } from "@/components/AccessRole";
 import { supabase } from "@/lib/supabase";
 
 const publicPaths = ["/login", "/auth/callback"];
@@ -62,6 +63,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         router.replace(canUseOperations ? "/" : "/payroll");
       } else if (!pathname.startsWith("/payroll") && !pathname.startsWith("/fuel") && !canUseOperations) {
         router.replace(canUseFuel ? "/fuel" : "/payroll");
+      } else if (role === "dashboard_fuel_viewer" && pathname !== "/" && !pathname.startsWith("/fuel")) {
+        router.replace("/");
       } else if (isReportManagementPath && !canManageReports) {
         router.replace("/");
       }
@@ -79,9 +82,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (checking) return <main className="auth-loading"><img src="https://cdn.prod.website-files.com/6493ca96ecc7e42995686bc5/68fbcce63d1ad0ff30d74399_Draft%20LogoDT.png" alt="Davenport Transportation" /><span>Loading DT Intelligence Hub…</span></main>;
   if (isPublic) return <>{children}</>;
-  if (!session) return null;
-  return <div className="app-frame">
+  if (!session || (operationsRole === "dashboard_fuel_viewer" && pathname !== "/" && !pathname.startsWith("/fuel"))) return null;
+  return <AccessRole.Provider value={operationsRole}><div className="app-frame">
     <NavBar operationsRole={operationsRole} payrollAccess={payrollAccess} fuelAccess={fuelAccess} />
     <div className="app-content">{children}</div>
-  </div>;
+  </div></AccessRole.Provider>;
 }

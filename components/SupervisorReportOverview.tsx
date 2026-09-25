@@ -16,7 +16,7 @@ const number = (value: number) => Number(value || 0).toLocaleString("en-US");
 const percent = (value: number) => `${(Number(value || 0) * 100).toFixed(2)}%`;
 const noteStatus = (status: OperationalNote["status"]) => status === "waiting_on_usps" ? "Waiting on USPS" : status === "monitoring" ? "Monitoring" : "Resolved";
 
-export default function SupervisorReportOverview({ supervisors, supervisorContracts, contracts, notes, start, end, showRankings }: {
+export default function SupervisorReportOverview({ supervisors, supervisorContracts, contracts, notes, start, end, showRankings, showContractLinks = true }: {
   supervisors: PerformanceRow[];
   supervisorContracts: PerformanceRow[];
   contracts: PerformanceRow[];
@@ -24,6 +24,7 @@ export default function SupervisorReportOverview({ supervisors, supervisorContra
   start: string;
   end: string;
   showRankings: boolean;
+  showContractLinks?: boolean;
 }) {
   const bottomContracts = new Set(showRankings ? contracts.slice(0, 10).map((row) => row.contract_number) : []);
   return <section className="panel supervisor-report-overview">
@@ -37,7 +38,7 @@ export default function SupervisorReportOverview({ supervisors, supervisorContra
           const contract = row.contract_number || "Unmapped";
           const contractNotes = notes.filter((item) => item.contract_number === contract && item.status !== "resolved");
           return <div className={`supervisor-report-contract ${bottomContracts.has(contract) ? "supervisor-report-low" : ""}`} key={contract}>
-            <Link href={`/contracts/${encodeURIComponent(contract)}?start=${start}&end=${end}`}><strong>{contract}</strong><span>Open details →</span></Link>
+            {showContractLinks ? <Link href={`/contracts/${encodeURIComponent(contract)}?start=${start}&end=${end}`}><strong>{contract}</strong><span>Open details →</span></Link> : <strong>{contract}</strong>}
             <span>{number(row.total_stops)} stops · {number(row.incomplete_stops)} incomplete</span>
             <strong>{percent(row.completion_percent)}</strong>
             {contractNotes.length > 0 && <div className="supervisor-report-notes">{contractNotes.map((note) => <p key={note.id}><b>{noteStatus(note.status)}{note.trip_number ? ` · Trip ${note.trip_number}` : ""}:</b> {note.note}</p>)}</div>}

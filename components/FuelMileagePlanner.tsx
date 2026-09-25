@@ -42,17 +42,18 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const selected = selectedContract ? [selectedContract] : contracts;
-  const contractKey = selected.join("|");
+  const planContracts = [...new Set([...selected, ...(planContract ? [planContract] : [])])];
+  const contractKey = planContracts.join("|");
 
   const refresh = useCallback(async () => {
-    if (!selected.length || !start || !end) { setPlans([]); setPurchases([]); return; }
+    if (!planContracts.length || !start || !end) { setPlans([]); setPurchases([]); return; }
     const [planResult, purchaseResult] = await Promise.all([
-      supabase.from("fuel_contract_mileage_plans").select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,tractor_count,straight_truck_count,alert_above_percent").in("contract_number", selected).lte("effective_start", end).order("effective_start"),
+      supabase.from("fuel_contract_mileage_plans").select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,tractor_count,straight_truck_count,alert_above_percent").in("contract_number", planContracts).order("effective_start"),
       supabase.rpc("fuel_contract_purchases_for_estimate", { p_start: start, p_end: end, p_contracts: selected }),
     ]);
     const needsMigration = planResult.error?.code === "42703" || planResult.error?.code === "PGRST204" || planResult.error?.code === "PGRST200";
     const legacyPlans = needsMigration
-      ? await supabase.from("fuel_contract_mileage_plans").select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,alert_above_percent").in("contract_number", selected).lte("effective_start", end).order("effective_start")
+      ? await supabase.from("fuel_contract_mileage_plans").select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,alert_above_percent").in("contract_number", planContracts).order("effective_start")
       : null;
     const currentPlans = legacyPlans ?? planResult;
     if (currentPlans.error || purchaseResult.error) {
@@ -116,7 +117,7 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
       straight_truck_count: truckType === "mixed" ? straightCount : truckType === "straight" ? 1 : truckType === "tractor" ? 0 : null,
     }, { onConflict: "contract_number,effective_start" });
     if (saveError) setError(saveError.code === "23P01" ? "These dates overlap another mileage plan for this contract. End the earlier plan before adding this one." : ["42703", "PGRST204"].includes(saveError.code) ? "Run fuel_vehicle_counts.sql in Supabase before saving vehicle counts." : saveError.message);
-    else { setMessage(`Saved mileage plan for ${planContract}.`); await refresh(); }
+    else { await refresh(); setMessage(`Saved mileage plan for ${planContract} starting ${effectiveStart}. Open “Saved plan dates” below to view or edit it; estimates use the selected report dates.`); }
     setSaving(false);
   }
 
