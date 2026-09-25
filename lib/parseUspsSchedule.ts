@@ -8,9 +8,34 @@ export type ScheduleAnalysis = {
   effectiveDates: string[];
   annualMiles: number | null;
   annualHours: number | null;
+  annualMilesPage: number | null;
+  annualHoursPage: number | null;
   changeSummaryFound: boolean;
   warnings: string[];
 };
+
+type StatedTotal = { value: number | null; page: number | null; conflict: boolean };
+
+// Only an explicitly labeled annual total is a contract total. Trip miles and
+// frequency-day counts must never be substituted for it.
+function statedAnnualTotal(text: string, unit: "miles" | "hours"): StatedTotal {
+  const pages = text.split(/--- PDF PAGE (\d+) ---/i);
+  const chunks = pages.length > 1
+    ? Array.from({ length: (pages.length - 1) / 2 }, (_, index) => ({ page: Number(pages[index * 2 + 1]), text: pages[index * 2 + 2] }))
+    : [{ page: 1, text }];
+  const values: Array<{ value: number; page: number }> = [];
+  const label = new RegExp(`\\b(?:Estimated\\s+)?Annual\\s+(?:Schedule\\s+)?${unit}\\s*:?\\s*([\\d,]+(?:\\.\\d+)?)\\b`, "gi");
+  for (const chunk of chunks) {
+    // The total appears near the top of a schedule, above the trip rows.
+    const top = chunk.text.split(/\r?\n/).slice(0, 45).join("\n");
+    for (const match of top.matchAll(label)) {
+      const value = Number(match[1].replaceAll(",", ""));
+      if (Number.isFinite(value) && value > 0) values.push({ value, page: chunk.page });
+    }
+  }
+  const unique = new Set(values.map(({ value }) => value));
+  return { value: unique.size === 1 ? values[0].value : null, page: unique.size === 1 ? values[0].page : null, conflict: unique.size > 1 };
+}
 
 function pageLines(items: TextItem[]) {
   const rows = new Map<number, Array<{ x: number; text: string }>>();
@@ -49,21 +74,26 @@ export function analyzeScheduleText(text: string, pageCount: number, fileName = 
     }
   }
   const effectiveDates = [...new Set(text.match(/\b\d{2}\/\d{2}\/20\d{2}\b/g) || [])].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-  const annualMilesMatch = text.match(/Estimated Annual Schedule Miles\s*:?\s*([\d,]+(?:\.\d+)?)/i);
-  const annualHoursMatch = text.match(/Estimated Annual Schedule Hours\s*:?\s*([\d,]+(?:\.\d+)?)/i);
+  const miles = statedAnnualTotal(text, "miles");
+  const hours = statedAnnualTotal(text, "hours");
   const warnings: string[] = [];
   if (!contractNumber) warnings.push("Contract number was not confidently identified.");
   if (!tripIds.size) warnings.push("No trip rows were confidently identified.");
   if (!frequencyCodes.length) warnings.push("Frequency reference definitions were not found; do not approve this schedule.");
   if (!effectiveDates.length) warnings.push("No effective dates were found.");
+  if (miles.conflict) warnings.push("Different annual miles are stated in this PDF. Check the source pages; no miles total was selected.");
+  if (hours.conflict) warnings.push("Different annual hours are stated in this PDF. Check the source pages; no hours total was selected.");
+  if (!miles.value && !miles.conflict) warnings.push("No labeled annual miles total was found near the top of a schedule page.");
   return {
     pageCount,
     contractNumber,
     tripIds: [...tripIds].sort((a, b) => Number(a) - Number(b)),
     frequencyCodes,
     effectiveDates,
-    annualMiles: annualMilesMatch ? Number(annualMilesMatch[1].replaceAll(",", "")) : null,
-    annualHours: annualHoursMatch ? Number(annualHoursMatch[1].replaceAll(",", "")) : null,
+    annualMiles: miles.value,
+    annualHours: hours.value,
+    annualMilesPage: miles.page,
+    annualHoursPage: hours.page,
     changeSummaryFound: /Trip Change Summary/i.test(text),
     warnings,
   };
@@ -80,7 +110,7 @@ export async function parseUspsSchedule(file: File): Promise<ScheduleAnalysis> {
   for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
     const page = await document.getPage(pageNumber);
     const content = await page.getTextContent();
-    lines.push(...pageLines(content.items as TextItem[]));
+    lines.push(`--- PDF PAGE ${pageNumber} ---`, ...pageLines(content.items as TextItem[]));
   }
   return analyzeScheduleText(lines.join("\n"), document.numPages, file.name);
 }

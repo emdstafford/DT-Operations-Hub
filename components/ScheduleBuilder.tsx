@@ -67,6 +67,15 @@ export default function ScheduleBuilder() {
   const [contract, setContract] = useState("");
   const [effectiveDate, setEffectiveDate] = useState("");
   const [analysis, setAnalysis] = useState<ScheduleAnalysis | null>(null);
+  const [revisedOcr, setRevisedOcr] = useState<OcrScheduleAnalysis | null>(null);
+  const [scannedFirstPage, setScannedFirstPage] = useState(1);
+  const [scannedLastPage, setScannedLastPage] = useState(1);
+  const [scannedRotation, setScannedRotation] = useState(0);
+  const [scannedRangeConfirmed, setScannedRangeConfirmed] = useState(false);
+  const [readingRevised, setReadingRevised] = useState(false);
+  const [revisedProgress, setRevisedProgress] = useState<OcrProgress | null>(null);
+  const [otherSchedules, setOtherSchedules] = useState<File[]>([]);
+  const [otherAnalyses, setOtherAnalyses] = useState<Array<{ name: string; result?: ScheduleAnalysis; error?: string }>>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [firstOriginalPage, setFirstOriginalPage] = useState(5);
@@ -150,7 +159,7 @@ export default function ScheduleBuilder() {
       }
     }
     setFiles((currentFiles) => ({ ...currentFiles, [kind]: { name: file.name, size: file.size, file, sheets, truckSheets, tripRows, parkingLocations } }));
-    if (kind === "source") setAnalysis(null);
+    if (kind === "source") { setAnalysis(null); setRevisedOcr(null); setOtherAnalyses([]); setScannedRangeConfirmed(false); }
     if (kind === "rates") {
       setOriginalAnalysis(null);
       setPageRangeConfirmed(false);
@@ -174,11 +183,40 @@ export default function ScheduleBuilder() {
     try {
       const result = await parseUspsSchedule(source);
       setAnalysis(result);
+      setRevisedOcr(null);
+      setScannedLastPage(result.pageCount);
+      const references: Array<{ name: string; result?: ScheduleAnalysis; error?: string }> = [];
+      for (const file of otherSchedules) {
+        try {
+          references.push({ name: file.name, result: await parseUspsSchedule(file) });
+        } catch (error) {
+          references.push({ name: file.name, error: error instanceof Error ? error.message : "This PDF could not be read." });
+        }
+      }
+      setOtherAnalyses(references);
       if (result.contractNumber) setContract(result.contractNumber);
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : "The PDF could not be analyzed.");
     } finally {
       setAnalyzing(false);
+    }
+  }
+
+  async function analyzeScannedRevised() {
+    const source = files.source?.file;
+    if (!source || !scannedRangeConfirmed) return;
+    setReadingRevised(true);
+    setAnalysisError("");
+    try {
+      const result = await parseScannedUspsSchedule(source, scannedFirstPage, scannedLastPage, scannedRotation, setRevisedProgress);
+      setRevisedOcr(result);
+      setAnalysis(result);
+      if (result.contractNumber) setContract(result.contractNumber);
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "The scanned schedule could not be read.");
+    } finally {
+      setReadingRevised(false);
+      setRevisedProgress(null);
     }
   }
 
@@ -212,6 +250,15 @@ export default function ScheduleBuilder() {
           {files[slot.kind] ? <strong className="selected-file">✓ {files[slot.kind]?.name} · {fileSize(files[slot.kind]?.size || 0)}</strong> : <strong>Choose file</strong>}
         </label>)}
       </div>
+      <div className="service-change-intake">
+        <div><span className="upload-card-title">Other official schedule versions</span><p>Optional: select multiple searchable USPS schedule PDFs for the same contract. Each file is read separately, with its own stated annual miles and page number. Keep scanned signed/rate packets in the restricted original slot above.</p></div>
+        <label className="hub-secondary-link"><input type="file" accept=".pdf" multiple onChange={(event) => {
+          const selected = Array.from(event.target.files || []).filter((file) => /\.pdf$/i.test(file.name));
+          setOtherSchedules(selected);
+          setOtherAnalyses([]);
+        }} />Choose other versions</label>
+      </div>
+      {otherSchedules.length > 0 && <p className="coming-note">Other versions: {otherSchedules.map((file) => file.name).join(" · ")}</p>}
       <div className="service-change-intake">
         <div><span className="upload-card-title">Service-change exhibits</span><p>Add every SV/RTO/change exhibit. Multiple effective dates in one PDF remain separate timeline events.</p></div>
         <label className="hub-secondary-link"><input type="file" accept=".pdf" multiple onChange={(event) => chooseServiceChanges(event.target.files)} />Add change exhibits</label>
@@ -249,10 +296,23 @@ export default function ScheduleBuilder() {
       {workbookSheets.length > 0 && <div className="detected-sheets"><strong>Workbook tabs detected</strong><span>{workbookSheets.join(" · ")}</span></div>}
       <button className="primary-link schedule-action" type="button" disabled={!ready || analyzing} onClick={() => void analyze()}>{analyzing ? "Analyzing on this device…" : "Analyze revised schedule"}</button>
       {analysisError && <p className="analysis-error">{analysisError}</p>}
+      {analysis && !revisedOcr && analysis.tripIds.length === 0 && analysis.annualMiles == null && <div className="reviewer-totals">
+        <div><p className="eyebrow">Scanned PDF</p><h4>Read revised schedule with local OCR</h4><span>No selectable schedule text was found. Choose only the schedule pages and their orientation. OCR stays on this device.</span></div>
+        <div className="page-range-fields">
+          <label>First schedule page<input type="number" min="1" max={analysis.pageCount} value={scannedFirstPage} onChange={(event) => { setScannedFirstPage(Number(event.target.value)); setScannedRangeConfirmed(false); }} /></label>
+          <label>Last schedule page<input type="number" min="1" max={analysis.pageCount} value={scannedLastPage} onChange={(event) => { setScannedLastPage(Number(event.target.value)); setScannedRangeConfirmed(false); }} /></label>
+          <label>Turn scanned pages<select value={scannedRotation} onChange={(event) => { setScannedRotation(Number(event.target.value)); setScannedRangeConfirmed(false); }}><option value={0}>No rotation</option><option value={90}>90° clockwise</option><option value={270}>90° counterclockwise</option><option value={180}>180°</option></select></label>
+        </div>
+        <label className="range-confirmation"><input type="checkbox" checked={scannedRangeConfirmed} onChange={(event) => setScannedRangeConfirmed(event.target.checked)} /><span>I checked this PDF and confirm pages {scannedFirstPage}–{scannedLastPage} contain schedule information only, with no signature or rate-only pages.</span></label>
+        <button className="primary-link schedule-action" type="button" disabled={!scannedRangeConfirmed || readingRevised} onClick={() => void analyzeScannedRevised()}>{readingRevised ? "Reading scanned schedule locally…" : "Read scanned revised schedule"}</button>
+        {revisedProgress && <div className="ocr-progress"><div><strong>PDF page {revisedProgress.page}</strong><span>{revisedProgress.status}</span></div><progress max="1" value={revisedProgress.progress} /></div>}
+      </div>}
       {analysis && <div className="analysis-results">
         <div className="analysis-result-heading"><div><p className="eyebrow">Initial reconciliation</p><h3>{analysis.warnings.length ? "Review required" : "Source recognized"}</h3></div><span className={analysis.warnings.length ? "review-waiting" : "review-ready"}>{analysis.warnings.length ? `${analysis.warnings.length} warning${analysis.warnings.length === 1 ? "" : "s"}` : "Checks passed"}</span></div>
         <div className="analysis-metrics"><div><span>PDF pages</span><strong>{analysis.pageCount}</strong></div><div><span>Trips found</span><strong>{analysis.tripIds.length}</strong></div><div><span>Frequency codes</span><strong>{analysis.frequencyCodes.length}</strong></div><div><span>Effective dates</span><strong>{analysis.effectiveDates.length}</strong></div></div>
-        <dl className="analysis-details"><div><dt>Contract</dt><dd>{analysis.contractNumber || "Not confirmed"}</dd></div><div><dt>Trips</dt><dd>{analysis.tripIds.join(", ") || "None confirmed"}</dd></div><div><dt>Frequencies</dt><dd>{analysis.frequencyCodes.map((item) => `${item.code} (${item.description})`).join(" · ") || "None confirmed"}</dd></div><div><dt>Dates found</dt><dd>{analysis.effectiveDates.join(" · ") || "None confirmed"}</dd></div><div><dt>Annual schedule</dt><dd>{analysis.annualMiles == null ? "Miles not confirmed" : `${analysis.annualMiles.toLocaleString()} miles`} · {analysis.annualHours == null ? "Hours not confirmed" : `${analysis.annualHours.toLocaleString()} hours`}</dd></div><div><dt>Change summary</dt><dd>{analysis.changeSummaryFound ? "Found" : "Not found"}</dd></div></dl>
+        {revisedOcr && <p className="analysis-warning">OCR confidence: {revisedOcr.averageConfidence.toFixed(1)}%. These are draft readings from pages {scannedFirstPage}–{scannedLastPage}; verify every stated total and trip against the PDF.</p>}
+        <dl className="analysis-details"><div><dt>Contract</dt><dd>{analysis.contractNumber || "Not confirmed"}</dd></div><div><dt>Trips</dt><dd>{analysis.tripIds.join(", ") || "None confirmed"}</dd></div><div><dt>Frequencies</dt><dd>{analysis.frequencyCodes.map((item) => `${item.code} (${item.description})`).join(" · ") || "None confirmed"}</dd></div><div><dt>Dates found</dt><dd>{analysis.effectiveDates.join(" · ") || "None confirmed"}</dd></div><div><dt>Stated annual schedule</dt><dd>{analysis.annualMiles == null ? "Miles not confirmed" : `${analysis.annualMiles.toLocaleString()} miles (PDF page ${analysis.annualMilesPage})`} · {analysis.annualHours == null ? "Hours not confirmed" : `${analysis.annualHours.toLocaleString()} hours (PDF page ${analysis.annualHoursPage})`}</dd></div><div><dt>Change summary</dt><dd>{analysis.changeSummaryFound ? "Found" : "Not found"}</dd></div></dl>
+        {otherAnalyses.length > 0 && <div className="comparison-summary"><strong>Other schedule versions (separate totals)</strong>{otherAnalyses.map(({ name, result, error }) => <p key={name}><strong>{name}</strong>: {error || (result ? `${result.contractNumber || "Contract unconfirmed"} · ${result.annualMiles?.toLocaleString() ?? "Miles unconfirmed"} annual miles${result.annualMilesPage ? ` (page ${result.annualMilesPage})` : ""} · ${result.annualHours?.toLocaleString() ?? "Hours unconfirmed"} annual hours${result.contractNumber && result.contractNumber !== analysis.contractNumber ? " · CONTRACT MISMATCH" : ""}${result.warnings.some((warning) => warning.startsWith("Different annual")) ? " · CONFLICTING TOTALS" : ""}` : "Could not analyze")}</p>)}</div>}
         {(files.simplified || files.driver) && <div className="comparison-summary"><strong>Comparison files</strong><span>{files.simplified?.truckSheets ?? 0} simplified truck tabs · {files.driver?.tripRows ?? 0} driver-schedule trip rows · {files.driver?.parkingLocations?.length ?? 0} named parking groups</span></div>}
         {analysis.warnings.map((warning) => <p className="analysis-warning" key={warning}>⚠ {warning}</p>)}
       </div>}
@@ -266,7 +326,7 @@ export default function ScheduleBuilder() {
         <label>Last schedule page<input type="number" min="1" value={lastOriginalPage} onChange={(event) => { setLastOriginalPage(Number(event.target.value)); setPageRangeConfirmed(false); }} /></label>
         <label>Turn scanned pages<select value={originalRotation} onChange={(event) => { setOriginalRotation(Number(event.target.value)); setPageRangeConfirmed(false); }}><option value={90}>90° clockwise</option><option value={270}>90° counterclockwise</option><option value={180}>180°</option><option value={0}>No rotation</option></select></label>
       </div>
-      <label className="range-confirmation"><input type="checkbox" checked={pageRangeConfirmed} onChange={(event) => setPageRangeConfirmed(event.target.checked)} /><span>I checked the PDF and confirm pages 5–27 contain schedule/location information only, with no signature or rate-only pages, and the selected rotation makes them readable.</span></label>
+      <label className="range-confirmation"><input type="checkbox" checked={pageRangeConfirmed} onChange={(event) => setPageRangeConfirmed(event.target.checked)} /><span>I checked the PDF and confirm pages {firstOriginalPage}–{lastOriginalPage} contain schedule/location information only, with no signature or rate-only pages, and the selected rotation makes them readable.</span></label>
       <button className="primary-link schedule-action" type="button" disabled={!files.rates || !analysis || !pageRangeConfirmed || readingOriginal} onClick={() => void analyzeOriginal()}>{readingOriginal ? "Reading original schedule locally…" : "Compare original to revised schedule"}</button>
       {!analysis && files.rates && <p className="coming-note">Analyze the revised USPS schedule in Step 3 first.</p>}
       {ocrProgress && <div className="ocr-progress"><div><strong>PDF page {ocrProgress.page}</strong><span>{ocrProgress.status}</span></div><progress max="1" value={ocrProgress.progress} /></div>}
@@ -281,6 +341,7 @@ export default function ScheduleBuilder() {
             <label>Original annual hours<input inputMode="decimal" value={verifiedOriginalHours} onChange={(event) => { setVerifiedOriginalHours(event.target.value); setTotalsConfirmed(false); }} placeholder="Example: 21373.84" /></label>
           </div>
           <label className="range-confirmation"><input type="checkbox" checked={totalsConfirmed} disabled={!verifiedOriginalMiles || !verifiedOriginalHours} onChange={(event) => setTotalsConfirmed(event.target.checked)} /><span>I independently added the original schedule miles and hours and confirm these entries match my calculation.</span></label>
+          {totalsConfirmed && confirmedOriginalMiles != null && originalAnalysis.annualMiles != null && Math.abs(confirmedOriginalMiles - originalAnalysis.annualMiles) > 0.01 && <p className="analysis-error">The PDF states {originalAnalysis.annualMiles.toLocaleString()} annual miles on page {originalAnalysis.annualMilesPage}, but the independently added trips total {confirmedOriginalMiles.toLocaleString()}. Check the contract and trip rows before using either value for a cost plan.</p>}
           {totalsConfirmed && confirmedOriginalMiles != null && confirmedOriginalHours != null && analysis?.annualMiles != null && analysis?.annualHours != null && <div className="verified-change-grid">
             <div><span>Verified miles change</span><strong>{(analysis.annualMiles - confirmedOriginalMiles).toLocaleString(undefined, { maximumFractionDigits: 2, signDisplay: "always" })}</strong></div>
             <div><span>Verified hours change</span><strong>{(analysis.annualHours - confirmedOriginalHours).toLocaleString(undefined, { maximumFractionDigits: 2, signDisplay: "always" })}</strong></div>
@@ -290,8 +351,8 @@ export default function ScheduleBuilder() {
           <div className={comparison.contractMismatch ? "difference-alert" : ""}><span>Contract check</span><strong>{comparison.contractMismatch ? `Mismatch: ${originalAnalysis.contractNumber} / ${analysis?.contractNumber}` : "Matches"}</strong></div>
           <div className="difference-alert"><span>Trip comparison</span><strong>Withheld pending row-by-row validation</strong><small>{originalAnalysis.tripIds.length} OCR candidates{files.driver?.tripRows ? ` · ${files.driver.tripRows} driver-schedule rows` : ""}. Values such as vehicle code 200 are not accepted as trips.</small></div>
           <div><span>Frequency changes</span><strong>{[...comparison.addedFrequencies.map((code) => `+${code}`), ...comparison.removedFrequencies.map((code) => `−${code}`)].join(", ") || "None detected"}</strong></div>
-          <div><span>Original annual miles</span><strong>{originalAnalysis.annualMiles == null ? "Not confirmed" : originalAnalysis.annualMiles.toLocaleString()}</strong></div>
-          <div><span>Revised annual miles</span><strong>{analysis?.annualMiles == null ? "Not confirmed" : analysis.annualMiles.toLocaleString()}</strong></div>
+          <div><span>Original stated annual miles</span><strong>{originalAnalysis.annualMiles == null ? "Not confirmed" : `${originalAnalysis.annualMiles.toLocaleString()} (PDF page ${originalAnalysis.annualMilesPage})`}</strong></div>
+          <div><span>Revised stated annual miles</span><strong>{analysis?.annualMiles == null ? "Not confirmed" : `${analysis.annualMiles.toLocaleString()} (PDF page ${analysis.annualMilesPage})`}</strong></div>
           <div><span>OCR miles change</span><strong>{comparison.milesDelta == null ? "Not available" : `${comparison.milesDelta.toLocaleString(undefined, { maximumFractionDigits: 2, signDisplay: "always" })} · Draft only`}</strong></div>
           <div><span>Original annual hours</span><strong>{originalAnalysis.annualHours == null ? "Not confirmed" : originalAnalysis.annualHours.toLocaleString()}</strong></div>
           <div><span>Revised annual hours</span><strong>{analysis?.annualHours == null ? "Not confirmed" : analysis.annualHours.toLocaleString()}</strong></div>
@@ -303,7 +364,7 @@ export default function ScheduleBuilder() {
       </div>}
     </section>
 
-    {analysis && <ScheduleTripReconciliation
+    {analysis && !revisedOcr?.lowConfidence && <ScheduleTripReconciliation
       contract={contract}
       effectiveDate={effectiveDate}
       officialTrips={analysis.tripIds}
