@@ -678,3 +678,46 @@ button, input { font: inherit; }
   .timecard-print-comparison thead{display:table-header-group}
   .timecard-print-comparison tr{break-inside:avoid}
 }
+
+/* Fuel report print choices */
+.fuel-print-contract-title,.fuel-print-driver-title{display:none}
+.fuel-print-choices{margin-top:6px;color:var(--navy);font-size:.76rem}
+.fuel-print-choices>summary{width:max-content;cursor:pointer;font-weight:800}
+.fuel-print-choices>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 14px;margin-top:8px}
+.fuel-print-choices label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.fuel-print-choices input{accent-color:var(--navy)}
+@media(max-width:700px){.fuel-print-choices>div{grid-template-columns:1fr}}
+@media print{
+  .fuel-report-stack .fuel-screen-title{display:none!important}
+  .fuel-report-stack.fuel-print-contracts .fuel-print-contract-title,
+  .fuel-report-stack.fuel-print-drivers .fuel-print-driver-title{display:block!important}
+  .fuel-report-stack.fuel-print-contracts .fuel-driver-totals,
+  .fuel-report-stack.fuel-print-drivers .fuel-monthly-detail,
+  .fuel-report-stack.fuel-print-drivers .fuel-contract-totals{display:none!important}
+  .fuel-report-stack.fuel-print-drivers.fuel-include-driver-contracts .fuel-contract-totals,
+  .fuel-report-stack.fuel-print-contracts.fuel-include-monthly .fuel-monthly-detail{display:block!important}
+  .fuel-report-stack .fuel-monthly-detail,
+  .fuel-report-stack .fuel-types-detail,
+  .fuel-report-stack .fuel-alerts-detail{display:none!important}
+  .fuel-report-stack.fuel-include-types .fuel-types-detail,
+  .fuel-report-stack.fuel-include-alerts .fuel-alerts-detail{display:block!important}
+  .fuel-report-stack>.fuel-mileage-wrapper.active{display:none!important}
+  .fuel-report-stack.fuel-include-estimate>.fuel-mileage-wrapper.active{display:block!important}
+  .fuel-report-stack .fuel-report-alert-section{break-before:auto;page-break-before:auto}
+}
+.fuel-print-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+.fuel-month-group h4{margin:13px 18px 6px;color:var(--navy-deep);font-size:.9rem}
+.fuel-month-group+.fuel-month-group{border-top:1px solid var(--line)}
+@media(max-width:700px){.fuel-print-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media print{
+ .fuel-print-summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:1px}
+ .fuel-print-summary>div{padding:7px 10px}
+ .fuel-print-summary strong{font-size:11pt}
+ .fuel-month-group h4{margin:12px 0 5px;font-size:10pt;break-after:avoid;page-break-after:avoid}
+ .fuel-month-group table thead{display:table-header-group}
+}
+@media print{
+ .fuel-report-stack.fuel-print-contracts.fuel-include-monthly .fuel-monthly-detail{display:block!important}
+ .fuel-report-stack.fuel-print-drivers.fuel-include-driver-contracts .fuel-contract-totals{display:block!important}
+ .fuel-monthly-report-table th:nth-child(n+2),.fuel-monthly-report-table td:nth-child(n+2){text-align:right}
+}
