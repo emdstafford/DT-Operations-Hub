@@ -42,6 +42,7 @@ export type ProcessedFuelReport = {
   totalFuelGallons: number;
   totalNetCost: number;
   gasolineRows: number;
+  suspectContractRows: number;
   rows: FuelTransactionInput[];
 };
 
@@ -118,6 +119,7 @@ export async function processFuelReport(file: File): Promise<ProcessedFuelReport
   const transactionGroups = new Set<string>();
   const rows: FuelTransactionInput[] = [];
   let duplicateRowsRemoved = 0;
+  let suspectContractRows = 0;
 
   for (const row of source) {
     const transactionDate = isoDate(row["Transaction Date"]);
@@ -136,6 +138,7 @@ export async function processFuelReport(file: File): Promise<ProcessedFuelReport
     }
     uniqueRows.add(uniqueKey);
     transactionGroups.add(groupKey);
+    if (!/^[0-9][A-Z0-9]{4,5}$/.test(text(row["Misc 2"]).toUpperCase())) suspectContractRows++;
     const odometer = text(row["Odometer"]) ? numberValue(row["Odometer"]) : null;
     const milesDriven = text(row["Miles Driven"]) ? numberValue(row["Miles Driven"]) : null;
     rows.push({
@@ -181,6 +184,7 @@ export async function processFuelReport(file: File): Promise<ProcessedFuelReport
     totalFuelGallons: rows.filter((row) => row.product_category === "diesel" || row.product_category === "gasoline").reduce((sum, row) => sum + row.unit_gallons, 0),
     totalNetCost: rows.reduce((sum, row) => sum + row.net_cost, 0),
     gasolineRows: rows.filter((row) => row.product_category === "gasoline").length,
+    suspectContractRows,
     rows,
   };
 }

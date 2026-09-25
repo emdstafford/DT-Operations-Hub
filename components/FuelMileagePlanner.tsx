@@ -18,6 +18,7 @@ export type FuelMileageRow = {
 };
 
 type Purchase = { contract_number: string; purchased_gallons: number; purchased_fuel_cost: number };
+type PlanDraft = { through: string; miles: string; tractors: string; straight: string; vans: string; mpg: string; threshold: string };
 const number = (value: number, decimals = 0) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: decimals, minimumFractionDigits: decimals });
 const currency = (value: number) => Number(value || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
 const DEFAULT_MPG = { tractor: 6.4, straight: 8.5, van: 12 } as const;
@@ -42,6 +43,8 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
   const [vans, setVans] = useState("");
   const [threshold, setThreshold] = useState("15");
   const [saving, setSaving] = useState(false);
+  const [editingKey, setEditingKey] = useState("");
+  const [draft, setDraft] = useState<PlanDraft | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const selected = selectedContract ? [selectedContract] : contracts;
@@ -133,6 +136,61 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
     setSaving(false);
   }
 
+  function editSavedPlan(plan: MileagePlan) {
+    setEditingKey(`${plan.contract_number}|${plan.effective_start}`);
+    setDraft({
+      through: plan.effective_end ?? "", miles: String(plan.annual_miles),
+      tractors: plan.tractor_count == null ? "" : String(plan.tractor_count),
+      straight: plan.straight_truck_count == null ? "" : String(plan.straight_truck_count),
+      vans: plan.van_count == null ? "" : String(plan.van_count),
+      mpg: String(plan.assumed_mpg), threshold: String(plan.alert_above_percent),
+    });
+    setError(""); setMessage("");
+  }
+
+  function updateDraftCount(field: "tractors" | "straight" | "vans", value: string) {
+    setDraft((current) => {
+      if (!current) return current;
+      const next = { ...current, [field]: value };
+      const counts = [next.tractors, next.straight, next.vans];
+      if (counts.every((count) => count === "" || (Number.isInteger(Number(count)) && Number(count) >= 0)) && counts.some((count) => Number(count) > 0)) {
+        next.mpg = String(mixedMpg(Number(next.tractors), Number(next.straight), Number(next.vans)));
+      }
+      return next;
+    });
+  }
+
+  async function saveSavedPlan(plan: MileagePlan) {
+    if (!canEdit || !draft) return;
+    const miles = Number(draft.miles), assumedMpg = Number(draft.mpg), alert = Number(draft.threshold);
+    const counts = [draft.tractors, draft.straight, draft.vans];
+    const countsValid = counts.every((value) => value === "" || (Number.isInteger(Number(value)) && Number(value) >= 0)) &&
+      (counts.every((value) => value === "") || counts.some((value) => Number(value) > 0));
+    if (!draft.miles || !draft.mpg || !draft.threshold || !Number.isFinite(miles) || miles <= 0 ||
+      !Number.isFinite(assumedMpg) || assumedMpg <= 0 || !Number.isFinite(alert) || alert < 0 || alert > 200 ||
+      !countsValid || (draft.through && draft.through < plan.effective_start)) {
+      setError("Enter annual miles and MPG above zero, a review threshold from 0% to 200%, and valid vehicle counts. The end date cannot precede the start date.");
+      return;
+    }
+    setSaving(true); setError(""); setMessage("");
+    const { data: user } = await supabase.auth.getUser();
+    const { data: saved, error: saveError } = await supabase.from("fuel_contract_mileage_plans").update({
+      effective_end: draft.through || null, annual_miles: miles, assumed_mpg: assumedMpg,
+      tractor_count: draft.tractors === "" ? null : Number(draft.tractors),
+      straight_truck_count: draft.straight === "" ? null : Number(draft.straight),
+      van_count: draft.vans === "" ? null : Number(draft.vans),
+      alert_above_percent: alert, updated_by: user.user?.id, updated_at: new Date().toISOString(),
+    }).eq("contract_number", plan.contract_number).eq("effective_start", plan.effective_start).select("contract_number");
+    if (saveError || !saved?.length) {
+      setError(saveError?.code === "23P01" ? "This end date overlaps another plan for the contract." : saveError?.message || "The plan could not be updated. Refresh and try again.");
+    } else {
+      setEditingKey(""); setDraft(null);
+      await refresh();
+      setMessage(`Updated ${plan.contract_number} starting ${plan.effective_start}. Estimates now use the saved values.`);
+    }
+    setSaving(false);
+  }
+
   return <section className="panel fuel-mileage-panel">
     <div className="panel-heading"><div><p className="eyebrow">Fuel planning</p><h2>Planned miles and fuel purchased</h2><span>Estimate uses annual schedule miles divided across the calendar year, then the MPG assumption. Purchases may shift between periods when tanks are filled.</span></div></div>
     {error && <p className="alert alert-error">{error}</p>}{message && <p className="alert fuel-success">{message}</p>}
@@ -162,7 +220,20 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
       <label>Flag when over expected by (%)<input type="number" min="0" max="200" step="0.1" value={threshold} onChange={(event) => setThreshold(event.target.value)} /></label>
       <button type="button" className="primary-link" disabled={saving} onClick={() => void savePlan()}>{saving ? "Saving…" : "Save mileage plan"}</button>
     </div><p>For a service change, set the previous plan’s end date, then add the new annual miles with its own effective start date. You can select an existing start date to revise its values.</p></details>}
-    {plans.length > 0 && <details className="fuel-mileage-editor"><summary>Saved plan dates ({plans.length})</summary><div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>From</th><th>Through</th><th>Annual miles</th><th>Tractors</th><th>Straight trucks</th><th>Vans</th><th>MPG</th><th>Review above</th><th></th></tr></thead><tbody>{plans.map((plan) => <tr key={`${plan.contract_number}-${plan.effective_start}`}><td>{plan.contract_number}</td><td>{plan.effective_start}</td><td>{plan.effective_end || "Current"}</td><td>{number(plan.annual_miles,1)}</td><td>{plan.tractor_count ?? "—"}</td><td>{plan.straight_truck_count ?? "—"}</td><td>{plan.van_count ?? "—"}</td><td>{number(plan.assumed_mpg,2)}</td><td>{number(plan.alert_above_percent,1)}%</td><td>{canEdit && <button className="hub-secondary-link" type="button" onClick={() => choosePlan(plan.contract_number,plan.effective_start)}>Edit</button>}</td></tr>)}</tbody></table></div></details>}
+    {plans.length > 0 && <details className="fuel-mileage-editor"><summary>Saved plan dates ({plans.length}) · Click Edit to update a row</summary><div className="table-scroll"><table className="data-table fuel-saved-plan-table"><thead><tr><th>Contract</th><th>From</th><th>Through</th><th>Annual miles</th><th>Tractors</th><th>Straight trucks</th><th>Vans</th><th>MPG</th><th>Review above</th><th>Action</th></tr></thead><tbody>{plans.map((plan) => {
+      const active = editingKey === `${plan.contract_number}|${plan.effective_start}` && draft;
+      return <tr key={`${plan.contract_number}-${plan.effective_start}`} className={active ? "fuel-inline-plan" : ""}>
+        <td><strong>{plan.contract_number}</strong></td><td>{plan.effective_start}</td>
+        <td>{active ? <input aria-label={`Through date for ${plan.contract_number}`} type="date" value={draft.through} onChange={(event) => setDraft({ ...draft, through: event.target.value })} /> : plan.effective_end || "Current"}</td>
+        <td>{active ? <input aria-label={`Annual miles for ${plan.contract_number}`} type="number" min="0.01" step="0.1" value={draft.miles} onChange={(event) => setDraft({ ...draft, miles: event.target.value })} /> : number(plan.annual_miles,1)}</td>
+        <td>{active ? <input aria-label={`Tractors for ${plan.contract_number}`} type="number" min="0" step="1" value={draft.tractors} onChange={(event) => updateDraftCount("tractors", event.target.value)} /> : plan.tractor_count ?? "—"}</td>
+        <td>{active ? <input aria-label={`Straight trucks for ${plan.contract_number}`} type="number" min="0" step="1" value={draft.straight} onChange={(event) => updateDraftCount("straight", event.target.value)} /> : plan.straight_truck_count ?? "—"}</td>
+        <td>{active ? <input aria-label={`Vans for ${plan.contract_number}`} type="number" min="0" step="1" value={draft.vans} onChange={(event) => updateDraftCount("vans", event.target.value)} /> : plan.van_count ?? "—"}</td>
+        <td>{active ? <input aria-label={`MPG for ${plan.contract_number}`} type="number" min="0.01" step="0.01" value={draft.mpg} onChange={(event) => setDraft({ ...draft, mpg: event.target.value })} /> : number(plan.assumed_mpg,2)}</td>
+        <td>{active ? <input aria-label={`Review threshold for ${plan.contract_number}`} type="number" min="0" max="200" step="0.1" value={draft.threshold} onChange={(event) => setDraft({ ...draft, threshold: event.target.value })} /> : `${number(plan.alert_above_percent,1)}%`}</td>
+        <td>{canEdit && (active ? <div className="fuel-inline-actions"><button className="primary-link" type="button" disabled={saving} onClick={() => void saveSavedPlan(plan)}>{saving ? "Saving…" : "Save"}</button><button className="hub-secondary-link" type="button" disabled={saving} onClick={() => { setEditingKey(""); setDraft(null); setError(""); }}>Cancel</button></div> : <button className="hub-secondary-link" type="button" onClick={() => editSavedPlan(plan)}>Edit</button>)}</td>
+      </tr>;
+    })}</tbody></table></div><p className="fuel-mileage-note">Changing vehicle counts recalculates MPG. You can then adjust MPG manually before saving. Saved plan start dates stay fixed.</p></details>}
     <div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Planned miles</th><th>Expected gallons</th><th>Purchased gallons</th><th>Difference</th><th>Fuel spend</th><th>Status</th></tr></thead><tbody>{rows.map((row) => <tr key={row.contract} className={row.status === "review" ? "fuel-policy-alert-row" : ""}><td className="font-semibold text-navy">{row.contract}</td><td>{row.status === "incomplete" ? "—" : number(row.plannedMiles,1)}</td><td>{row.status === "incomplete" ? "—" : number(row.expectedGallons,1)}</td><td>{number(row.purchasedGallons,1)}</td><td>{row.status === "incomplete" ? "—" : `${row.variancePercent >= 0 ? "+" : ""}${number(row.variancePercent,1)}%`}</td><td>{currency(row.purchasedFuelCost)}</td><td>{row.status === "incomplete" ? `Plan needed (${row.coveredDays}/${row.totalDays} days)` : row.status === "review" ? `Needs review (>${number(row.alertAbovePercent,1)}%)` : "Within estimate"}</td></tr>)}</tbody></table></div>
     <p className="fuel-mileage-note">A fuel variance measures purchases against an MPG estimate; it does not confirm actual miles driven, misuse, or contract profit. DEF and fees are excluded. Changing an MPG assumption updates the estimate for all dates in that plan.</p>
   </section>;

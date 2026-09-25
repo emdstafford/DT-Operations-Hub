@@ -732,3 +732,26 @@ button, input { font: inherit; }
  .fuel-contract-breakdown-table{min-width:0!important;font-size:7.4pt!important}
  .fuel-contract-breakdown-table th,.fuel-contract-breakdown-table td{padding:5px 4px!important}
 }
+
+/* Review Comdata labels and edit saved fuel mileage plans in place. */
+.fuel-cleanup-panel>summary{padding:14px 18px;color:var(--navy);font-weight:800;cursor:pointer}
+.fuel-cleanup-body{border-top:1px solid var(--line);padding:15px 18px}
+.fuel-cleanup-body>p:first-child{margin:0 0 12px;color:var(--muted);font-size:.78rem;line-height:1.5}
+.fuel-cleanup-controls{display:flex;align-items:end;flex-wrap:wrap;gap:12px}
+.fuel-cleanup-controls label,.fuel-cleanup-edit label{display:grid;gap:5px;color:var(--navy);font-size:.75rem;font-weight:800}
+.fuel-cleanup-controls input[type="search"],.fuel-cleanup-edit input{min-width:min(100%,280px);min-height:38px;border:1px solid var(--line);border-radius:7px;padding:7px 10px;color:var(--ink);background:#fff}
+.fuel-cleanup-controls .fuel-cleanup-all{display:flex;align-items:center;gap:7px;min-height:38px}
+.fuel-cleanup-all input{accent-color:var(--navy)}
+.fuel-cleanup-note{margin:12px 0;color:var(--muted);font-size:.74rem}
+.fuel-cleanup-scroll{max-height:430px}
+.fuel-cleanup-edit{display:grid;gap:10px;margin-top:14px;border:1px solid #b8cbdc;border-radius:8px;padding:14px;background:#f5f8fb}
+.fuel-cleanup-edit>span{color:var(--muted);font-size:.75rem}
+.fuel-inline-actions{display:flex;flex-wrap:wrap;gap:7px}
+.fuel-inline-actions button{white-space:nowrap}
+.fuel-saved-plan-table{min-width:1100px}
+.fuel-saved-plan-table .fuel-inline-plan{background:#eef4f8}
+.fuel-saved-plan-table input{width:100%;min-width:78px;min-height:35px;border:1px solid var(--line);border-radius:6px;padding:5px 6px;color:var(--ink);background:#fff;font:inherit;font-size:.76rem}
+.fuel-saved-plan-table input[type="date"]{min-width:128px}
+.fuel-saved-plan-table td:nth-child(5) input,.fuel-saved-plan-table td:nth-child(6) input,.fuel-saved-plan-table td:nth-child(7) input{min-width:58px}
+@media(max-width:680px){.fuel-cleanup-controls{display:grid;align-items:stretch}.fuel-cleanup-controls input[type="search"]{width:100%}}
+@media print{.fuel-cleanup-panel,.fuel-saved-plan-table .fuel-inline-actions{display:none!important}}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccessRole } from "@/components/AccessRole";
 import FuelMileagePlanner, { type FuelMileageRow } from "@/components/FuelMileagePlanner";
+import FuelDataCleanup from "@/components/FuelDataCleanup";
 import { processFuelReport, type ProcessedFuelReport } from "@/lib/processFuelReport";
 import { supabase } from "@/lib/supabase";
 
@@ -292,9 +293,11 @@ export default function FuelReports() {
       <div><p className="eyebrow">Import Comdata</p><h2>Upload Transaction Listing</h2><p>The file stays inside the secured DT system. Driver-license fields, VINs, and license plates are not stored.</p></div>
       <label className="primary-link fuel-file-button">{parsing ? "Reading file…" : "Choose Comdata file"}<input type="file" accept=".xlsx,.xls" disabled={parsing || uploading} onChange={(event) => void selectFile(event.target.files?.[0])} /></label>
     </div></details>}
+    {canUpload && <FuelDataCleanup start={start} end={end} onCorrected={() => { setFuelRevision((value) => value + 1); void loadOptions(false); }} />}
     {preview && <section className="panel fuel-import-preview">
       <div className="panel-heading"><div><p className="eyebrow">Ready to import</p><h2>{preview.fileName}</h2></div><span>{displayDate(preview.periodStart)} – {displayDate(preview.periodEnd)}</span></div>
       <div className="fuel-preview-grid"><div><span>Source rows</span><strong>{number(preview.sourceRows)}</strong></div><div><span>Transactions</span><strong>{number(preview.transactionCount)}</strong></div><div><span>Fuel gallons</span><strong>{number(preview.totalFuelGallons, 1)}</strong></div><div><span>Net cost</span><strong>{currency(preview.totalNetCost)}</strong></div><div className="fuel-gas-preview"><span>Gasoline lines</span><strong>{number(preview.gasolineRows)}</strong></div></div>
+      {preview.suspectContractRows > 0 && <p className="fuel-preview-note">{number(preview.suspectContractRows)} line items have a blank or non-contract Misc 2 label. After import, open “Review Comdata contract labels” to correct any that should belong to a contract.</p>}
       {preview.duplicateRowsRemoved > 0 && <p className="fuel-preview-note">{number(preview.duplicateRowsRemoved)} exact duplicate row{preview.duplicateRowsRemoved === 1 ? " was" : "s were"} removed during validation.</p>}
       <div className="fuel-preview-actions"><button className="clear-filters" disabled={uploading} onClick={() => setPreview(null)}>Cancel</button><button className="primary-link" disabled={uploading} onClick={() => void importReport()}>{uploading ? `Saving… ${progress}%` : "Import fuel report"}</button></div>
       {uploading && <progress className="fuel-import-progress" max="100" value={progress} />}
