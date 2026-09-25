@@ -604,6 +604,7 @@ button, input { font: inherit; }
 .timecard-person{margin-top:16px}
 .timecard-person h3{margin:0 0 7px;color:var(--navy-deep);font-size:1rem}
 .timecard-person h3 span{margin-left:8px;color:var(--muted);font-size:.76rem;font-weight:600}
+.timecard-inline-comparison{margin:8px 0 12px;break-inside:avoid}.timecard-inline-comparison>strong{display:block;margin:0 0 4px;color:var(--navy);font-size:.72rem}.timecard-inline-comparison .table-scroll{max-height:none}.timecard-inline-comparison table{min-width:0;width:100%;table-layout:fixed;font-size:.75rem}.timecard-inline-comparison th,.timecard-inline-comparison td{text-align:right;padding:4px 7px!important}.timecard-inline-comparison th{background:#edf3f8;color:var(--navy-deep);font-weight:700}.timecard-inline-comparison td{background:#f8fafc}.timecard-inline-comparison td:last-child{font-weight:700}
 .timecard-person h4{margin:11px 0 6px;color:var(--navy);font-size:.8rem}
 .timecard-person h4 span{margin-left:7px;color:var(--muted);font-weight:600}
 .timecard-person p{margin:5px 0 12px;color:var(--muted);font-size:.78rem}
