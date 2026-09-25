@@ -53,8 +53,13 @@ export default function ContractSelector() {
       if (!active) return;
       const latestDay = latest.data?.period_end || today;
       setAnchor(latestDay);
-      const dates = preset("week", latestDay);
+      const query = new URLSearchParams(window.location.search);
+      const queryStart = query.get("start") || "";
+      const queryEnd = query.get("end") || "";
+      const hasDates = /^\d{4}-\d{2}-\d{2}$/.test(queryStart) && /^\d{4}-\d{2}-\d{2}$/.test(queryEnd);
+      const dates = hasDates ? { start: queryStart, end: queryEnd } : preset("week", latestDay);
       setStart(dates.start); setEnd(dates.end);
+      if (hasDates) setRange("custom");
       setOptions((contracts.data ?? []).map((row: { contract_number: string }) => row.contract_number));
       setAssignments((dated.data ?? []) as Assignment[]);
       setCurrentAssignments((current.data ?? []) as CurrentAssignment[]);

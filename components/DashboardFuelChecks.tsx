@@ -106,10 +106,13 @@ export default function DashboardFuelChecks({ start, end, contracts }: {
   const activeView = view;
   const matching = activeView === "over" ? over : planNeeded;
   const shown = showAll ? matching : matching.slice(0, 5);
+  const purchasedCost = purchases.reduce((sum, row) => sum + Number(row.purchased_fuel_cost || 0), 0);
+  const purchasedGallons = purchases.reduce((sum, row) => sum + Number(row.purchased_gallons || 0), 0);
 
   return <section className="panel dashboard-fuel-checks">
     <div className="panel-heading"><div><p className="eyebrow">Fuel and operations</p><h2>Contracts to check</h2><span>{start} – {end} · Visible to approved fuel users</span></div><Link className="hub-secondary-link" href="/fuel">Fuel Reports →</Link></div>
     {loading ? <div className="hub-loading">Checking contract fuel estimates…</div> : <>
+      <div className="dashboard-fuel-purchases"><div><span>Fuel spend on displayed contracts</span><strong>{purchasedCost.toLocaleString("en-US", { style: "currency", currency: "USD" })}</strong></div><div><span>Fuel gallons purchased</span><strong>{number(purchasedGallons, 1)}</strong></div></div>
       <div className="fuel-check-summary" role="group" aria-label="Fuel checks">
         <button type="button" className={activeView === "over" ? "active fuel-check-alert" : ""} onClick={() => { setView("over"); setShowAll(false); }} aria-pressed={activeView === "over"}><strong>{over.length}</strong><span>Over fuel estimate</span></button>
         <button type="button" className={activeView === "plan-needed" ? "active fuel-check-warning" : ""} onClick={() => { setView("plan-needed"); setShowAll(false); }} aria-pressed={activeView === "plan-needed"}><strong>{planNeeded.length}</strong><span>Need a mileage plan</span></button>

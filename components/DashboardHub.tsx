@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { OperationalNote } from "@/components/ContractOperationalNotes";
 import DashboardFuelChecks from "@/components/DashboardFuelChecks";
 import PeriodAnnotations from "@/components/PeriodAnnotations";
+import SupervisorReportOverview from "@/components/SupervisorReportOverview";
 import { supabase } from "@/lib/supabase";
 
 type Row = { period_start?: string; contract_number?: string; supervisor?: string; load_count: number; total_stops: number; completed_stops: number; incomplete_stops: number; completion_percent: number };
@@ -387,7 +388,6 @@ export default function DashboardHub() {
           <button className={rangeMode === "day" ? "active" : ""} onClick={() => chooseRange("day")}>Latest day</button>
           <button className={rangeMode === "week" ? "active" : ""} onClick={() => chooseRange("week")}>Latest week</button>
           <button className={rangeMode === "month" ? "active" : ""} onClick={() => chooseRange("month")}>Latest month</button>
-          <button className={maxCompletion === "95" ? "goal-filter active" : "goal-filter"} onClick={() => setMaxCompletion(maxCompletion === "95" ? "" : "95")}>Below 95%</button>
         </div>
         <div className="executive-date-fields">
           <label>From<input type="date" value={start} onChange={(event) => { setStart(event.target.value); setRangeMode("custom"); }} /></label>
@@ -472,15 +472,10 @@ export default function DashboardHub() {
           </section>;
         })}
       </section>}</>}
-      {dashboardView === "overview" && <section className="hub-grid dashboard-overview-grid">
-        <section className="panel hub-trend"><div className="panel-heading"><h2>Performance trend</h2><span>{grain === "day" ? "Click a day to see trips" : "Select Day view for trip drill-down"}</span></div><div className="trend-list">{data.trend.map((row) => <div className={`trend-row ${grain === "day" ? "trend-row-clickable" : ""}`} key={row.period_start}><div><button className="trend-day-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{row.period_start}</button><span>{percent(row.completion_percent)}</span></div><div className="trend-track"><i style={{width:`${Math.max(2, Number(row.incomplete_stops) / maxIncomplete * 100)}%`}} /></div><button className="trend-missed-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{number(row.incomplete_stops)} incomplete</button></div>)}</div></section>
-        <section className="panel attention-panel"><div className="panel-heading"><h2>Five contracts needing attention</h2><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="attention-list">{data.contracts.slice(0,5).map((row,index) => <Link key={row.contract_number} href={`/contracts/${encodeURIComponent(row.contract_number || "Unmapped")}?start=${start}&end=${end}`}><span>{index+1}</span><strong>{row.contract_number}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.incomplete_stops)} incomplete · <b className={`contract-health ${contractHealth(row.completion_percent).className}`}>{contractHealth(row.completion_percent).label}</b></small></Link>)}</div></section>
-      </section>}
+      {dashboardView === "overview" && <section className="panel attention-panel dashboard-attention-summary"><div className="panel-heading"><div><p className="eyebrow">USPS performance</p><h2>Contracts below 95%</h2></div><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="attention-list">{data.contracts.filter((row) => Number(row.completion_percent) < 0.95).slice(0,5).map((row,index) => <Link key={row.contract_number} href={`/contracts/${encodeURIComponent(row.contract_number || "Unmapped")}?start=${start}&end=${end}`}><span>{index+1}</span><strong>{row.contract_number}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.incomplete_stops)} incomplete · <b className={`contract-health ${contractHealth(row.completion_percent).className}`}>{contractHealth(row.completion_percent).label}</b></small></Link>)}{!data.contracts.some((row) => Number(row.completion_percent) < 0.95) && <div className="location-empty">All contracts with loads in this period are at or above 95%.</div>}</div><Link className="dashboard-summary-link" href={`/contracts?start=${start}&end=${end}`}>Browse all contracts →</Link></section>}
       {dashboardView === "overview" && <DashboardFuelChecks start={start} end={end} contracts={data.contracts} />}
-      {dashboardView === "overview" && <section className="panel supervisor-overview">
-        <div className="panel-heading"><h2>Supervisor totals</h2><span>{displayDate(start)} – {displayDate(end)} · Click a supervisor for details</span></div>
-        <div className="supervisor-overview-grid">{data.supervisors.map((row) => <button type="button" key={row.supervisor || "Unassigned"} onClick={() => { setSelectedSupervisors([row.supervisor || "Unassigned"]); setDashboardView("investigate"); setInvestigateTab("supervisors"); }}><strong>{row.supervisor || "Unassigned"}</strong><em>{percent(row.completion_percent)}</em><small>{number(row.total_stops)} stops · {number(row.incomplete_stops)} incomplete</small></button>)}</div>
-      </section>}
+      {dashboardView === "overview" && <SupervisorReportOverview supervisors={data.supervisors} supervisorContracts={data.supervisor_contracts} contracts={data.contracts} notes={operationalNotes} start={start} end={end} showRankings={isEntireReport} />}
+      {dashboardView === "overview" && <details className="panel dashboard-trend-disclosure"><summary>Performance trend · {data.trend.length} periods</summary><div className="trend-list">{data.trend.map((row) => <div className={`trend-row ${grain === "day" ? "trend-row-clickable" : ""}`} key={row.period_start}><div><button className="trend-day-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{row.period_start}</button><span>{percent(row.completion_percent)}</span></div><div className="trend-track"><i style={{width:`${Math.max(2, Number(row.incomplete_stops) / maxIncomplete * 100)}%`}} /></div><button className="trend-missed-button" onClick={() => void openDay(row.period_start || "")} disabled={!row.period_start}>{number(row.incomplete_stops)} incomplete</button></div>)}</div></details>}
       {dashboardView === "overview" && selectedDay && grain === "day" && <section className="panel day-drilldown">
         <div className="panel-heading"><div><p className="eyebrow">Daily missed-stop drill-down</p><h2>{displayDate(selectedDay)}</h2></div><button className="clear-filters" onClick={() => { setSelectedDay(""); setTripBreakdown([]); }}>Close</button></div>
         {drillError && <div className="alert alert-error">{drillError}</div>}
