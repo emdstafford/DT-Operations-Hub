@@ -56,7 +56,7 @@ export default function HolidayHoursTrends() {
       if (!active) return;
       if (historyError) {
         setError(historyError.code === "42703"
-          ? "Run the updated holiday-history SQL once to enable Payroll Trends."
+          ? "Run the updated holiday-history SQL once to enable Holiday Hours History."
           : historyError.message);
         setHistory([]);
       } else {
@@ -190,10 +190,10 @@ export default function HolidayHoursTrends() {
     URL.revokeObjectURL(url);
   }
 
-  if (loading) return <section className="panel holiday-history-empty">Loading payroll trends…</section>;
+  if (loading) return <section className="panel holiday-history-empty">Loading holiday hours history…</section>;
 
   return <div className="payroll-trends-stack">
-    {(error || message) && <section className={`panel ${error ? "payroll-error" : "holiday-history-success"}`}><strong>{error ? "Payroll Trends" : "History updated"}</strong><span>{error || message}</span></section>}
+    {(error || message) && <section className={`panel ${error ? "payroll-error" : "holiday-history-success"}`}><strong>{error ? "Holiday Hours History" : "History updated"}</strong><span>{error || message}</span></section>}
     <section className="panel payroll-trend-filters">
       <label>Holiday search<input value={search} placeholder="Christmas" onChange={(event) => setSearch(event.target.value)} /></label>
       <label>Year<select value={year} onChange={(event) => setYear(event.target.value)}><option value="">All years</option>{years.map((option) => <option key={option}>{option}</option>)}</select></label>

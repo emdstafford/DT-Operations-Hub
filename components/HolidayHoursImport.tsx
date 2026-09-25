@@ -80,7 +80,7 @@ export default function HolidayHoursImport() {
       if (saveError) {
         setHistoryError("The payroll file was calculated, but its summary could not be saved to shared history.");
       } else {
-        setHistoryMessage(`${holidays.length === 1 ? holidays[0].name : "Both holidays"} automatically saved to Payroll Trends.`);
+        setHistoryMessage(`${holidays.length === 1 ? holidays[0].name : "Both holidays"} automatically saved to Holiday Hours History.`);
       }
     } catch (caught) {
       setFileName("");
@@ -165,7 +165,7 @@ export default function HolidayHoursImport() {
         <li><strong>Set Employee Information Effective Date As of.</strong> Choose the specific date needed for this holiday-hours calculation.</li>
         <li><strong>Select Run and download the report as a CSV.</strong> Do not rename or remove the Company Code, File Number, or Hours columns.</li>
         <li><strong>Select whether this import covers one or two holidays, then enter each holiday name and date.</strong> The file chooser becomes available after these details are complete. Two holidays doubles each employee’s calculated amount.</li>
-        <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, checks for duplicates, and automatically saves the summary to Payroll Trends.</li>
+        <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, checks for duplicates, and automatically saves the summary to Holiday Hours History.</li>
         <li><strong>Review the results.</strong> Check the employee count, combined source hours, employees capped at 8.00, and several individual employees.</li>
         <li><strong>Download the import CSV.</strong> The file is named epihne23.csv and contains Co Code, Batch ID, File #, Hours 3 Code, and Hours 3 Amount.</li>
         <li><strong>In ADP, go to Payroll Dashboard.</strong> Select Manage Payroll, then go to Worksheets.</li>

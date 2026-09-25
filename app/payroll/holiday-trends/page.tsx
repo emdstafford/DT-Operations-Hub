@@ -7,10 +7,10 @@ export default function HolidayTrendsPage() {
     <header className="hub-header">
       <div>
         <p className="eyebrow">Restricted payroll tools</p>
-        <h1>Payroll Trends</h1>
-        <p>Search, compare, maintain, and export saved holiday-import summaries.</p>
+        <h1>Holiday Hours History</h1>
+        <p>Search and compare saved holiday-hours calculations.</p>
       </div>
-      <div className="payroll-page-actions"><Link className="secondary-button" href="/payroll/holiday-hours">Holiday Hours Import</Link><Link className="secondary-button" href="/payroll/timecards">Timecard Packet</Link><span className="restricted-badge">Payroll access only</span></div>
+      <div className="payroll-page-actions"><Link className="secondary-button" href="/payroll/holiday-hours">Holiday Hours Import</Link><Link className="secondary-button" href="/payroll">All Payroll Tools</Link></div>
     </header>
     <PayrollAccessGate><HolidayHoursTrends /></PayrollAccessGate>
   </main>;

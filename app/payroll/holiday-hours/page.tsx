@@ -10,7 +10,7 @@ export default function HolidayHoursPage() {
         <h1>Holiday Hours Import</h1>
         <p>Combine employee hours, calculate holiday hours, and create the payroll-ready import file.</p>
       </div>
-      <div className="payroll-page-actions"><Link className="secondary-button" href="/payroll/holiday-trends">Payroll Trends</Link><Link className="secondary-button" href="/payroll/timecards">Timecard Packet</Link><span className="restricted-badge">Payroll access only</span></div>
+      <div className="payroll-page-actions"><Link className="secondary-button" href="/payroll/holiday-trends">Holiday Hours History</Link><Link className="secondary-button" href="/payroll">All Payroll Tools</Link></div>
     </header>
     <PayrollAccessGate><HolidayHoursImport /></PayrollAccessGate>
   </main>;

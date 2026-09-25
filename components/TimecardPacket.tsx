@@ -59,7 +59,7 @@ function parse(source: Source | null, range: Range): Result {
 const total = (rows: Shift[]) => rows.reduce((sum, row) => sum + row.hundredths, 0);
 
 function TimecardRows({ contract, employee, rows }: { contract: string; employee: string; rows: Shift[] }) {
-  return <section className="timecard-period"><table className="data-table"><thead><tr className="timecard-print-context"><th colSpan={4}>Contract {contract} · {employee}</th></tr><tr><th>In time</th><th>Out time</th><th>Hours</th><th>Pay Code</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.inTime}-${index}`}><td>{row.inTime}</td><td>{row.outTime || "—"}</td><td>{hoursLabel(row.hundredths)}</td><td>{row.payCode || "—"}</td></tr>)}</tbody><tfoot><tr><th colSpan={2}>Employee total</th><th>{hoursLabel(total(rows))}</th><th /></tr></tfoot></table></section>;
+  return <section className="timecard-period"><table className="data-table"><thead><tr className="timecard-print-context"><th colSpan={3}>Contract {contract} · {employee}</th></tr><tr><th>In time</th><th>Out time</th><th>Hours</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.inTime}-${index}`}><td>{row.inTime}</td><td>{row.outTime || "—"}</td><td>{hoursLabel(row.hundredths)}</td></tr>)}</tbody><tfoot><tr><th colSpan={2}>Employee total</th><th>{hoursLabel(total(rows))}</th></tr></tfoot></table></section>;
 }
 
 export default function TimecardPacket() {

@@ -544,13 +544,16 @@ button, input { font: inherit; }
 }
 
 /* Local-only payroll timecard packets. Each contract starts a fresh print sheet. */
-.payroll-tools-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.payroll-tools-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .payroll-tool-card{display:flex;flex-direction:column;align-items:flex-start;gap:9px;padding:20px;transition:border-color .15s ease,box-shadow .15s ease}
 .payroll-tool-card:hover{border-color:#aabccc;box-shadow:0 6px 20px rgb(7 35 63 / 8%)}
 .payroll-tool-card span{color:var(--muted);font-size:.71rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
 .payroll-tool-card h2{margin:0;color:var(--navy-deep);font-size:1.1rem}
 .payroll-tool-card p{flex:1;margin:0;color:var(--muted);font-size:.85rem;line-height:1.5}
 .payroll-tool-card strong{color:var(--navy);font-size:.8rem}
+.payroll-tool-links{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.payroll-tool-links a{border:1px solid var(--line);border-radius:7px;padding:8px 11px;color:var(--navy);background:#f7f9fb;font-size:.8rem;font-weight:800}
+.payroll-tool-links a:hover{border-color:#aabccc;background:#edf3f8}
 .timecard-intro{padding:15px 20px}
 .timecard-intro strong{color:var(--navy-deep)}
 .timecard-intro p{margin:4px 0 0;color:var(--muted);font-size:.81rem}
