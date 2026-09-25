@@ -9,11 +9,20 @@ type MissedLoad = { operating_date: string; trip_number: string | null; load_num
 type MissedTrip = { date: string; trip: string; loads: string[]; incomplete: number };
 const number = (value: number) => Number(value || 0).toLocaleString("en-US");
 const percent = (value: number) => `${(Number(value || 0) * 100).toFixed(2)}%`;
+function quickDates(mode: "day" | "week" | "month", lastDay: string) {
+  const last = new Date(`${lastDay}T12:00:00Z`);
+  if (mode === "day") return { start: lastDay, end: lastDay };
+  if (mode === "month") return { start: new Date(Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), 1, 12)).toISOString().slice(0, 10), end: lastDay };
+  last.setUTCDate(last.getUTCDate() - ((last.getUTCDay() + 1) % 7));
+  return { start: last.toISOString().slice(0, 10), end: lastDay };
+}
 
 export default function PerformanceExplorer({ fixedContract, contractsOnly = false, initialStart, initialEnd }: { fixedContract?: string; contractsOnly?: boolean; initialStart?: string; initialEnd?: string }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [start, setStart] = useState(initialStart || `${today.slice(0, 4)}-01-01`);
-  const [end, setEnd] = useState(initialEnd || today);
+  const [start, setStart] = useState(initialStart || (fixedContract ? "" : `${today.slice(0, 4)}-01-01`));
+  const [end, setEnd] = useState(initialEnd || (fixedContract ? "" : today));
+  const [latestEnd, setLatestEnd] = useState(today);
+  const [rangeMode, setRangeMode] = useState<"day" | "week" | "month" | "custom">(initialStart ? "custom" : "week");
   const [grain, setGrain] = useState("week");
   const [selectedSupervisor, setSelectedSupervisor] = useState("");
   const [excludeAugust, setExcludeAugust] = useState(false);
@@ -27,7 +36,31 @@ export default function PerformanceExplorer({ fixedContract, contractsOnly = fal
   const [missedError, setMissedError] = useState("");
   const [showAllTrips, setShowAllTrips] = useState(false);
 
+  useEffect(() => {
+    if (!fixedContract) return;
+    let active = true;
+    void (async () => {
+      const result = await supabase.from("report_history").select("period_end").eq("report_type", "usps_loads").order("period_end", { ascending: false }).limit(1).maybeSingle();
+      if (!active) return;
+      const anchor = result.data?.period_end || today;
+      setLatestEnd(anchor);
+      if (!initialStart || !initialEnd) {
+        const dates = quickDates("week", anchor);
+        setStart(dates.start); setEnd(dates.end);
+      }
+    })();
+    return () => { active = false; };
+  }, [fixedContract, initialStart, initialEnd, today]);
+
+  function selectQuickDates(mode: "day" | "week" | "month") {
+    const dates = quickDates(mode, latestEnd);
+    setStart(dates.start); setEnd(dates.end); setRangeMode(mode);
+    setGrain(mode === "day" ? "day" : mode === "month" ? "month" : "week");
+  }
+
   useEffect(() => { void (async () => {
+    if (!start || !end) return;
+    if (start > end) { setError("The start date must be on or before the end date."); setLoading(false); return; }
     setLoading(true); setError("");
     const [trendResult, contractResult, supervisorResult] = await Promise.all([
       supabase.rpc("performance_trend_filtered", { p_start: start, p_end: end, p_grain: grain, p_contract: fixedContract ?? null, p_supervisor: selectedSupervisor || null, p_exclude_august_2026: excludeAugust }),
@@ -80,12 +113,12 @@ export default function PerformanceExplorer({ fixedContract, contractsOnly = fal
   return <div className="report-stack">
     {fixedContract && <div className="contract-print-toolbar no-print"><div><strong>Contract {fixedContract}</strong><span>Print the totals and {grain} trend for the selected dates.</span></div><button className="primary-link" type="button" disabled={loading} onClick={() => window.print()}>Print contract report</button></div>}
     {fixedContract && <div className="print-only print-report-heading"><p>DT Intelligence Hub</p><h1>Contract {fixedContract} Performance</h1><strong>{start} – {end}</strong></div>}
-    <section className="panel filter-bar no-print">
-      <label>Start date<input type="date" value={start} onChange={(event) => setStart(event.target.value)} /></label>
-      <label>End date<input type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
-      <label>Trend grouping<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Daily</option><option value="week">Weekly (Sat–Fri)</option><option value="month">Monthly</option><option value="year">Yearly</option></select></label>
+    <section className={`panel filter-bar no-print ${fixedContract ? "contract-period-controls" : ""}`}>
+      {fixedContract && <div className="contract-quick-dates" role="group" aria-label="Contract reporting period"><button type="button" className={rangeMode === "day" ? "active" : ""} onClick={() => selectQuickDates("day")}>Latest day</button><button type="button" className={rangeMode === "week" ? "active" : ""} onClick={() => selectQuickDates("week")}>Latest week</button><button type="button" className={rangeMode === "month" ? "active" : ""} onClick={() => selectQuickDates("month")}>Latest month</button></div>}
+      <div className="contract-browser-dates"><label>From<input type="date" value={start} onChange={(event) => { setStart(event.target.value); setRangeMode("custom"); }} /></label><label>To<input type="date" value={end} onChange={(event) => { setEnd(event.target.value); setRangeMode("custom"); }} /></label></div>
+      {fixedContract ? <details className="contract-extra-filters"><summary>More filters</summary><label>Trend grouping<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Daily</option><option value="week">Weekly (Sat–Fri)</option><option value="month">Monthly</option><option value="year">Yearly</option></select></label><label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20</label></details> : <label>Trend grouping<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Daily</option><option value="week">Weekly (Sat–Fri)</option><option value="month">Monthly</option><option value="year">Yearly</option></select></label>}
       {!contractsOnly && !fixedContract && <label>Supervisor<select value={selectedSupervisor} onChange={(event) => setSelectedSupervisor(event.target.value)}><option value="">All supervisors</option>{supervisors.filter((row) => row.supervisor && row.supervisor !== "Unassigned").map((row) => <option key={row.supervisor} value={row.supervisor}>{row.supervisor}</option>)}</select></label>}
-      <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20</label>
+      {!fixedContract && <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20</label>}
     </section>
     {!fixedContract && <PeriodAnnotations start={start} end={end} />}
     {error && <div className="alert alert-error">{error}</div>}
