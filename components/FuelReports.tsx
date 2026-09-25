@@ -32,6 +32,13 @@ const displayDate = (value: string) => value ? new Intl.DateTimeFormat("en-US", 
 const monthLabel = (value: string) => value ? new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`)) : "—";
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character] ?? character);
 const productLabel = (value: string) => ({ diesel: "Diesel", gasoline: "Gasoline", def: "DEF", fee: "Transaction fees", adjustment: "Adjustments", other: "Other" }[value] || value);
+function fuelPreset(mode: "day" | "week" | "month", anchor: string) {
+  const last = new Date(`${anchor}T12:00:00Z`);
+  if (mode === "day") return { start: anchor, end: anchor };
+  if (mode === "month") return { start: new Date(Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), 1, 12)).toISOString().slice(0, 10), end: anchor };
+  last.setUTCDate(last.getUTCDate() - ((last.getUTCDay() + 1) % 7));
+  return { start: last.toISOString().slice(0, 10), end: anchor };
+}
 
 export default function FuelReports() {
   const today = new Date().toISOString().slice(0, 10);
@@ -39,6 +46,9 @@ export default function FuelReports() {
   const [options, setOptions] = useState<Options>({ period_start: null, period_end: null, contracts: [], people: [], stations: [], supervisors: [] });
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
+  const [rangeMode, setRangeMode] = useState<"day" | "week" | "month" | "custom">("month");
+  const [contractSearch, setContractSearch] = useState("");
+  const [showAllContracts, setShowAllContracts] = useState(false);
   const [grain, setGrain] = useState("week");
   const [reportMonth, setReportMonth] = useState("");
   const [supervisor, setSupervisor] = useState("");
@@ -74,8 +84,9 @@ export default function FuelReports() {
     const next = (result ?? { period_start: null, period_end: null, contracts: [], people: [], stations: [], supervisors: [] }) as Options;
     setOptions(next);
     if ((resetDates || start === today) && next.period_start && next.period_end) {
-      setStart(next.period_start);
-      setEnd(next.period_end);
+      const latestMonth = fuelPreset("month", next.period_end);
+      setStart(latestMonth.start); setEnd(latestMonth.end);
+      setRangeMode("month"); setGrain("month");
     }
   }, [start, today]);
 
@@ -89,13 +100,15 @@ export default function FuelReports() {
     const { data: access } = await supabase.from("fuel_tool_users").select("can_upload").eq("email", email).eq("active", true).maybeSingle();
     setCanUpload(Boolean(access?.can_upload));
     await loadOptions(true);
-    if (selectedContract) setContract(selectedContract);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(selectedStart)) setStart(selectedStart);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(selectedEnd)) setEnd(selectedEnd);
+    if (selectedContract) { setContract(selectedContract); setView("report"); }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(selectedStart)) { setStart(selectedStart); setRangeMode("custom"); }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(selectedEnd)) { setEnd(selectedEnd); setRangeMode("custom"); }
     if (query.get("view") === "mileage") setView("mileage");
   })(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!start || !end) return;
+    if (start > end) { setError("The start date must be on or before the end date."); setData(emptyData); setLoading(false); return; }
     let active = true;
     void (async () => {
       setLoading(true); setError("");
@@ -104,7 +117,7 @@ export default function FuelReports() {
         p_supervisor: supervisor || null, p_contract: contract || null, p_person: person || null, p_station: station || null, p_category: category || null,
       });
       if (!active) return;
-      if (dashboardError) setError(dashboardError.message.includes("fuel_dashboard_v2") ? "Run the Fuel Supervisor Reports SQL in Supabase to enable supervisor reporting." : dashboardError.message);
+      if (dashboardError) { setError(dashboardError.message.includes("fuel_dashboard_v2") ? "Run the Fuel Supervisor Reports SQL in Supabase to enable supervisor reporting." : dashboardError.message); setData(emptyData); }
       else setData((result ?? emptyData) as FuelData);
       setLoading(false);
     })();
@@ -157,6 +170,7 @@ export default function FuelReports() {
   }
 
   const activeRows = useMemo(() => view === "contracts" ? data.by_contract : view === "people" ? data.by_person : view === "stations" ? data.by_station : [], [data, view]);
+  const visibleContracts = useMemo(() => data.by_contract.filter((row) => row.name.toLowerCase().includes(contractSearch.trim().toLowerCase())).sort((a, b) => b.total_spend - a.total_spend || a.name.localeCompare(b.name)), [data.by_contract, contractSearch]);
   const reportTitle = supervisor ? `${supervisor} Fuel Report` : contract ? `Contract ${contract} Fuel Report` : person ? `${person} Fuel Report` : "Company Fuel Report";
   const reportContext = [supervisor && `Supervisor: ${supervisor}`, contract && `Contract: ${contract}`, person && `Employee: ${person}`, station && `Station: ${station}`, category && `Fuel type: ${productLabel(category)}`].filter(Boolean).join(" · ") || "All fuel activity";
 
@@ -169,9 +183,20 @@ export default function FuelReports() {
 
   function clearFilters() { setSupervisor(""); setContract(""); setPerson(""); setStation(""); setCategory(""); }
 
+  function chooseRecent(mode: "day" | "week" | "month") {
+    const dates = fuelPreset(mode, options.period_end || today);
+    setStart(dates.start); setEnd(dates.end); setRangeMode(mode); setReportMonth(""); setGrain(mode);
+  }
+
+  function openContract(value: string) {
+    setContract(value); setView("report");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function chooseMonth(value: string) {
     setReportMonth(value);
     if (!value) return;
+    setRangeMode("custom");
     const [year, month] = value.split("-").map(Number);
     setStart(`${value}-01`);
     setEnd(new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10));
@@ -243,10 +268,10 @@ export default function FuelReports() {
   }
 
   return <div className="report-stack fuel-report-stack">
-    {canUpload && <section className="panel fuel-upload-panel">
+    {canUpload && <details className="panel fuel-upload-disclosure"><summary>Upload a Comdata fuel report</summary><div className="fuel-upload-panel">
       <div><p className="eyebrow">Import Comdata</p><h2>Upload Transaction Listing</h2><p>The file stays inside the secured DT system. Driver-license fields, VINs, and license plates are not stored.</p></div>
       <label className="primary-link fuel-file-button">{parsing ? "Reading file…" : "Choose Comdata file"}<input type="file" accept=".xlsx,.xls" disabled={parsing || uploading} onChange={(event) => void selectFile(event.target.files?.[0])} /></label>
-    </section>}
+    </div></details>}
     {preview && <section className="panel fuel-import-preview">
       <div className="panel-heading"><div><p className="eyebrow">Ready to import</p><h2>{preview.fileName}</h2></div><span>{displayDate(preview.periodStart)} – {displayDate(preview.periodEnd)}</span></div>
       <div className="fuel-preview-grid"><div><span>Source rows</span><strong>{number(preview.sourceRows)}</strong></div><div><span>Transactions</span><strong>{number(preview.transactionCount)}</strong></div><div><span>Fuel gallons</span><strong>{number(preview.totalFuelGallons, 1)}</strong></div><div><span>Net cost</span><strong>{currency(preview.totalNetCost)}</strong></div><div className="fuel-gas-preview"><span>Gasoline lines</span><strong>{number(preview.gasolineRows)}</strong></div></div>
@@ -256,14 +281,16 @@ export default function FuelReports() {
     </section>}
     {(error || uploadMessage) && <section className={`alert ${error ? "alert-error" : "fuel-success"}`}>{error || uploadMessage}</section>}
 
-    <section className="panel fuel-filters">
-      <div className="fuel-date-fields"><label>Quick month<input type="month" value={reportMonth} onChange={(event) => chooseMonth(event.target.value)} /></label><label>From<input type="date" value={start} onChange={(event) => { setReportMonth(""); setStart(event.target.value); }} /></label><label>To<input type="date" value={end} onChange={(event) => { setReportMonth(""); setEnd(event.target.value); }} /></label><label>Group trend<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label></div>
-      <div className="fuel-filter-fields"><label>Supervisor<select value={supervisor} onChange={(event) => { setSupervisor(event.target.value); setContract(""); setGrain("month"); }}><option value="">All supervisors</option>{options.supervisors.map((item) => <option key={item}>{item}</option>)}</select></label><label>Contract<select value={contract} onChange={(event) => setContract(event.target.value)}><option value="">All contracts</option>{options.contracts.map((item) => <option key={item}>{item}</option>)}</select></label><label>Employee<select value={person} onChange={(event) => setPerson(event.target.value)}><option value="">All employees</option>{options.people.map((item) => <option key={item}>{item}</option>)}</select></label><label>Station<select value={station} onChange={(event) => setStation(event.target.value)}><option value="">All stations</option>{options.stations.map((item) => <option key={item}>{item}</option>)}</select></label><label>Fuel type<select value={category} onChange={(event) => setCategory(event.target.value)}><option value="">All products</option><option value="diesel">Diesel</option><option value="gasoline">Gasoline</option><option value="def">DEF</option><option value="fee">Transaction fees</option><option value="adjustment">Adjustments</option><option value="other">Other</option></select></label>{(supervisor || contract || person || station || category) && <button className="clear-filters" onClick={clearFilters}>Clear filters</button>}</div>
+    <section className="panel fuel-filters fuel-browser-filters">
+      <div className="fuel-main-filters"><div className="contract-quick-dates" role="group" aria-label="Fuel reporting period"><button type="button" className={rangeMode === "day" ? "active" : ""} onClick={() => chooseRecent("day")}>Latest day</button><button type="button" className={rangeMode === "week" ? "active" : ""} onClick={() => chooseRecent("week")}>Latest week</button><button type="button" className={rangeMode === "month" ? "active" : ""} onClick={() => chooseRecent("month")}>Latest month</button></div><div className="fuel-date-fields"><label>From<input type="date" value={start} onChange={(event) => { setReportMonth(""); setRangeMode("custom"); setStart(event.target.value); }} /></label><label>To<input type="date" value={end} onChange={(event) => { setReportMonth(""); setRangeMode("custom"); setEnd(event.target.value); }} /></label></div><label className="fuel-main-supervisor">Supervisor<select value={supervisor} onChange={(event) => { setSupervisor(event.target.value); setContract(""); setGrain("month"); }}><option value="">All supervisors</option>{options.supervisors.map((item) => <option key={item}>{item}</option>)}</select></label></div>
+      {contract && <div className="fuel-selected-contract"><strong>Contract {contract}</strong><button type="button" onClick={() => { setContract(""); setView("contracts"); }}>← Browse all contracts</button></div>}
+      <details className="fuel-more-filters"><summary>More filters{person || station || category ? " · Active" : ""}</summary><div className="fuel-filter-fields"><label>Choose a month<input type="month" value={reportMonth} onChange={(event) => chooseMonth(event.target.value)} /></label><label>Contract<select value={contract} onChange={(event) => setContract(event.target.value)}><option value="">All contracts</option>{options.contracts.map((item) => <option key={item}>{item}</option>)}</select></label><label>Employee<select value={person} onChange={(event) => setPerson(event.target.value)}><option value="">All employees</option>{options.people.map((item) => <option key={item}>{item}</option>)}</select></label><label>Station<select value={station} onChange={(event) => setStation(event.target.value)}><option value="">All stations</option>{options.stations.map((item) => <option key={item}>{item}</option>)}</select></label><label>Fuel type<select value={category} onChange={(event) => setCategory(event.target.value)}><option value="">All products</option><option value="diesel">Diesel</option><option value="gasoline">Gasoline</option><option value="def">DEF</option><option value="fee">Transaction fees</option><option value="adjustment">Adjustments</option><option value="other">Other</option></select></label><label>Group trend<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label>{(supervisor || contract || person || station || category) && <button className="clear-filters" onClick={clearFilters}>Clear filters</button>}</div></details>
     </section>
 
     {loading ? <section className="hub-loading">Loading fuel activity…</section> : <>
-      <section className="panel fuel-gary-actions no-print"><div><p className="eyebrow">Report actions</p><strong>{reportTitle}</strong><span>{displayDate(start)} – {displayDate(end)} · {reportContext}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => { setView("report"); downloadSupervisorCsv(); }}>Download CSV</button><button className="hub-secondary-link" onClick={() => void copySupervisorEmail()}>{emailCopied ? "Email report copied!" : "Copy Email Report"}</button><button className="primary-link" onClick={printFuelReport}>Print Gary&apos;s Fuel Report</button></div></section>
       <section className="fuel-metric-grid"><article className="metric-card metric-primary"><span>Total spend</span><strong>{currency(data.totals.total_spend)}</strong></article><article className="metric-card"><span>Fuel gallons</span><strong>{number(data.totals.fuel_gallons, 1)}</strong></article><article className="metric-card"><span>Fuel transactions</span><strong>{number(data.totals.transactions)}</strong></article><article className="metric-card"><span>Average price per gallon</span><strong>{currency(data.totals.average_price_per_gallon)}</strong></article><button className="metric-card metric-card-action fuel-alert-card" onClick={() => setView("gasoline")}><span>Gasoline spend</span><strong>{currency(data.totals.gasoline_spend)}</strong><small>{number(data.totals.gasoline_lines)} lines · Review →</small></button></section>
+      <section className="panel fuel-gary-actions no-print"><div><p className="eyebrow">Report actions</p><strong>{reportTitle}</strong><span>{displayDate(start)} – {displayDate(end)} · {reportContext}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => { setView("report"); downloadSupervisorCsv(); }}>Download CSV</button><button className="hub-secondary-link" onClick={() => void copySupervisorEmail()}>{emailCopied ? "Email report copied!" : "Copy Email Report"}</button><button className="primary-link" onClick={printFuelReport}>Print Gary&apos;s Fuel Report</button></div></section>
+      <nav className="fuel-view-tabs" aria-label="Fuel report view"><button className={view === "contracts" ? "active" : ""} onClick={() => { setContract(""); setView("contracts"); }}>Contracts</button><button className={view === "report" ? "active" : ""} onClick={() => setView("report")}>Full report</button><button className={view === "mileage" ? "active" : ""} onClick={() => setView("mileage")}>Fuel estimate</button><button className={view === "people" ? "active" : ""} onClick={() => setView("people")}>Employees</button><details className="fuel-more-views"><summary>More reports</summary><div><button className={view === "stations" ? "active" : ""} onClick={() => setView("stations")}>Stations</button><button className={view === "products" ? "active" : ""} onClick={() => setView("products")}>Fuel types</button><button className={view === "trend" ? "active" : ""} onClick={() => setView("trend")}>Trend</button><button className={view === "gasoline" ? "active fuel-warning-tab" : "fuel-warning-tab"} onClick={() => setView("gasoline")}>Gasoline review</button><button className={view === "spend-alerts" ? "active fuel-warning-tab" : "fuel-warning-tab"} onClick={() => setView("spend-alerts")}>Spend alerts ({data.spend_alerts.length})</button><button className={view === "controls" ? "active" : ""} onClick={() => setView("controls")}>Employee fuel controls</button></div></details></nav>
       {view === "report" && <section className="panel fuel-supervisor-report">
         <div className="fuel-supervisor-heading"><div><p className="eyebrow">Davenport Transportation</p><h2>{reportTitle}</h2><span>{displayDate(start)} – {displayDate(end)} · {reportContext}</span></div></div>
         <div className="fuel-print-summary"><div><span>Total spend</span><strong>{currency(data.totals.total_spend)}</strong></div><div><span>Fuel gallons</span><strong>{number(data.totals.fuel_gallons,1)}</strong></div><div><span>Transactions</span><strong>{number(data.totals.transactions)}</strong></div><div><span>Contracts</span><strong>{number(new Set(data.monthly_contracts.map((row) => row.contract_number)).size)}</strong></div></div>
@@ -274,9 +301,9 @@ export default function FuelReports() {
         {data.spend_alerts.length > 0 && <div className="fuel-report-section fuel-report-alert-section"><h3>Monthly Spending-Limit Alerts</h3><div className="table-scroll"><table className="data-table"><thead><tr><th>Month</th><th>Employee</th><th>Spend</th><th>Limit</th><th>Over limit</th></tr></thead><tbody>{data.spend_alerts.map((row) => <tr key={`${row.person_name}-${row.period_start}`}><td>{monthLabel(row.period_start)}</td><td className="font-semibold text-navy">{row.person_name}</td><td>{currency(row.total_spend)}</td><td>{currency(row.monthly_spend_limit)}</td><td><strong>{currency(row.overage)}</strong></td></tr>)}</tbody></table></div></div>}
       </section>}
       <div className={`fuel-mileage-wrapper ${view === "report" || view === "mileage" ? "active" : ""}`}><FuelMileagePlanner start={start} end={end} contracts={[...new Set(data.monthly_contracts.map((row) => row.contract_number))]} planOptions={options.contracts} selectedContract={contract} canEdit={canUpload} onRowsChange={updateMileageRows} /></div>
-      <nav className="fuel-view-tabs" aria-label="Fuel report view"><button className={view === "report" ? "active" : ""} onClick={() => setView("report")}>Full report</button><button className={view === "mileage" ? "active" : ""} onClick={() => setView("mileage")}>Fuel estimate</button><button className={view === "contracts" ? "active" : ""} onClick={() => setView("contracts")}>Contracts</button><button className={view === "people" ? "active" : ""} onClick={() => setView("people")}>Employees</button><button className={view === "stations" ? "active" : ""} onClick={() => setView("stations")}>Stations</button><button className={view === "products" ? "active" : ""} onClick={() => setView("products")}>Fuel types</button><button className={view === "trend" ? "active" : ""} onClick={() => setView("trend")}>Trend</button><button className={view === "gasoline" ? "active fuel-warning-tab" : "fuel-warning-tab"} onClick={() => setView("gasoline")}>Gasoline review</button><button className={view === "spend-alerts" ? "active fuel-warning-tab" : "fuel-warning-tab"} onClick={() => setView("spend-alerts")}>Spend alerts ({data.spend_alerts.length})</button><button className={view === "controls" ? "active" : ""} onClick={() => setView("controls")}>Employee fuel controls</button></nav>
 
-      {(view === "contracts" || view === "people" || view === "stations") && <section className="panel overflow-hidden"><div className="panel-heading"><h2>{view === "contracts" ? "Fuel by contract" : view === "people" ? "Fuel by employee" : "Fuel by station"}</h2><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="table-scroll fuel-table-scroll"><table className="data-table"><thead><tr><th>{view === "contracts" ? "Contract" : view === "people" ? "Employee" : "Station"}</th>{view === "stations" && <th>Location</th>}<th>Transactions</th><th>Fuel gallons</th><th>Gasoline spend</th><th>Total spend</th></tr></thead><tbody>{activeRows.map((row) => <tr key={`${row.name}-${row.city || ""}-${row.state || ""}`}><td className="font-semibold text-navy">{row.name}</td>{view === "stations" && <td>{[row.city,row.state].filter(Boolean).join(", ")}</td>}<td>{number(row.transactions)}</td><td>{number(row.fuel_gallons,1)}</td><td>{currency(row.gasoline_spend || 0)}</td><td><strong>{currency(row.total_spend)}</strong></td></tr>)}</tbody></table></div></section>}
+      {view === "contracts" && <section className="panel fuel-contract-browser"><div className="panel-heading"><div><p className="eyebrow">Find a contract</p><h2>Fuel by contract</h2><span>Choose a contract to see its full fuel report.</span></div><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="fuel-contract-search"><label className="contract-search">Search contract<input type="search" value={contractSearch} onChange={(event) => { setContractSearch(event.target.value); setShowAllContracts(false); }} placeholder="Enter a contract number" /></label><span>{number(visibleContracts.length)} contracts with fuel purchases</span></div>{visibleContracts.length ? <><div className="contract-browser-list">{(showAllContracts ? visibleContracts : visibleContracts.slice(0, 24)).map((row) => <button type="button" className="contract-browser-card fuel-contract-card" key={row.name} onClick={() => openContract(row.name)}><span className="contract-browser-name"><strong>{row.name}</strong><span>{number(row.transactions)} transactions · {number(row.fuel_gallons, 1)} gallons</span></span><span className="contract-browser-stats"><strong>{currency(row.total_spend)}</strong><span>Total fuel spend</span></span><span className="contract-browser-status status-quiet">{row.gasoline_spend ? `${currency(row.gasoline_spend)} gasoline` : "View fuel details"}</span><span className="contract-browser-arrow" aria-hidden="true">→</span></button>)}</div>{visibleContracts.length > 24 && <button type="button" className="fuel-check-expand" onClick={() => setShowAllContracts(!showAllContracts)}>{showAllContracts ? "Show fewer contracts ↑" : `Show all ${visibleContracts.length} contracts ↓`}</button>}</> : <div className="location-empty">No contract fuel purchases match this search and date range.</div>}</section>}
+      {(view === "people" || view === "stations") && <section className="panel overflow-hidden"><div className="panel-heading"><h2>{view === "people" ? "Fuel by employee" : "Fuel by station"}</h2><span>{displayDate(start)} – {displayDate(end)}</span></div><div className="table-scroll fuel-table-scroll"><table className="data-table"><thead><tr><th>{view === "people" ? "Employee" : "Station"}</th>{view === "stations" && <th>Location</th>}<th>Transactions</th><th>Fuel gallons</th><th>Gasoline spend</th><th>Total spend</th></tr></thead><tbody>{activeRows.map((row) => <tr key={`${row.name}-${row.city || ""}-${row.state || ""}`}><td className="font-semibold text-navy">{row.name}</td>{view === "stations" && <td>{[row.city,row.state].filter(Boolean).join(", ")}</td>}<td>{number(row.transactions)}</td><td>{number(row.fuel_gallons,1)}</td><td>{currency(row.gasoline_spend || 0)}</td><td><strong>{currency(row.total_spend)}</strong></td></tr>)}</tbody></table></div></section>}
 
       {view === "products" && <section className="panel overflow-hidden"><div className="panel-heading"><h2>Spend by fuel type</h2><span>Fees and adjustments remain separate from fuel gallons</span></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Category</th><th>Line items</th><th>Units/gallons</th><th>Total spend</th></tr></thead><tbody>{data.by_product.map((row) => <tr key={row.name}><td className="font-semibold text-navy">{productLabel(row.name)}</td><td>{number(row.line_items)}</td><td>{number(row.units,1)}</td><td><strong>{currency(row.total_spend)}</strong></td></tr>)}</tbody></table></div></section>}
 
