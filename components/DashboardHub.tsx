@@ -420,6 +420,7 @@ export default function DashboardHub() {
     <PeriodAnnotations start={start} end={end} />
     {error && <div className="alert alert-error">{error.includes("dashboard_hub_filtered") ? "The dashboard database update still needs to be installed in Supabase." : error}</div>}
     {loading ? <section className="hub-loading">Loading your operations picture…</section> : <>
+      <section className="dashboard-email-bar"><div><strong>Report actions</strong><span>{displayDate(start)} – {displayDate(end)}{selectedSupervisors.length || selectedContracts.length ? " with selected filters" : " · Company-wide"}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => void printPerformanceReview()} disabled={reviewLoading}>{reviewLoading ? "Building review…" : "Performance Review"}</button><button className="hub-secondary-link" onClick={printGaryReport}>Gary’s Report</button><button className="primary-link" onClick={copyEmail}>{copied ? "Email report copied!" : "Copy Email Report"}</button></div></section>
       <section className="metric-grid">
         <article className="metric-card metric-primary"><span>Completion</span><strong>{percent(data.totals.completion_percent)}</strong></article>
         <article className="metric-card"><span>Total stops</span><strong>{number(data.totals.total_stops)}</strong></article>
@@ -427,7 +428,6 @@ export default function DashboardHub() {
         <button type="button" className="metric-card metric-card-action" onClick={() => { setContractListMode("below95"); setDashboardView("investigate"); setInvestigateTab("contracts"); }}><span>Contracts below 95%</span><strong>{number(data.contracts.filter((row) => Number(row.completion_percent) < 0.95).length)}</strong><small>View contracts →</small></button>
         <article className="metric-card"><span>Unique loads</span><strong>{number(data.totals.load_count)}</strong></article>
       </section>
-      <section className="dashboard-email-bar"><div><strong>Report actions</strong><span>{displayDate(start)} – {displayDate(end)}{selectedSupervisors.length || selectedContracts.length ? " with selected filters" : " · Company-wide"}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => void printPerformanceReview()} disabled={reviewLoading}>{reviewLoading ? "Building review…" : "Performance Review"}</button><button className="hub-secondary-link" onClick={printGaryReport}>Gary’s Report</button><button className="primary-link" onClick={copyEmail}>{copied ? "Email report copied!" : "Copy Email Report"}</button></div></section>
       <nav className="dashboard-view-switch panel" aria-label="Dashboard view">
         <button className={dashboardView === "overview" ? "active" : ""} onClick={() => setDashboardView("overview")}><strong>Overview</strong><span>Totals, trend, and urgent contracts</span></button>
         <button className={dashboardView === "investigate" ? "active" : ""} onClick={() => setDashboardView("investigate")}><strong>Investigate</strong><span>Contracts, supervisors, geofences, and comparisons</span></button>

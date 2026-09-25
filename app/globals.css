@@ -515,3 +515,30 @@ button, input { font: inherit; }
   .dashboard-page .dashboard-report-buttons{grid-template-columns:repeat(2,minmax(0,1fr))}
   .dashboard-page .dashboard-report-buttons button:last-child{grid-column:1/-1}
 }
+
+/* Apply the same readable, tighter hierarchy to the other workspace pages. */
+@media screen {
+  .page-shell:not(.dashboard-page){padding-top:24px}
+  .page-shell:not(.dashboard-page) :is(.page-intro,.hub-header){gap:14px;margin-bottom:16px}
+  .page-shell:not(.dashboard-page) :is(.page-intro,.hub-header) h1{margin:2px 0 4px;font-size:clamp(1.5rem,2.1vw,1.95rem)}
+  .page-shell:not(.dashboard-page) :is(.page-intro,.hub-header) p:not(.eyebrow){font-size:.86rem;line-height:1.45}
+  .page-shell:not(.dashboard-page) .report-stack{gap:12px}
+  .page-shell:not(.dashboard-page) .metric-card{min-width:0;padding:11px 14px}
+  .page-shell:not(.dashboard-page) .metric-card strong{margin-top:4px;font-size:clamp(1.35rem,2vw,1.8rem)}
+  .page-shell:not(.dashboard-page) .panel-heading{min-height:52px}
+  .page-shell:not(.dashboard-page) .contract-browser-controls{gap:12px;padding:13px 16px}
+  .fuel-page .fuel-main-filters{gap:10px;padding:13px 16px}
+  .fuel-page .fuel-gary-actions{gap:10px;padding:10px 14px}
+  .fuel-page .fuel-gary-actions .dashboard-report-buttons{gap:7px}
+  .fuel-page .fuel-gary-actions button{min-height:38px;padding:0 12px;font-size:.86rem}
+  .fuel-page .fuel-metric-grid{gap:9px}
+  @media(max-width:640px){
+    .page-shell:not(.dashboard-page){padding-top:16px}
+    .page-shell:not(.dashboard-page) :is(.page-intro,.hub-header){gap:10px;margin-bottom:12px}
+    .page-shell:not(.dashboard-page) :is(.metric-grid,.fuel-metric-grid){grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+    .page-shell:not(.dashboard-page) .metric-card{padding:10px 11px}
+    .page-shell:not(.dashboard-page) .metric-card strong{font-size:1.42rem}
+    .fuel-page .fuel-gary-actions .dashboard-report-buttons{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .fuel-page .fuel-gary-actions .dashboard-report-buttons button:last-child{grid-column:1/-1}
+  }
+}
