@@ -6,6 +6,7 @@ export type MileagePlan = {
   assumed_mpg: number;
   tractor_count?: number | null;
   straight_truck_count?: number | null;
+  van_count?: number | null;
   alert_above_percent: number;
 };
 
