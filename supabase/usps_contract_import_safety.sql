@@ -4,6 +4,10 @@
 alter table public.usps_trip_rates
   add column if not exists usps_mpg numeric;
 
+create unique index if not exists usps_rate_imports_completed_hash_unique
+  on public.usps_rate_imports(source_file_hash)
+  where source_file_hash is not null and status='completed';
+
 create or replace function public.cleanup_incomplete_usps_rate_imports(p_source_file_name text)
 returns integer
 language plpgsql
@@ -49,6 +53,7 @@ grant execute on function public.cleanup_incomplete_usps_rate_imports(text) to a
 
 create or replace function public.import_usps_rate_workbook(
   p_source_file_name text,
+  p_source_file_hash text,
   p_sheet_count integer,
   p_trip_count integer,
   p_sheets jsonb
@@ -74,11 +79,18 @@ begin
     raise exception 'Invalid USPS workbook payload';
   end if;
 
+  if p_source_file_hash is not null and exists(
+    select 1 from public.usps_rate_imports
+    where source_file_hash=p_source_file_hash and status='completed'
+  ) then
+    raise exception 'This exact USPS workbook has already been imported.' using errcode='23505';
+  end if;
+
   insert into public.usps_rate_imports(
-    source_file_name,imported_by,sheet_count,trip_count,status
+    source_file_name,source_file_hash,imported_by,sheet_count,trip_count,status
   )
   values(
-    p_source_file_name,auth.uid(),p_sheet_count,p_trip_count,'validating'
+    p_source_file_name,p_source_file_hash,auth.uid(),p_sheet_count,p_trip_count,'validating'
   )
   returning id into import_id;
 
@@ -157,8 +169,8 @@ begin
 end;
 $$;
 
-revoke all on function public.import_usps_rate_workbook(text,integer,integer,jsonb) from public;
-grant execute on function public.import_usps_rate_workbook(text,integer,integer,jsonb) to authenticated;
+revoke all on function public.import_usps_rate_workbook(text,text,integer,integer,jsonb) from public;
+grant execute on function public.import_usps_rate_workbook(text,text,integer,integer,jsonb) to authenticated;
 
 create or replace function public.fuel_usps_mileage_plans(p_contracts text[])
 returns table(
