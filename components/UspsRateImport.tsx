@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";\nimport type { DragEvent } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { DragEvent } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
 
@@ -42,7 +43,8 @@ function pick(row:Cell[], map:Map<string,number>, names:string[]){
 
 export default function UspsRateImport(){
   const [fileName,setFileName]=useState(""); const [fileHash,setFileHash]=useState(""); const [sheets,setSheets]=useState<PreviewSheet[]>([]);
-  const [error,setError]=useState(""); const [saving,setSaving]=useState(false); const [saved,setSaved]=useState("");\n  const [dragging,setDragging]=useState(false); const inputRef=useRef<HTMLInputElement>(null);
+  const [error,setError]=useState(""); const [saving,setSaving]=useState(false); const [saved,setSaved]=useState("");
+  const [dragging,setDragging]=useState(false); const inputRef=useRef<HTMLInputElement>(null);
   const totals=useMemo(()=>({contracts:sheets.length,trips:sheets.reduce((n,s)=>n+s.rows.length,0),review:sheets.filter(s=>s.status==="review").length}),[sheets]);
 
   async function preview(file?:File){
