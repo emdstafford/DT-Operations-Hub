@@ -779,3 +779,7 @@ button, input { font: inherit; }
 .contract-import-actions button{border:0}
 .contract-import-actions span{color:var(--muted);font-size:.78rem}
 @media(max-width:640px){.contract-drop-zone{min-height:260px;padding:26px 18px}.contract-detected-file em{width:100%;margin-left:0}.contract-import-actions{align-items:stretch;flex-direction:column}.contract-import-actions .primary-link{width:100%}}
+
+/* Keep the full contract intake surface active while dragging over child content. */
+.contract-drop-zone>*{pointer-events:none}
+.contract-drop-zone input{pointer-events:none}
