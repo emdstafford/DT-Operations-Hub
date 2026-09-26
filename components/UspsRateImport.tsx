@@ -107,7 +107,7 @@ export default function UspsRateImport(){
       setSaved(`Saved ${totals.trips.toLocaleString()} USPS trip rates across ${totals.contracts} contracts.`);
     }catch(e){
       const x=e as {message?:string;details?:string;hint?:string;code?:string};
-      const parts=[x?.message,x?.details,x?.hint,x?.code?\`Code: ${x.code}\`:null].filter(Boolean);
+      const parts=[x?.message,x?.details,x?.hint,x?.code?`Code: ${x.code}`:null].filter(Boolean);
       setError(parts.length?parts.join(" — "):"The USPS rates could not be saved.");
     }
     finally{setSaving(false);}
