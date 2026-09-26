@@ -11,8 +11,8 @@ export default function Page() {
       <p>Find a contract by number or supervisor, then tap it to see what happened.</p>
     </div></header>
     <div className="no-print"><ContractSelector /></div>
-    <ExpiringContracts />
     <UspsRateImport />
+    <ExpiringContracts />
     <details className="contract-print-disclosure"><summary>Print all contracts by month</summary><MonthlyContractPrintReport /></details>
   </main>;
 }
