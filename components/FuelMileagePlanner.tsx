@@ -18,6 +18,7 @@ export type FuelMileageRow = {
 };
 
 type Purchase = { contract_number: string; purchased_gallons: number; purchased_fuel_cost: number };
+type UspsPlan = { contract_number: string; effective_start: string; effective_end: string | null; annual_miles: number; source: string };
 type PlanDraft = { through: string; miles: string; tractors: string; straight: string; vans: string; mpg: string; threshold: string };
 const number = (value: number, decimals = 0) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: decimals, minimumFractionDigits: decimals });
 const currency = (value: number) => Number(value || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -32,6 +33,7 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
 }) {
   const [plans, setPlans] = useState<MileagePlan[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [uspsPlans, setUspsPlans] = useState<UspsPlan[]>([]);
   const [planContract, setPlanContract] = useState("");
   const [effectiveStart, setEffectiveStart] = useState("");
   const [effectiveEnd, setEffectiveEnd] = useState("");
@@ -52,10 +54,11 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
   const contractKey = planContracts.join("|");
 
   const refresh = useCallback(async () => {
-    if (!planContracts.length || !start || !end) { setPlans([]); setPurchases([]); return; }
-    const [planResult, purchaseResult] = await Promise.all([
+    if (!planContracts.length || !start || !end) { setPlans([]); setPurchases([]); setUspsPlans([]); return; }
+    const [planResult, purchaseResult, uspsResult] = await Promise.all([
       supabase.from("fuel_contract_mileage_plans").select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,tractor_count,straight_truck_count,van_count,alert_above_percent").in("contract_number", planContracts).order("effective_start"),
       supabase.rpc("fuel_contract_purchases_for_estimate", { p_start: start, p_end: end, p_contracts: selected }),
+      supabase.rpc("fuel_usps_mileage_plans", { p_contracts: planContracts }),
     ]);
     const missingColumn = (code?: string) => ["42703", "PGRST204", "PGRST200"].includes(code ?? "");
     const needsVanMigration = missingColumn(planResult.error?.code);
@@ -69,12 +72,13 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
     const currentPlans = legacyPlans ?? priorPlans ?? planResult;
     if (currentPlans.error || purchaseResult.error) {
       setError("To enable mileage estimates, run fuel_mileage_estimates.sql in Supabase.");
-      setPlans([]); setPurchases([]);
+      setPlans([]); setPurchases([]); setUspsPlans([]);
       return;
     }
     setError(needsVanMigration ? "To use van counts and updated MPG assumptions, run fuel_mpg_assumptions.sql in Supabase. Saved estimates remain visible." : "");
     setPlans((currentPlans.data ?? []) as MileagePlan[]);
     setPurchases((purchaseResult.data ?? []) as Purchase[]);
+    setUspsPlans(uspsResult.error ? [] : (uspsResult.data ?? []) as UspsPlan[]);
   // contractKey represents the exact selection; avoid refetching when parent recreates its array.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start, end, contractKey]);
@@ -82,7 +86,13 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
   useEffect(() => { void refresh(); }, [refresh]);
 
   const rows = useMemo(() => selected.map((contract): FuelMileageRow => {
-    const estimate = estimateContractMileage(plans.filter((plan) => plan.contract_number === contract), start, end);
+    const manual = plans.filter((plan) => plan.contract_number === contract);
+    const usps = uspsPlans.filter((plan) => plan.contract_number === contract).map((plan): MileagePlan => ({
+      contract_number: plan.contract_number, effective_start: plan.effective_start, effective_end: plan.effective_end,
+      annual_miles: Number(plan.annual_miles), assumed_mpg: DEFAULT_MPG.tractor, alert_above_percent: 15,
+      tractor_count: null, straight_truck_count: null, van_count: null,
+    }));
+    const estimate = estimateContractMileage(manual.length ? manual : usps, start, end);
     const purchase = purchases.find((item) => item.contract_number === contract);
     const purchasedGallons = Number(purchase?.purchased_gallons ?? 0);
     const variancePercent = estimate.expectedGallons > 0 ? (purchasedGallons / estimate.expectedGallons - 1) * 100 : 0;
@@ -93,7 +103,7 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
       variancePercent, status: !complete ? "incomplete" : variancePercent > estimate.alertAbovePercent ? "review" : "in-range",
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [contractKey, plans, purchases, start, end]);
+  }), [contractKey, plans, uspsPlans, purchases, start, end]);
 
   useEffect(() => { onRowsChange(rows); }, [rows, onRowsChange]);
 
@@ -192,9 +202,9 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
   }
 
   return <section className="panel fuel-mileage-panel">
-    <div className="panel-heading"><div><p className="eyebrow">Fuel planning</p><h2>Planned miles and fuel purchased</h2><span>Estimate uses annual schedule miles divided across the calendar year, then the MPG assumption. Purchases may shift between periods when tanks are filled.</span></div></div>
+    <div className="panel-heading"><div><p className="eyebrow">Fuel planning</p><h2>Planned miles and fuel purchased</h2><span>Planned mileage comes automatically from the USPS contract schedule when available. Saved mileage plans act as dated overrides. Fuel estimates then apply the MPG assumption; purchases may shift between periods when tanks are filled.</span></div></div>
     {error && <p className="alert alert-error">{error}</p>}{message && <p className="alert fuel-success">{message}</p>}
-    {canEdit && <details className="fuel-mileage-editor"><summary>Add or update a dated mileage plan</summary><div className="fuel-mileage-fields">
+    {canEdit && <details className="fuel-mileage-editor"><summary>Add a mileage override</summary><div className="fuel-mileage-fields">
       <label>Contract<select value={planContract} onChange={(event) => choosePlan(event.target.value, "")}><option value="">Choose contract</option>{planOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
       <label>Effective from<input type="date" value={effectiveStart} onChange={(event) => choosePlan(planContract, event.target.value)} /></label>
       <label>Effective through (optional)<input type="date" value={effectiveEnd} onChange={(event) => setEffectiveEnd(event.target.value)} /></label>
@@ -219,7 +229,7 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
       }} /></label>}
       <label>Flag when over expected by (%)<input type="number" min="0" max="200" step="0.1" value={threshold} onChange={(event) => setThreshold(event.target.value)} /></label>
       <button type="button" className="primary-link" disabled={saving} onClick={() => void savePlan()}>{saving ? "Saving…" : "Save mileage plan"}</button>
-    </div><p>For a service change, set the previous plan’s end date, then add the new annual miles with its own effective start date. You can select an existing start date to revise its values.</p></details>}
+    </div><p>You normally do not need to enter annual miles here anymore. USPS contract mileage is automatic; use an override only for a confirmed service change or correction that should replace the USPS baseline for a date range.</p></details>}
     {plans.length > 0 && <details className="fuel-mileage-editor"><summary>Saved plan dates ({plans.length}) · Click Edit to update a row</summary><div className="table-scroll"><table className="data-table fuel-saved-plan-table"><thead><tr><th>Contract</th><th>From</th><th>Through</th><th>Annual miles</th><th>Tractors</th><th>Straight trucks</th><th>Vans</th><th>MPG</th><th>Review above</th><th>Action</th></tr></thead><tbody>{plans.map((plan) => {
       const active = editingKey === `${plan.contract_number}|${plan.effective_start}` && draft;
       return <tr key={`${plan.contract_number}-${plan.effective_start}`} className={active ? "fuel-inline-plan" : ""}>
