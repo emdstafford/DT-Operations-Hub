@@ -93,13 +93,13 @@ export default function UspsRateImport(){
         for(const row of sheet.rows){const key=row.effective_start+"|"+(row.effective_end??"");groups.set(key,[...(groups.get(key)??[]),row]);}
         for(const group of groups.values()){
           const first=group[0];
-          const {data:version,error:ve}=await supabase.from("usps_contract_rate_versions").upsert({
+          const {data:version,error:ve}=await supabase.from("usps_contract_rate_versions").insert({
             contract_number:first.contract_number,effective_start:first.effective_start,effective_end:first.effective_end,
             source_import_id:imp.id,source_sheet_name:sheet.sheetName,
             contract_status:/TERM|TERMINAT/i.test(sheet.sheetName)?"terminated":"active",created_by:user.id
-          },{onConflict:"contract_number,effective_start"}).select("id").single(); if(ve)throw ve;
+          }).select("id").single(); if(ve)throw ve;
           const payload=group.map(({effective_start,effective_end,usps_mpg,...row})=>({...row,contract_rate_version_id:version.id}));
-          const {error:te}=await supabase.from("usps_trip_rates").upsert(payload,{onConflict:"contract_rate_version_id,trip_number"});if(te)throw te;
+          const {error:te}=await supabase.from("usps_trip_rates").insert(payload);if(te)throw te;
         }
       }
       setSaved(`Saved ${totals.trips.toLocaleString()} USPS trip rates across ${totals.contracts} contracts.`);
