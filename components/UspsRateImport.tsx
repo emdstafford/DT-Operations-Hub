@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { DragEvent, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
 
@@ -42,7 +42,7 @@ function pick(row:Cell[], map:Map<string,number>, names:string[]){
 
 export default function UspsRateImport(){
   const [fileName,setFileName]=useState(""); const [fileHash,setFileHash]=useState(""); const [sheets,setSheets]=useState<PreviewSheet[]>([]);
-  const [error,setError]=useState(""); const [saving,setSaving]=useState(false); const [saved,setSaved]=useState("");
+  const [error,setError]=useState(""); const [saving,setSaving]=useState(false); const [saved,setSaved]=useState("");\n  const [dragging,setDragging]=useState(false); const inputRef=useRef<HTMLInputElement>(null);
   const totals=useMemo(()=>({contracts:sheets.length,trips:sheets.reduce((n,s)=>n+s.rows.length,0),review:sheets.filter(s=>s.status==="review").length}),[sheets]);
 
   async function preview(file?:File){
@@ -83,6 +83,11 @@ export default function UspsRateImport(){
     }catch{setSheets([]);setError("I could not read that workbook. Please use the original USPS Excel file.");}
   }
 
+  function onDrop(event:DragEvent<HTMLDivElement>){
+    event.preventDefault();setDragging(false);
+    void preview(event.dataTransfer.files?.[0]);
+  }
+
   async function saveRates(){
     if(!sheets.length||totals.review){setError("Resolve workbook exceptions before saving.");return;}
     if(!fileHash){setError("Choose the USPS workbook again so its file fingerprint can be verified.");return;}
@@ -117,22 +122,44 @@ export default function UspsRateImport(){
     finally{setSaving(false);}
   }
 
-  return <section className="hub-card no-print" style={{marginTop:24}}>
-    <div className="section-heading"><div><p className="eyebrow">USPS contract financials</p><h2>Import USPS Rates</h2>
-      <p>USPS is the authoritative source for contracted trips and rates. Valid rows import automatically; only structural exceptions are flagged.</p></div></div>
-    <label className="hub-secondary-link" style={{display:"inline-block",cursor:"pointer"}}>Choose USPS workbook
-      <input type="file" accept=".xlsx,.xls" onChange={e=>preview(e.target.files?.[0])} style={{display:"none"}}/></label>
-    {error&&<p role="alert" style={{marginTop:16}}>{error}</p>}{saved&&<p style={{marginTop:16}}><strong>{saved}</strong></p>}
-    {!!sheets.length&&<><div className="summary-grid" style={{marginTop:20}}>
-      <div className="summary-card"><span>Workbook</span><strong>{fileName}</strong></div>
-      <div className="summary-card"><span>Contracts</span><strong>{totals.contracts}</strong></div>
-      <div className="summary-card"><span>USPS trips</span><strong>{totals.trips.toLocaleString()}</strong></div>
-      <div className="summary-card"><span>Exceptions</span><strong>{totals.review}</strong></div>
-    </div><div style={{overflowX:"auto",marginTop:20}}><table className="data-table"><thead><tr><th>Contract</th><th>Trips</th><th>Effective</th><th>Expiration</th><th>Status</th></tr></thead>
-    <tbody>{sheets.map(s=><tr key={s.sheetName}><td><strong>{s.contractNumber}</strong></td><td>{s.rows.length.toLocaleString()}</td>
-      <td>{s.effectiveDates.join(", ")||"—"}</td><td>{s.expirationDates.join(", ")||"—"}</td><td>{s.note??(s.status==="ready"?"Ready":"Review")}</td></tr>)}</tbody></table></div>
-    <button className="hub-primary-link" type="button" onClick={saveRates} disabled={saving||totals.review>0} style={{marginTop:18,display:"inline-flex",alignItems:"center",justifyContent:"center",minHeight:44,padding:"10px 18px",borderRadius:8,border:"1px solid #0b2f5b",background:"#0b2f5b",color:"#fff",fontWeight:700,cursor:saving||totals.review>0?"not-allowed":"pointer",opacity:saving||totals.review>0?0.6:1,textDecoration:"none"}}>
-      {saving?"Saving USPS rates…":"Save USPS Rates"}</button>
-    <p style={{marginTop:12}}>Saving creates effective-dated rate history. A later USPS workbook will not erase prior contract periods.</p></>}
+  return <section className="contract-intake no-print">
+    <div
+      className={`contract-drop-zone${dragging?" is-dragging":""}`}
+      onDragEnter={event=>{event.preventDefault();setDragging(true);}}
+      onDragOver={event=>{event.preventDefault();setDragging(true);}}
+      onDragLeave={event=>{event.preventDefault();if(event.currentTarget===event.target)setDragging(false);}}
+      onDrop={onDrop}
+      onClick={()=>inputRef.current?.click()}
+      role="button"
+      tabIndex={0}
+      onKeyDown={event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();inputRef.current?.click();}}}
+    >
+      <input ref={inputRef} type="file" accept=".xlsx,.xls,.pdf,.doc,.docx" onChange={event=>void preview(event.target.files?.[0])} />
+      <div className="contract-drop-icon">↑</div>
+      <p className="eyebrow">Contract intake</p>
+      <h2>{fileName?"Choose another file":"Drop a contract file here"}</h2>
+      <p>Drag and drop a USPS workbook, contract, amendment, extension, or bid package — or click to browse.</p>
+      <span>Excel · PDF · Word</span>
+    </div>
+
+    {fileName&&<div className="contract-detected-file"><span>Selected file</span><strong>{fileName}</strong>{sheets.length>0&&<em>Recognized as USPS rate workbook</em>}</div>}
+    {error&&<p className="alert alert-error" role="alert">{error}</p>}
+    {saved&&<p className="alert contract-import-success"><strong>{saved}</strong></p>}
+
+    {!!sheets.length&&<section className="panel contract-import-preview">
+      <div className="panel-heading"><div><p className="eyebrow">Detected automatically</p><h2>USPS Rate Workbook</h2><span>Review the detected contracts and trips before saving.</span></div></div>
+      <div className="summary-grid contract-import-summary">
+        <div className="summary-card"><span>Contracts</span><strong>{totals.contracts}</strong></div>
+        <div className="summary-card"><span>USPS trips</span><strong>{totals.trips.toLocaleString()}</strong></div>
+        <div className="summary-card"><span>Exceptions</span><strong>{totals.review}</strong></div>
+      </div>
+      <div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Trips</th><th>Effective</th><th>Expiration</th><th>Status</th></tr></thead>
+      <tbody>{sheets.map(sheet=><tr key={sheet.sheetName}><td><strong>{sheet.contractNumber}</strong></td><td>{sheet.rows.length.toLocaleString()}</td>
+        <td>{sheet.effectiveDates.join(", ")||"—"}</td><td>{sheet.expirationDates.join(", ")||"—"}</td><td>{sheet.note??(sheet.status==="ready"?"Ready":"Review")}</td></tr>)}</tbody></table></div>
+      <div className="contract-import-actions">
+        <button className="primary-link" type="button" onClick={()=>void saveRates()} disabled={saving||totals.review>0}>{saving?"Saving USPS rates…":"Save USPS Rates"}</button>
+        <span>Saving creates effective-dated history. Later USPS files do not erase prior contract periods.</span>
+      </div>
+    </section>}
   </section>;
 }
