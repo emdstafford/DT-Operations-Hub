@@ -33,7 +33,7 @@ create table if not exists public.usps_contract_rate_versions (
   constraint usps_contract_rate_version_dates
     check (effective_end is null or effective_end >= effective_start),
   constraint usps_contract_rate_version_unique
-    unique (contract_number, effective_start)
+    unique (contract_number, effective_start, source_import_id)
 );
 
 create table if not exists public.usps_trip_rates (
