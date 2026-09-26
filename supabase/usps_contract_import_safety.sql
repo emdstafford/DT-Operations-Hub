@@ -64,6 +64,7 @@ declare
   period record;
   version_id uuid;
   inserted_trips integer := 0;
+  inserted_now integer := 0;
 begin
   if not public.has_app_permission('can_edit_rates') then
     raise exception 'Rate-edit permission required' using errcode='42501';
@@ -139,7 +140,8 @@ begin
           or nullif(r->>'effective_end','')::date = period.effective_end
         );
 
-      get diagnostics inserted_trips = inserted_trips + row_count;
+      get diagnostics inserted_now = row_count;
+      inserted_trips := inserted_trips + inserted_now;
     end loop;
   end loop;
 
