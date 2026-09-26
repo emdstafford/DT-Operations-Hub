@@ -86,7 +86,7 @@ export default function UspsRateImport(){
     try{
       const {data:{user}}=await supabase.auth.getUser(); if(!user)throw new Error("Sign in again before importing rates.");
       const {data:imp,error:ie}=await supabase.from("usps_rate_imports").insert({
-        source_file_name:fileName,imported_by:user.id,sheet_count:sheets.length,trip_count:totals.trips,status:"completed"
+        source_file_name:fileName,imported_by:user.id,sheet_count:sheets.length,trip_count:totals.trips,status:"validating"
       }).select("id").single(); if(ie)throw ie;
       for(const sheet of sheets){
         const groups=new Map<string,TripRow[]>();
@@ -96,14 +96,20 @@ export default function UspsRateImport(){
           const {data:version,error:ve}=await supabase.from("usps_contract_rate_versions").insert({
             contract_number:first.contract_number,effective_start:first.effective_start,effective_end:first.effective_end,
             source_import_id:imp.id,source_sheet_name:sheet.sheetName,
-            contract_status:/TERM|TERMINAT/i.test(sheet.sheetName)?"terminated":"active",created_by:user.id
+            contract_status:sheet.note==="Termination noted in USPS workbook"?"terminated":"active",termination_note:sheet.note==="Termination noted in USPS workbook"?sheet.note:null,created_by:user.id
           }).select("id").single(); if(ve)throw ve;
           const payload=group.map(({effective_start,effective_end,usps_mpg,...row})=>({...row,contract_rate_version_id:version.id}));
           const {error:te}=await supabase.from("usps_trip_rates").insert(payload);if(te)throw te;
         }
       }
+      const {error:completeError}=await supabase.from("usps_rate_imports").update({status:"completed"}).eq("id",imp.id);
+      if(completeError)throw completeError;
       setSaved(`Saved ${totals.trips.toLocaleString()} USPS trip rates across ${totals.contracts} contracts.`);
-    }catch(e){setError(e instanceof Error?e.message:"The USPS rates could not be saved.");}
+    }catch(e){
+      const x=e as {message?:string;details?:string;hint?:string;code?:string};
+      const parts=[x?.message,x?.details,x?.hint,x?.code?\`Code: ${x.code}\`:null].filter(Boolean);
+      setError(parts.length?parts.join(" — "):"The USPS rates could not be saved.");
+    }
     finally{setSaving(false);}
   }
 
