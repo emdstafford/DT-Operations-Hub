@@ -7,7 +7,7 @@ export default function Page() {
     <header className="page-intro"><div>
       <p className="eyebrow">Contract intelligence</p>
       <h1>Contracts</h1>
-      <p>Find a contract by number or supervisor, then tap it to see what happened.</p>
+      <p>Find a contract by number or supervisor, then tap it to see what happened.</p>\n      <p className="eyebrow">Financials preview · safe USPS import</p>
     </div></header>
     <ContractTools />
     <div className="no-print"><ContractSelector /></div>
