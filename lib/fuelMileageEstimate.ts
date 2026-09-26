@@ -24,16 +24,16 @@ const utcDay = (date: string) => Date.parse(`${date}T00:00:00Z`);
 export function estimateContractMileage(plans: MileagePlan[], start: string, end: string): MileageEstimate {
   const first = utcDay(start);
   const last = utcDay(end);
-  if (!Number.isFinite(first) || !Number.isFinite(last) || first > last) return { plannedMiles: 0, expectedGallons: 0, coveredDays: 0, totalDays: 0, alertAbovePercent: 0 };
+  if (!Number.isFinite(first) || !Number.isFinite(last) || first > last) return { plannedMiles: 0, expectedGallons: 0, mileageCoveredDays: 0, gallonsCoveredDays: 0, coveredDays: 0, totalDays: 0, alertAbovePercent: 0 };
   const ordered = [...plans].sort((a, b) => a.effective_start.localeCompare(b.effective_start));
   let plannedMiles = 0;
   let expectedGallons = 0;
-  let coveredDays = 0;
+  let mileageCoveredDays = 0;\n  let gallonsCoveredDays = 0;
   let alertAbovePercent = 0;
   for (let date = first; date <= last; date += DAY) {
     const day = new Date(date).toISOString().slice(0, 10);
     const plan = ordered.find((item) => item.effective_start <= day && (!item.effective_end || day <= item.effective_end));
-    if (!plan || Number(plan.annual_miles) <= 0 || Number(plan.assumed_mpg) <= 0) continue;
+    if (!plan || Number(plan.annual_miles) <= 0) continue;
     const year = new Date(date).getUTCFullYear();
     const daysInYear = (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / DAY;
     const dailyMiles = Number(plan.annual_miles) / daysInYear;
@@ -42,5 +42,5 @@ export function estimateContractMileage(plans: MileagePlan[], start: string, end
     alertAbovePercent = Number(plan.alert_above_percent);
     coveredDays++;
   }
-  return { plannedMiles, expectedGallons, coveredDays, totalDays: Math.round((last - first) / DAY) + 1, alertAbovePercent };
+  return { plannedMiles, expectedGallons, mileageCoveredDays, gallonsCoveredDays, coveredDays: mileageCoveredDays, totalDays: Math.round((last - first) / DAY) + 1, alertAbovePercent };
 }
