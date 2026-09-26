@@ -172,6 +172,8 @@ $$;
 revoke all on function public.import_usps_rate_workbook(text,text,integer,integer,jsonb) from public;
 grant execute on function public.import_usps_rate_workbook(text,text,integer,integer,jsonb) to authenticated;
 
+drop function if exists public.fuel_usps_mileage_plans(text[]);
+
 create or replace function public.fuel_usps_mileage_plans(p_contracts text[])
 returns table(
   contract_number text,
