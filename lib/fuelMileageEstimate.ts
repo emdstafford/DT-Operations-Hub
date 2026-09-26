@@ -32,7 +32,7 @@ export function estimateContractMileage(plans: MileagePlan[], start: string, end
   let alertAbovePercent = 0;
   for (let date = first; date <= last; date += DAY) {
     const day = new Date(date).toISOString().slice(0, 10);
-    const plan = ordered.find((item) => item.effective_start <= day && (!item.effective_end || day <= item.effective_end));
+    const plan = [...ordered].reverse().find((item) => item.effective_start <= day && (!item.effective_end || day <= item.effective_end));
     if (!plan || Number(plan.annual_miles) <= 0) continue;
     const year = new Date(date).getUTCFullYear();
     const daysInYear = (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / DAY;
