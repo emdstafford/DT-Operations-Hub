@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";\nimport type { DragEvent } from "react";
 import * as XLSX from "xlsx";
 import {
   processReport,
@@ -171,7 +171,7 @@ export default function UploadPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-  const [selectedDay, setSelectedDay] = useState("");
+  const [selectedDay, setSelectedDay] = useState("");\n  const [dragging, setDragging] = useState(false);\n  const inputRef = useRef<HTMLInputElement>(null);
   const email = useMemo(() => report ? buildEmail(report) : "", [report]);
   const emailHtml = useMemo(() => report ? buildEmailHtml(report) : "", [report]);
   const selectedDayContracts = useMemo(() => {
@@ -189,8 +189,7 @@ export default function UploadPage() {
     }).sort((a, b) => a.percentComplete - b.percentComplete);
   }, [report, selectedDay]);
 
-  async function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  async function processFile(file?: File) {
     if (!file) return;
     setFileName(file.name);
     setLoading(true);
@@ -227,6 +226,16 @@ export default function UploadPage() {
     }
   }
 
+  async function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    await processFile(event.target.files?.[0]);
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragging(false);
+    void processFile(event.dataTransfer.files?.[0]);
+  }
+
   async function copyEmail() {
     const html = buildEmailHtml(report!);
     if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
@@ -245,15 +254,31 @@ export default function UploadPage() {
     <main className="page-shell">
       <header className="page-intro">
         <div>
-          <p className="eyebrow">One upload center</p>
+          <p className="eyebrow">Report intake</p>
           <h1>Upload a report</h1>
-          <p>Choose either a daily or weekly USPS load-details file, or the missed-stops file. The hub will recognize it automatically.</p>
+          <p>Drop in a USPS load-details or missed-stops workbook. The Hub will recognize the report type automatically.</p>
         </div>
-        <label className="upload-button">
-          <span>{loading ? "Identifying and processing…" : "Choose report"}</span>
-          <input type="file" accept=".xlsx,.xlsm,.xls" onChange={handleFileSelect} disabled={loading} />
-        </label>
       </header>
+
+      <div
+        className={`contract-drop-zone${dragging ? " is-dragging" : ""}`}
+        onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
+        onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+        onDragLeave={(event) => { event.preventDefault(); const next = event.relatedTarget as Node | null; if (!next || !event.currentTarget.contains(next)) setDragging(false); }}
+        onDrop={handleDrop}
+        onClick={() => !loading && inputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => { if (!loading && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); inputRef.current?.click(); } }}
+        aria-disabled={loading}
+      >
+        <input ref={inputRef} type="file" accept=".xlsx,.xlsm,.xls" onChange={handleFileSelect} disabled={loading} />
+        <div className="contract-drop-icon" aria-hidden="true">↑</div>
+        <p className="eyebrow">Report intake</p>
+        <h2>{loading ? "Identifying and processing…" : fileName ? "Choose another report" : "Drop a report here"}</h2>
+        <p>Drag and drop anywhere in this box — or click anywhere in the box to browse.</p>
+        <span>Excel · XLSM · XLS</span>
+      </div>
 
       {fileName && <div className="file-strip"><span>Selected file</span><strong>{fileName}</strong></div>}
       {error && <div className="alert alert-error">{error}</div>}
