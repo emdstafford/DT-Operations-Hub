@@ -127,7 +127,7 @@ export default function UspsRateImport(){
     </div><div style={{overflowX:"auto",marginTop:20}}><table className="data-table"><thead><tr><th>Contract</th><th>Trips</th><th>Effective</th><th>Expiration</th><th>Status</th></tr></thead>
     <tbody>{sheets.map(s=><tr key={s.sheetName}><td><strong>{s.contractNumber}</strong></td><td>{s.rows.length.toLocaleString()}</td>
       <td>{s.effectiveDates.join(", ")||"—"}</td><td>{s.expirationDates.join(", ")||"—"}</td><td>{s.note??(s.status==="ready"?"Ready":"Review")}</td></tr>)}</tbody></table></div>
-    <button className="hub-primary-link" type="button" onClick={saveRates} disabled={saving||totals.review>0} style={{marginTop:18}}>
+    <button className="hub-primary-link" type="button" onClick={saveRates} disabled={saving||totals.review>0} style={{marginTop:18,display:"inline-flex",alignItems:"center",justifyContent:"center",minHeight:44,padding:"10px 18px",borderRadius:8,border:"1px solid #0b2f5b",background:"#0b2f5b",color:"#fff",fontWeight:700,cursor:saving||totals.review>0?"not-allowed":"pointer",opacity:saving||totals.review>0?0.6:1,textDecoration:"none"}}>
       {saving?"Saving USPS rates…":"Save USPS Rates"}</button>
     <p style={{marginTop:12}}>Saving creates effective-dated rate history. A later USPS workbook will not erase prior contract periods.</p></>}
   </section>;
