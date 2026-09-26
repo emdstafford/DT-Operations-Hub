@@ -129,7 +129,7 @@ export default function UspsRateImport(){
       className={`contract-drop-zone${dragging?" is-dragging":""}`}
       onDragEnter={event=>{event.preventDefault();setDragging(true);}}
       onDragOver={event=>{event.preventDefault();setDragging(true);}}
-      onDragLeave={event=>{event.preventDefault();if(event.currentTarget===event.target)setDragging(false);}}
+      onDragLeave={event=>{event.preventDefault();const next=event.relatedTarget as Node | null;if(!next||!event.currentTarget.contains(next))setDragging(false);}}
       onDrop={onDrop}
       onClick={()=>inputRef.current?.click()}
       role="button"
@@ -137,7 +137,7 @@ export default function UspsRateImport(){
       onKeyDown={event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();inputRef.current?.click();}}}
     >
       <input ref={inputRef} type="file" accept=".xlsx,.xls,.pdf,.doc,.docx" onChange={event=>void preview(event.target.files?.[0])} />
-      <div className="contract-drop-icon">↑</div>
+      <div className="contract-drop-icon" aria-hidden="true">↑</div>
       <p className="eyebrow">Contract intake</p>
       <h2>{fileName?"Choose another file":"Drop a contract file here"}</h2>
       <p>Drag and drop a USPS workbook, contract, amendment, extension, or bid package — or click to browse.</p>
