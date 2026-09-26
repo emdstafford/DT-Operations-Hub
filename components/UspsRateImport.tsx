@@ -41,14 +41,17 @@ function pick(row:Cell[], map:Map<string,number>, names:string[]){
 }
 
 export default function UspsRateImport(){
-  const [fileName,setFileName]=useState(""); const [sheets,setSheets]=useState<PreviewSheet[]>([]);
+  const [fileName,setFileName]=useState(""); const [fileHash,setFileHash]=useState(""); const [sheets,setSheets]=useState<PreviewSheet[]>([]);
   const [error,setError]=useState(""); const [saving,setSaving]=useState(false); const [saved,setSaved]=useState("");
   const totals=useMemo(()=>({contracts:sheets.length,trips:sheets.reduce((n,s)=>n+s.rows.length,0),review:sheets.filter(s=>s.status==="review").length}),[sheets]);
 
   async function preview(file?:File){
-    if(!file)return; setError("");setSaved("");setFileName(file.name);
+    if(!file)return; setError("");setSaved("");setFileName(file.name);setFileHash("");
     try{
-      const wb=XLSX.read(await file.arrayBuffer(),{type:"array",cellDates:true});
+      const bytes=await file.arrayBuffer();
+      const digest=await crypto.subtle.digest("SHA-256",bytes);
+      setFileHash(Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,"0")).join(""));
+      const wb=XLSX.read(bytes,{type:"array",cellDates:true});
       const parsed:PreviewSheet[]=wb.SheetNames.map(sheetName=>{
         const raw=XLSX.utils.sheet_to_json<Cell[]>(wb.Sheets[sheetName],{header:1,defval:null,raw:true});
         const hi=findHeader(raw); if(hi<0)return {sheetName,contractNumber:sheetName,rows:[],status:"review",note:"USPS header row not found",expirationDates:[],effectiveDates:[]};
@@ -82,29 +85,30 @@ export default function UspsRateImport(){
 
   async function saveRates(){
     if(!sheets.length||totals.review){setError("Resolve workbook exceptions before saving.");return;}
+    if(!fileHash){setError("Choose the USPS workbook again so its file fingerprint can be verified.");return;}
     setSaving(true);setError("");setSaved("");
     try{
       const {data:{user}}=await supabase.auth.getUser(); if(!user)throw new Error("Sign in again before importing rates.");
-      const {data:imp,error:ie}=await supabase.from("usps_rate_imports").insert({
-        source_file_name:fileName,imported_by:user.id,sheet_count:sheets.length,trip_count:totals.trips,status:"validating"
-      }).select("id").single(); if(ie)throw ie;
-      for(const sheet of sheets){
-        const groups=new Map<string,TripRow[]>();
-        for(const row of sheet.rows){const key=row.effective_start+"|"+(row.effective_end??"");groups.set(key,[...(groups.get(key)??[]),row]);}
-        for(const group of groups.values()){
-          const first=group[0];
-          const {data:version,error:ve}=await supabase.from("usps_contract_rate_versions").insert({
-            contract_number:first.contract_number,effective_start:first.effective_start,effective_end:first.effective_end,
-            source_import_id:imp.id,source_sheet_name:sheet.sheetName,
-            contract_status:sheet.note==="Termination noted in USPS workbook"?"terminated":"active",termination_note:sheet.note==="Termination noted in USPS workbook"?sheet.note:null,created_by:user.id
-          }).select("id").single(); if(ve)throw ve;
-          const payload=group.map(({effective_start,effective_end,usps_mpg,...row})=>({...row,contract_rate_version_id:version.id}));
-          const {error:te}=await supabase.from("usps_trip_rates").insert(payload);if(te)throw te;
-        }
-      }
-      const {error:completeError}=await supabase.from("usps_rate_imports").update({status:"completed"}).eq("id",imp.id);
-      if(completeError)throw completeError;
-      setSaved(`Saved ${totals.trips.toLocaleString()} USPS trip rates across ${totals.contracts} contracts.`);
+
+      const {error:cleanupError}=await supabase.rpc("cleanup_incomplete_usps_rate_imports",{p_source_file_name:fileName});
+      if(cleanupError)throw cleanupError;
+
+      const payload=sheets.map(sheet=>({
+        sheetName:sheet.sheetName,
+        contractNumber:sheet.contractNumber,
+        note:sheet.note??null,
+        rows:sheet.rows
+      }));
+      const {error:importError}=await supabase.rpc("import_usps_rate_workbook",{
+        p_source_file_name:fileName,
+        p_source_file_hash:fileHash,
+        p_sheet_count:sheets.length,
+        p_trip_count:totals.trips,
+        p_sheets:payload
+      });
+      if(importError)throw importError;
+
+      setSaved(`Saved ${totals.trips.toLocaleString()} USPS trip rates across ${totals.contracts} contracts. The import is complete and connected to contract mileage history.`);
     }catch(e){
       const x=e as {message?:string;details?:string;hint?:string;code?:string};
       const parts=[x?.message,x?.details,x?.hint,x?.code?`Code: ${x.code}`:null].filter(Boolean);
