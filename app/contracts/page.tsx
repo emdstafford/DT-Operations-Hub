@@ -11,7 +11,7 @@ export default function Page() {
         <p>Find a contract by number or supervisor, then tap it to see what happened.</p>
       </div>
       <div className="hub-actions no-print">
-        <Link className="primary-link" href="/contracts/import-usps">Import USPS Rates</Link>
+        <Link className="primary-link" href="/contracts/import-usps">Upload Contract Data</Link>
         <Link className="hub-secondary-link" href="/contracts/expiring">Expiring Contracts</Link>
       </div>
     </header>
