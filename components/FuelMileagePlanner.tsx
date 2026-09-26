@@ -18,7 +18,7 @@ export type FuelMileageRow = {
 };
 
 type Purchase = { contract_number: string; purchased_gallons: number; purchased_fuel_cost: number };
-type UspsPlan = { contract_number: string; effective_start: string; effective_end: string | null; annual_miles: number; source: string };
+type UspsPlan = { contract_number: string; effective_start: string; effective_end: string | null; annual_miles: number; source: string; suggested_mpg: number | null; equipment_basis: string | null };
 type PlanDraft = { through: string; miles: string; tractors: string; straight: string; vans: string; mpg: string; threshold: string };
 const number = (value: number, decimals = 0) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: decimals, minimumFractionDigits: decimals });
 const currency = (value: number) => Number(value || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -89,7 +89,7 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
     const manual = plans.filter((plan) => plan.contract_number === contract);
     const usps = uspsPlans.filter((plan) => plan.contract_number === contract).map((plan): MileagePlan => ({
       contract_number: plan.contract_number, effective_start: plan.effective_start, effective_end: plan.effective_end,
-      annual_miles: Number(plan.annual_miles), assumed_mpg: DEFAULT_MPG.tractor, alert_above_percent: 15,
+      annual_miles: Number(plan.annual_miles), assumed_mpg: Number(plan.suggested_mpg ?? 0), alert_above_percent: 15,
       tractor_count: null, straight_truck_count: null, van_count: null,
     }));
     const estimate = estimateContractMileage(manual.length ? manual : usps, start, end);
@@ -202,7 +202,7 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
   }
 
   return <section className="panel fuel-mileage-panel">
-    <div className="panel-heading"><div><p className="eyebrow">Fuel planning</p><h2>Planned miles and fuel purchased</h2><span>Planned mileage comes automatically from the USPS contract schedule when available. Saved mileage plans act as dated overrides. Fuel estimates then apply the MPG assumption; purchases may shift between periods when tanks are filled.</span></div></div>
+    <div className="panel-heading"><div><p className="eyebrow">Fuel planning</p><h2>Planned miles and fuel purchased</h2><span>Planned mileage comes automatically from the USPS contract schedule when available. When USPS equipment is clearly one type, Fuel applies the matching DT MPG assumption automatically. Mixed or unclear equipment requires an MPG override. Saved mileage plans act as dated overrides.</span></div></div>
     {error && <p className="alert alert-error">{error}</p>}{message && <p className="alert fuel-success">{message}</p>}
     {canEdit && <details className="fuel-mileage-editor"><summary>Add a mileage override</summary><div className="fuel-mileage-fields">
       <label>Contract<select value={planContract} onChange={(event) => choosePlan(event.target.value, "")}><option value="">Choose contract</option>{planOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -244,7 +244,7 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
         <td>{canEdit && (active ? <div className="fuel-inline-actions"><button className="primary-link" type="button" disabled={saving} onClick={() => void saveSavedPlan(plan)}>{saving ? "Saving…" : "Save"}</button><button className="hub-secondary-link" type="button" disabled={saving} onClick={() => { setEditingKey(""); setDraft(null); setError(""); }}>Cancel</button></div> : <button className="hub-secondary-link" type="button" onClick={() => editSavedPlan(plan)}>Edit</button>)}</td>
       </tr>;
     })}</tbody></table></div><p className="fuel-mileage-note">Changing vehicle counts recalculates MPG. You can then adjust MPG manually before saving. Saved plan start dates stay fixed.</p></details>}
-    <div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Planned miles</th><th>Expected gallons</th><th>Purchased gallons</th><th>Difference</th><th>Fuel spend</th><th>Status</th></tr></thead><tbody>{rows.map((row) => <tr key={row.contract} className={row.status === "review" ? "fuel-policy-alert-row" : ""}><td className="font-semibold text-navy">{row.contract}</td><td>{row.status === "incomplete" ? "—" : number(row.plannedMiles,1)}</td><td>{row.status === "incomplete" ? "—" : number(row.expectedGallons,1)}</td><td>{number(row.purchasedGallons,1)}</td><td>{row.status === "incomplete" ? "—" : `${row.variancePercent >= 0 ? "+" : ""}${number(row.variancePercent,1)}%`}</td><td>{currency(row.purchasedFuelCost)}</td><td>{row.status === "incomplete" ? `Plan needed (${row.coveredDays}/${row.totalDays} days)` : row.status === "review" ? `Needs review (>${number(row.alertAbovePercent,1)}%)` : "Within estimate"}</td></tr>)}</tbody></table></div>
+    <div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Planned miles</th><th>Expected gallons</th><th>Purchased gallons</th><th>Difference</th><th>Fuel spend</th><th>Status</th></tr></thead><tbody>{rows.map((row) => <tr key={row.contract} className={row.status === "review" ? "fuel-policy-alert-row" : ""}><td className="font-semibold text-navy">{row.contract}</td><td>{row.status === "incomplete" ? "—" : number(row.plannedMiles,1)}</td><td>{row.status === "incomplete" ? "—" : number(row.expectedGallons,1)}</td><td>{number(row.purchasedGallons,1)}</td><td>{row.status === "incomplete" ? "—" : `${row.variancePercent >= 0 ? "+" : ""}${number(row.variancePercent,1)}%`}</td><td>{currency(row.purchasedFuelCost)}</td><td>{row.status === "incomplete" ? `Mileage/MPG setup needed (${row.coveredDays}/${row.totalDays} days)` : row.status === "review" ? `Needs review (>${number(row.alertAbovePercent,1)}%)` : "Within estimate"}</td></tr>)}</tbody></table></div>
     <p className="fuel-mileage-note">A fuel variance measures purchases against an MPG estimate; it does not confirm actual miles driven, misuse, or contract profit. DEF and fees are excluded. Changing an MPG assumption updates the estimate for all dates in that plan.</p>
   </section>;
 }
