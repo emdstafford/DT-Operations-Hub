@@ -117,6 +117,12 @@ begin
         case when sheet->>'note'='Termination noted in USPS workbook' then sheet->>'note' else null end,
         auth.uid()
       )
+      on conflict (contract_number,effective_start,source_import_id)
+      do update set
+        effective_end=excluded.effective_end,
+        source_sheet_name=excluded.source_sheet_name,
+        contract_status=excluded.contract_status,
+        termination_note=excluded.termination_note
       returning id into version_id;
 
       insert into public.usps_trip_rates(
@@ -150,7 +156,25 @@ begin
         and (
           (nullif(r->>'effective_end','') is null and period.effective_end is null)
           or nullif(r->>'effective_end','')::date = period.effective_end
-        );
+        )
+      on conflict (contract_rate_version_id,trip_number)
+      do update set
+        unit_cost=excluded.unit_cost,
+        annual_trip_cost=excluded.annual_trip_cost,
+        calculated_rate_per_mile=excluded.calculated_rate_per_mile,
+        equipment_type=excluded.equipment_type,
+        frequency=excluded.frequency,
+        annual_trip_count=excluded.annual_trip_count,
+        wage_rate=excluded.wage_rate,
+        health_welfare_rate=excluded.health_welfare_rate,
+        detention_rate=excluded.detention_rate,
+        per_trip_miles=excluded.per_trip_miles,
+        annual_miles=excluded.annual_miles,
+        fuel_type=excluded.fuel_type,
+        per_trip_hours=excluded.per_trip_hours,
+        source_row_number=excluded.source_row_number,
+        source_payload=excluded.source_payload,
+        usps_mpg=excluded.usps_mpg;
 
       get diagnostics inserted_now = row_count;
       inserted_trips := inserted_trips + inserted_now;
