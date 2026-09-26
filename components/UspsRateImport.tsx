@@ -1,6 +1,6 @@
 "use client";
 
-import { DragEvent, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";\nimport type { DragEvent } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
 
