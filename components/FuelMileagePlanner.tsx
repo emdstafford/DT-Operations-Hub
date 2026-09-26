@@ -100,7 +100,7 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
     return {
       contract, ...estimate,
       purchasedGallons, purchasedFuelCost: Number(purchase?.purchased_fuel_cost ?? 0),
-      variancePercent, status: !complete ? "incomplete" : variancePercent > estimate.alertAbovePercent ? "review" : "in-range",
+      variancePercent, status: !mileageComplete || !gallonsComplete ? "incomplete" : variancePercent > estimate.alertAbovePercent ? "review" : "in-range",
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [contractKey, plans, uspsPlans, purchases, start, end]);
