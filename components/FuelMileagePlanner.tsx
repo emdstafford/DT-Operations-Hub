@@ -13,6 +13,7 @@ export type FuelMileageRow = {
   variancePercent: number;
   alertAbovePercent: number;
   coveredDays: number;
+  gallonsCoveredDays: number;
   totalDays: number;
   status: "review" | "in-range" | "incomplete";
 };
@@ -96,7 +97,8 @@ export default function FuelMileagePlanner({ start, end, contracts, planOptions,
     const purchase = purchases.find((item) => item.contract_number === contract);
     const purchasedGallons = Number(purchase?.purchased_gallons ?? 0);
     const variancePercent = estimate.expectedGallons > 0 ? (purchasedGallons / estimate.expectedGallons - 1) * 100 : 0;
-    const mileageComplete = estimate.totalDays > 0 && estimate.mileageCoveredDays === estimate.totalDays;\n    const gallonsComplete = estimate.totalDays > 0 && estimate.gallonsCoveredDays === estimate.totalDays;
+    const mileageComplete = estimate.totalDays > 0 && estimate.mileageCoveredDays === estimate.totalDays;
+    const gallonsComplete = estimate.totalDays > 0 && estimate.gallonsCoveredDays === estimate.totalDays;
     return {
       contract, ...estimate,
       purchasedGallons, purchasedFuelCost: Number(purchase?.purchased_fuel_cost ?? 0),
