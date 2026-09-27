@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";\nimport type { DragEvent } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { DragEvent } from "react";
 import * as XLSX from "xlsx";
 import {
   processReport,
@@ -141,7 +142,8 @@ function buildEmail(report: ProcessedReport) {
     lines.push("Contract / assigned trips\tTotal Stops\tStops Completed\tStops Incomplete\t% Complete");
     contracts.forEach((row) => lines.push(`${row.label}\t${row.totalStops}\t${row.completedStops}\t${row.incompleteStops}\t${percent(row.percentComplete)}`));
   });
-  return lines.join("\n");
+  return lines.join("
+");
 }
 
 function escapeHtml(value: string) {
@@ -171,7 +173,9 @@ export default function UploadPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-  const [selectedDay, setSelectedDay] = useState("");\n  const [dragging, setDragging] = useState(false);\n  const inputRef = useRef<HTMLInputElement>(null);
+  const [selectedDay, setSelectedDay] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const email = useMemo(() => report ? buildEmail(report) : "", [report]);
   const emailHtml = useMemo(() => report ? buildEmailHtml(report) : "", [report]);
   const selectedDayContracts = useMemo(() => {
