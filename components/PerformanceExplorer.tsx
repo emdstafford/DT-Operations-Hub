@@ -102,7 +102,7 @@ export default function PerformanceExplorer({ fixedContract, contractsOnly = fal
           }
           if ((result.data ?? []).length < 1000) break;
         }
-        if (active) setMissedTrips([...grouped.values()].sort((a, b) => b.incomplete - a.incomplete || b.date.localeCompare(a.date) || a.trip.localeCompare(b.trip, undefined, { numeric: true })));
+        if (active) setMissedTrips([...grouped.values()].sort((a, b) => a.date.localeCompare(b.date) || a.trip.localeCompare(b.trip, undefined, { numeric: true }) || b.incomplete - a.incomplete));
       } catch (cause) {
         if (active) { setMissedError(cause instanceof Error ? cause.message : "Could not load incomplete stops by trip."); setMissedTrips([]); }
       } finally { if (active) setMissedLoading(false); }
