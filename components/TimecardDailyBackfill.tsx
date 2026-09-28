@@ -42,9 +42,10 @@ async function parseFile(file: File) {
       if (!best || score > best.score) best = { rows, header, score };
     });
   }
-  if (!best || best.score < 4) throw new Error("Could not identify the timecard columns.");
+  const selected = best as { rows: string[][]; header: number; score: number } | null;
+  if (!selected || selected.score < 4) throw new Error("Could not identify the timecard columns.");
 
-  const heading = best.rows[best.header];
+  const heading: string[] = selected.rows[selected.header];
   const contractCol = find(heading, aliases.contract);
   const hoursCol = find(heading, aliases.hours);
   const payCodeCol = find(heading, aliases.payCode);
@@ -56,7 +57,7 @@ async function parseFile(file: File) {
   let unreadableRows = 0;
   const dates: string[] = [];
 
-  for (const cells of best.rows.slice(best.header + 1)) {
+  for (const cells of selected.rows.slice(selected.header + 1)) {
     if (!cells.some((cell) => cell.trim())) continue;
     const payCode = (cells[payCodeCol] ?? "").trim().toUpperCase();
     if (payCode === "PTO") continue;
