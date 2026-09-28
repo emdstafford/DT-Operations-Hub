@@ -357,7 +357,7 @@ export default function DashboardHub() {
         const group = groups.get(key) ?? { operatingDate: row.operating_date, contract, trip, loads: 0, loadNumbers: [], totalStops: 0, completedStops: 0, incompleteStops: 0 };
         group.loads += 1; group.loadNumbers.push(row.load_number); group.totalStops += Number(row.total_stops || 0); group.completedStops += Number(row.completed_stops || 0); group.incompleteStops += Number(row.incomplete_stops || 0); groups.set(key, group);
       });
-      const trips = [...groups.values()].sort((a,b) => a.operatingDate.localeCompare(b.operatingDate) || b.incompleteStops-a.incompleteStops || a.contract.localeCompare(b.contract));
+      const trips = [...groups.values()].sort((a,b) => a.operatingDate.localeCompare(b.operatingDate) || a.contract.localeCompare(b.contract) || a.trip.localeCompare(b.trip, undefined, { numeric: true }) || b.incompleteStops-a.incompleteStops);
       const [missedHistory, annotations, savedOperationalNotes] = await Promise.all([
         supabase.from("report_history").select("data").eq("report_type","missed_stops").lte("period_start",end).gte("period_end",start),
         supabase.from("report_annotations").select("title,note,period_start,period_end").lte("period_start",end).gte("period_end",start).order("period_start"),
