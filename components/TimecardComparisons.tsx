@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export type TimecardSummaryEntry = { contract: string; employeeId: string; name: string; hundredths: number };
-export type TimecardDailyEntry = { date: string; contract: string; hundredths: number };
+export type TimecardDailyEntry = { date: string; contract: string; hundredths: number };\nexport type TimecardDetailEntry = { contract: string; last: string; first: string; employeeId: string; date: string; inTime: string; outTime: string; hundredths: number };
 export type SavedReport = {
   id: string; payroll_name: string; pay_date: string; period_start: string; period_end: string; source_file: string; saved_at: string;
   summary: TimecardSummaryEntry[];
@@ -30,7 +30,7 @@ export function totals(rows: TimecardSummaryEntry[], kind: "driver" | "contract"
   return map;
 }
 
-export default function TimecardComparisons({ entries, dailyEntries, start, end, sourceName, payrollName }: { entries: TimecardSummaryEntry[]; dailyEntries: TimecardDailyEntry[]; start: string; end: string; sourceName: string; payrollName: string }) {
+export default function TimecardComparisons({ entries, dailyEntries, detailRows, start, end, sourceName, payrollName }: { entries: TimecardSummaryEntry[]; dailyEntries: TimecardDailyEntry[]; detailRows: TimecardDetailEntry[]; start: string; end: string; sourceName: string; payrollName: string }) {
   const [previous, setPrevious] = useState<SavedReport | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -68,7 +68,7 @@ export default function TimecardComparisons({ entries, dailyEntries, start, end,
             employee_count: new Set(current.map((entry) => entry.employeeId)).size,
             contract_count: new Set(current.map((entry) => entry.contract)).size,
             total_hundredths: current.reduce((sum, row) => sum + row.hundredths, 0),
-            summary: current, daily_summary: dailyEntries, saved_by: user.user.id,
+            summary: current, daily_summary: dailyEntries, detail_rows: detailRows, saved_by: user.user.id,
           });
           // Concurrent uploads may save the identical summary at the same instant.
           if (insertError && insertError.code !== "23505") throw insertError;
@@ -85,7 +85,7 @@ export default function TimecardComparisons({ entries, dailyEntries, start, end,
       } finally { if (active) setSaving(false); }
     })();
     return () => { active = false; };
-  }, [signature, start, end, sourceName, payrollName, current, dailyEntries]);
+  }, [signature, start, end, sourceName, payrollName, current, dailyEntries, detailRows]);
 
   const drivers = useMemo(() => compare(totals(previous?.summary ?? [], "driver"), totals(current, "driver")), [previous, current]);
   const contracts = useMemo(() => compare(totals(previous?.summary ?? [], "contract"), totals(current, "contract")), [previous, current]);
