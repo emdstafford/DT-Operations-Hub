@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { ComparisonTable, compare, totals, type SavedReport } from "@/components/TimecardComparisons";
+import { ComparisonTable, compare, totals, type SavedReport, type TimecardDetailEntry } from "@/components/TimecardComparisons";
 
-type HistoryRow = SavedReport & { employee_count: number; contract_count: number; total_hundredths: number; archived_at: string | null };
+type HistoryRow = SavedReport & { employee_count: number; contract_count: number; total_hundredths: number; archived_at: string | null; detail_rows?: TimecardDetailEntry[] };
 type Assignment = { contract_number: string; supervisor: string; start_date: string; end_date: string | null };
 type CurrentAssignment = { contract_number: string; supervisor: string };
 const hour = (hundredths: number) => (hundredths / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -48,7 +48,7 @@ export default function TimecardHistory() {
 
   useEffect(() => { let active = true; void (async () => {
     const [history, baseline, auth] = await Promise.all([supabase.from("timecard_summary_history")
-      .select("id,payroll_name,pay_date,period_start,period_end,source_file,saved_at,employee_count,contract_count,total_hundredths,summary,archived_at")
+      .select("id,payroll_name,pay_date,period_start,period_end,source_file,saved_at,employee_count,contract_count,total_hundredths,summary,detail_rows,archived_at")
       .order("pay_date", { ascending: false }).order("saved_at", { ascending: false }).limit(250),
       supabase.from("timecard_comparison_baseline").select("report_id").eq("id", true).maybeSingle(), supabase.auth.getUser()]);
     const { data, error: historyError } = history;
