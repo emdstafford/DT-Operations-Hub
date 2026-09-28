@@ -6,7 +6,8 @@ import { estimateContractMileage, type MileagePlan } from "@/lib/fuelMileageEsti
 import { supabase } from "@/lib/supabase";
 
 type Totals = { loads: number; total: number; completed: number; incomplete: number };
-type Fuel = { spend: number; gallons: number; expected: number; covered: number; days: number };\ntype FuelBreakdown = { diesel_gallons: number; diesel_cost: number; gasoline_gallons: number; gasoline_spend: number; misc_cost: number };
+type Fuel = { spend: number; gallons: number; expected: number; covered: number; days: number };
+type FuelBreakdown = { diesel_gallons: number; diesel_cost: number; gasoline_gallons: number; gasoline_spend: number; misc_cost: number };
 type Schedule = { trip_count: number; scheduled_payment: number; source_hours: number; term_days: number | null; snapshot_date: string };
 type PayRate = { st_hourly: number | null; tt_hourly: number | null; fringe_hourly: number | null; car_hourly: number | null; daily_rate: number | null; needs_review: boolean; effective_start: string | null };
 type PayHours = { hours: number; payrolls: number; first_period: string | null; last_period: string | null };
@@ -15,7 +16,8 @@ const number = (value: number, digits = 0) => Number(value || 0).toLocaleString(
 const money = (value: number) => Number(value || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 export default function ContractAtGlance({ contract, start, end, totals }: { contract: string; start: string; end: string; totals: Totals }) {
-  const [fuel, setFuel] = useState<Fuel | null>(null);\n  const [fuelBreakdown, setFuelBreakdown] = useState<FuelBreakdown | null>(null);
+  const [fuel, setFuel] = useState<Fuel | null>(null);
+  const [fuelBreakdown, setFuelBreakdown] = useState<FuelBreakdown | null>(null);
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [payRate, setPayRate] = useState<PayRate | null>(null);
   const [payHours, setPayHours] = useState<PayHours | null>(null);
@@ -43,7 +45,11 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
         setFuel({ spend: Number(purchased?.purchased_fuel_cost ?? 0), gallons: Number(purchased?.purchased_gallons ?? 0),
           expected: estimate.expectedGallons, covered: estimate.coveredDays, days: estimate.totalDays });
       }
-      if (!breakdown.error) {\n        const row = breakdown.data?.by_contract?.[0];\n        if (row) setFuelBreakdown({ diesel_gallons: Number(row.diesel_gallons ?? 0), diesel_cost: Number(row.diesel_cost ?? 0), gasoline_gallons: Number(row.gasoline_gallons ?? 0), gasoline_spend: Number(row.gasoline_spend ?? 0), misc_cost: Math.max(0, Number(row.total_spend ?? 0) - Number(row.diesel_cost ?? 0) - Number(row.gasoline_spend ?? 0)) });\n      }\n      setFinancialAccess(access.data === true);
+      if (!breakdown.error) {
+        const row = breakdown.data?.by_contract?.[0];
+        if (row) setFuelBreakdown({ diesel_gallons: Number(row.diesel_gallons ?? 0), diesel_cost: Number(row.diesel_cost ?? 0), gasoline_gallons: Number(row.gasoline_gallons ?? 0), gasoline_spend: Number(row.gasoline_spend ?? 0), misc_cost: Math.max(0, Number(row.total_spend ?? 0) - Number(row.diesel_cost ?? 0) - Number(row.gasoline_spend ?? 0)) });
+      }
+      setFinancialAccess(access.data === true);
       if (access.data === true) {
         const [result, rateResult, hoursResult, periodsResult] = await Promise.all([supabase.from("usps_contract_trip_snapshots")
           .select("trip_count,scheduled_payment,source_hours,term_days,snapshot_date")
