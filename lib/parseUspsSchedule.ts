@@ -53,8 +53,9 @@ function pageLines(items: TextItem[]) {
 
 export function analyzeScheduleText(text: string, pageCount: number, fileName = ""): ScheduleAnalysis {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const headerContract = text.match(/\bHCR(?:#|\s+ID)?[\s\S]{0,120}?\b(\d{4}[A-Z])\b/i)?.[1];
-  const filenameContract = fileName.match(/\b(\d{4}[A-Z])\b/i)?.[1];
+  const contractPattern = "(\\d{4}[A-Z]|\\d{3}[A-Z]\\d|\\d{2}[A-Z]\\d{2})";
+  const headerContract = text.match(new RegExp(`\\bHCR(?:#|\\s+ID)?[\\s\\S]{0,120}?\\b${contractPattern}\\b`, "i"))?.[1];
+  const filenameContract = fileName.match(new RegExp(`\\b${contractPattern}\\b`, "i"))?.[1];
   const contractNumber = (headerContract || filenameContract || "").toUpperCase();
   const tripIds = new Set<string>();
   for (const line of lines) {

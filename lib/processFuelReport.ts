@@ -37,6 +37,7 @@ export type ProcessedFuelReport = {
   periodStart: string;
   periodEnd: string;
   sourceRows: number;
+  introRowsSkipped: number;
   duplicateRowsRemoved: number;
   transactionCount: number;
   totalFuelGallons: number;
@@ -109,8 +110,17 @@ export async function processFuelReport(file: File): Promise<ProcessedFuelReport
   const workbook = XLSX.read(buffer, { type: "array", cellDates: false, cellStyles: false });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!sheet) throw new Error("The Comdata workbook does not contain a readable worksheet.");
-  const source = XLSX.utils.sheet_to_json<SourceRow>(sheet, { defval: "", raw: true });
   const required = ["Transaction Number", "Transaction Date", "Merchant Name", "Misc 1", "Misc 2", "Product Description", "Net Cost"];
+  // Some Comdata exports put a 14-line cover above the transaction header.
+  // Locate the actual header instead of dropping the first 14 transactions from
+  // a file whose header already starts on row 1.
+  const preview = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", raw: true, blankrows: true, range: 0 });
+  const headerRow = preview.slice(0, 50).findIndex((cells) => {
+    const labels = new Set(cells.map((value) => text(value)));
+    return required.every((label) => labels.has(label));
+  });
+  if (headerRow < 0) throw new Error("This does not match the Comdata Transaction Listing. The transaction header was not found in the first 50 rows.");
+  const source = XLSX.utils.sheet_to_json<SourceRow>(sheet, { range: headerRow, defval: "", raw: true });
   const headers = new Set(Object.keys(source[0] ?? {}));
   const missing = required.filter((header) => !headers.has(header));
   if (missing.length) throw new Error(`This does not match the Comdata Transaction Listing. Missing: ${missing.join(", ")}.`);
@@ -179,6 +189,7 @@ export async function processFuelReport(file: File): Promise<ProcessedFuelReport
     periodStart: dates[0],
     periodEnd: dates[dates.length - 1],
     sourceRows: source.length,
+    introRowsSkipped: headerRow,
     duplicateRowsRemoved,
     transactionCount: transactionGroups.size,
     totalFuelGallons: rows.filter((row) => row.product_category === "diesel" || row.product_category === "gasoline").reduce((sum, row) => sum + row.unit_gallons, 0),
