@@ -97,17 +97,17 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
     </section>
     <section className="print-only panel contract-print-at-glance">
       <div className="panel-heading"><div><p className="eyebrow">Selected-date overview</p><h2>At a glance</h2><span>{start} – {end}</span></div></div>
-      <div className="contract-financial-stats">
+      <div className="contract-print-glance-grid">
         <div><span>Completion</span><strong>{totals.total ? `${complete.toFixed(2)}%` : "—"}</strong></div>
         <div><span>Unique loads</span><strong>{number(totals.loads)}</strong></div>
-        <div><span>Total stops</span><strong>{number(totals.total)}</strong></div>
-        <div><span>Incomplete stops</span><strong>{number(totals.incomplete)}</strong></div>
-        <div><span>Fuel purchased</span><strong>{fuel ? money(fuel.spend) : "—"}</strong></div>
-        {financialAccess && <div><span>Latest USPS scheduled payment</span><strong>{schedule ? money(schedule.scheduled_payment) : "—"}</strong></div>}
-        {financialAccess && <div><span>Base pay + fringe estimate</span><strong>{estimatedPay === null ? "—" : money(estimatedPay)}</strong></div>}
-        <div><span>Trip notes</span><strong>Review</strong></div>
+        <div><span>Incomplete stops</span><strong>{number(totals.incomplete)}</strong><small>{number(totals.total)} total stops</small></div>
+        <div><span>Fuel purchased</span><strong>{fuel ? money(fuel.spend) : "—"}</strong><small>{fuel ? `${number(fuel.gallons, 1)} gallons` : "No fuel data"}</small></div>
+        {financialAccess && <div><span>USPS scheduled payment</span><strong>{schedule ? money(schedule.scheduled_payment) : "—"}</strong><small>{schedule ? `${number(schedule.trip_count)} trips · reviewed ${schedule.snapshot_date}` : "No schedule data"}</small></div>}
+        {financialAccess && <div><span>Base pay + fringe</span><strong>{estimatedPay === null ? "—" : money(estimatedPay)}</strong><small>{estimatedPay !== null && payHours ? `${number(Number(payHours.hours), 2)} payroll hours` : payStatus}</small></div>}
+        {financialAccess && payRate?.st_hourly !== null && <div><span>Straight truck / hour</span><strong>{money(payRate.st_hourly)}</strong><small>{payRate.fringe_hourly !== null ? `+${money(payRate.fringe_hourly)} fringe / worked hour` : "No fringe rate"}</small></div>}
+        {financialAccess && payRate?.tt_hourly !== null && <div><span>Tractor trailer / hour</span><strong>{money(payRate.tt_hourly)}</strong><small>{payRate.fringe_hourly !== null ? `+${money(payRate.fringe_hourly)} fringe / worked hour` : "No fringe rate"}</small></div>}
+        <div><span>Trip notes</span><strong>Review</strong><small>See operational notes below</small></div>
       </div>
-      {financialAccess && estimatedPay === null && <p>Pay estimate: {payStatus}.</p>}
     </section>
     {fuel && <section id="contract-fuel" className="panel contract-financial-panel no-print">
       <div className="panel-heading"><div><p className="eyebrow">Selected dates</p><h2>Fuel</h2><span>Diesel and gasoline purchased for {contract} from {start} through {end}</span></div><Link className="hub-secondary-link" href={fuelLink}>Full fuel report →</Link></div>
