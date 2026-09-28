@@ -95,6 +95,20 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
         <a href="#contract-notes" className="contract-overview-card"><span>Trip notes</span><strong>Review</strong><small>See USPS issues ↓</small></a>
       </nav>
     </section>
+    <section className="print-only panel contract-print-at-glance">
+      <div className="panel-heading"><div><p className="eyebrow">Selected-date overview</p><h2>At a glance</h2><span>{start} – {end}</span></div></div>
+      <div className="contract-financial-stats">
+        <div><span>Completion</span><strong>{totals.total ? `${complete.toFixed(2)}%` : "—"}</strong></div>
+        <div><span>Unique loads</span><strong>{number(totals.loads)}</strong></div>
+        <div><span>Total stops</span><strong>{number(totals.total)}</strong></div>
+        <div><span>Incomplete stops</span><strong>{number(totals.incomplete)}</strong></div>
+        <div><span>Fuel purchased</span><strong>{fuel ? money(fuel.spend) : "—"}</strong></div>
+        {financialAccess && <div><span>Latest USPS scheduled payment</span><strong>{schedule ? money(schedule.scheduled_payment) : "—"}</strong></div>}
+        {financialAccess && <div><span>Base pay + fringe estimate</span><strong>{estimatedPay === null ? "—" : money(estimatedPay)}</strong></div>}
+        <div><span>Trip notes</span><strong>Review</strong></div>
+      </div>
+      {financialAccess && estimatedPay === null && <p>Pay estimate: {payStatus}.</p>}
+    </section>
     {financialAccess && <section className="print-only panel contract-print-financials">
       <div className="panel-heading"><div><p className="eyebrow">Selected-date financial summary</p><h2>Contract financials</h2><span>{start} – {end}</span></div></div>
       <div className="contract-financial-stats">
