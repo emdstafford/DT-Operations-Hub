@@ -122,9 +122,9 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
         <div><span>Base pay + fringe estimate</span><strong>{estimatedPay === null ? "—" : money(estimatedPay)}</strong></div>
         <div><span>Diesel gallons purchased</span><strong>{fuelBreakdown ? number(fuelBreakdown.diesel_gallons, 1) : "—"}</strong></div>
         <div><span>Diesel purchased cost</span><strong>{fuelBreakdown ? money(fuelBreakdown.diesel_cost) : "—"}</strong></div>
+        <div><span>Misc fuel charges</span><strong>{fuelBreakdown ? money(fuelBreakdown.misc_cost) : "—"}</strong></div>
         <div><span>Gas gallons purchased</span><strong>{fuelBreakdown ? number(fuelBreakdown.gasoline_gallons, 1) : "—"}</strong></div>
         <div><span>Gas purchased cost</span><strong>{fuelBreakdown ? money(fuelBreakdown.gasoline_spend) : "—"}</strong></div>
-        <div><span>Misc fuel charges</span><strong>{fuelBreakdown ? money(fuelBreakdown.misc_cost) : "—"}</strong></div>
       </div>
       {payRate && <div className="contract-financial-stats">
         <div><span>Straight truck / hour</span><strong>{payRate.st_hourly === null ? "—" : money(payRate.st_hourly)}</strong></div>
