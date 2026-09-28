@@ -33,6 +33,6 @@ export default function DashboardReportActions() {
   if (!canManageReports) return null;
 
   return <div className="hub-actions">
-    <Link href="/upload" className="primary-link">Upload report</Link>
+    <Link href="/upload" className="primary-link">Upload files</Link>
   </div>;
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import {
   processReport,
@@ -12,6 +13,7 @@ import {
   type MissedStopSummary,
 } from "@/lib/processOperationalExceptions";
 import { saveMissedStopsSnapshot, saveReportSnapshot } from "@/lib/reportHistory";
+import { supabase } from "@/lib/supabase";
 
 function number(value: number) {
   return value.toLocaleString("en-US");
@@ -172,6 +174,25 @@ export default function UploadPage() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [selectedDay, setSelectedDay] = useState("");
+  const [fuelAccess, setFuelAccess] = useState(false);
+  const [payrollAccess, setPayrollAccess] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const email = userData.user?.email?.toLowerCase();
+      if (!email) return;
+      const [fuel, payroll] = await Promise.all([
+        supabase.from("fuel_tool_users").select("can_upload").eq("email", email).eq("active", true).maybeSingle(),
+        supabase.from("payroll_tool_users").select("email").eq("email", email).eq("active", true).maybeSingle(),
+      ]);
+      if (active) {
+        setFuelAccess(Boolean(fuel.data?.can_upload));
+        setPayrollAccess(Boolean(payroll.data));
+      }
+    })();
+    return () => { active = false; };
+  }, []);
   const email = useMemo(() => report ? buildEmail(report) : "", [report]);
   const emailHtml = useMemo(() => report ? buildEmailHtml(report) : "", [report]);
   const selectedDayContracts = useMemo(() => {
@@ -245,15 +266,27 @@ export default function UploadPage() {
     <main className="page-shell">
       <header className="page-intro">
         <div>
-          <p className="eyebrow">One upload center</p>
-          <h1>Upload a report</h1>
-          <p>Choose either a daily or weekly USPS load-details file, or the missed-stops file. The hub will recognize it automatically.</p>
+          <p className="eyebrow">Upload center</p>
+          <h1>Upload files</h1>
+          <p>Choose the type of file below. Each tool checks the file before saving any data.</p>
         </div>
+      </header>
+
+      <nav className="upload-destinations" aria-label="Choose an upload type">
+        <a className="panel upload-destination" href="#usps-report"><strong>USPS load details or missed stops</strong><span>Upload daily or weekly performance files here ↓</span></a>
+        {fuelAccess && <Link className="panel upload-destination" href="/fuel#comdata-upload"><strong>Comdata fuel report</strong><span>Import transactions and review fuel spending →</span></Link>}
+        {payrollAccess && <Link className="panel upload-destination" href="/payroll/timecards"><strong>Payroll timecards</strong><span>Prepare and print the timecard report →</span></Link>}
+        {payrollAccess && <Link className="panel upload-destination" href="/payroll/holiday-hours"><strong>Holiday hours</strong><span>Calculate hours and create the ADP import →</span></Link>}
+        <Link className="panel upload-destination" href="/schedule-builder"><strong>USPS contract schedules</strong><span>Review a schedule and its service changes →</span></Link>
+      </nav>
+
+      <section id="usps-report" className="panel usps-upload-choice">
+        <div><h2>USPS load details or missed stops</h2><p>Select a workbook. The hub recognizes the two USPS report types automatically and checks for duplicates.</p></div>
         <label className="upload-button">
           <span>{loading ? "Identifying and processing…" : "Choose report"}</span>
           <input type="file" accept=".xlsx,.xlsm,.xls" onChange={handleFileSelect} disabled={loading} />
         </label>
-      </header>
+      </section>
 
       {fileName && <div className="file-strip"><span>Selected file</span><strong>{fileName}</strong></div>}
       {error && <div className="alert alert-error">{error}</div>}

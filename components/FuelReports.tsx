@@ -289,10 +289,10 @@ export default function FuelReports() {
   }
 
   return <div className={`report-stack fuel-report-stack fuel-print-${printMode}${printTypes ? " fuel-include-types" : ""}${printAlerts ? " fuel-include-alerts" : ""}${printEstimate ? " fuel-include-estimate" : ""}${printContractOnDrivers ? " fuel-include-driver-contracts" : ""}`}>
-    {canUpload && <details className="panel fuel-upload-disclosure"><summary>Upload a Comdata fuel report</summary><div className="fuel-upload-panel">
+    {canUpload && <section id="comdata-upload" className="panel fuel-upload-disclosure"><div className="fuel-upload-panel">
       <div><p className="eyebrow">Import Comdata</p><h2>Upload Transaction Listing</h2><p>The file stays inside the secured DT system. Driver-license fields, VINs, and license plates are not stored.</p></div>
       <label className="primary-link fuel-file-button">{parsing ? "Reading file…" : "Choose Comdata file"}<input type="file" accept=".xlsx,.xls" disabled={parsing || uploading} onChange={(event) => void selectFile(event.target.files?.[0])} /></label>
-    </div></details>}
+    </div></section>}
     {canUpload && <FuelDataCleanup start={start} end={end} onCorrected={() => { setFuelRevision((value) => value + 1); void loadOptions(false); }} />}
     {preview && <section className="panel fuel-import-preview">
       <div className="panel-heading"><div><p className="eyebrow">Ready to import</p><h2>{preview.fileName}</h2></div><span>{displayDate(preview.periodStart)} – {displayDate(preview.periodEnd)}</span></div>
