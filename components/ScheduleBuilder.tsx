@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { parseUspsSchedule, type ScheduleAnalysis } from "@/lib/parseUspsSchedule";
 import { parseScannedUspsSchedule, type OcrProgress, type OcrScheduleAnalysis } from "@/lib/parseScannedUspsSchedule";
 import ScheduleTripReconciliation from "@/components/ScheduleTripReconciliation";
+import { useUploadHandoff } from "@/components/UploadHandoff";
 
 type IntakeKind = "source" | "simplified" | "driver" | "rates";
 type Intake = { name: string; size: number; file: File; sheets?: string[]; truckSheets?: number; tripRows?: number; parkingLocations?: string[] };
@@ -61,6 +62,7 @@ function inferChangeDetails(file: File): ServiceChangeDraft {
 }
 
 export default function ScheduleBuilder() {
+  const handoff = useUploadHandoff();
   const [files, setFiles] = useState<Partial<Record<IntakeKind, Intake>>>({});
   const [serviceChanges, setServiceChanges] = useState<ServiceChangeDraft[]>([]);
   const [originalEffectiveDate, setOriginalEffectiveDate] = useState("");
@@ -174,6 +176,12 @@ export default function ScheduleBuilder() {
       if (date && /^\d+$/.test(date[2])) setEffectiveDate(`${date[3]}-${date[1].padStart(2, "0")}-${date[2].padStart(2, "0")}`);
     }
   }
+  useEffect(() => {
+    const file = handoff.take("schedule");
+    if (file) void choose("source", file);
+  // Consume the in-memory file once when this page opens.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function analyze() {
     const source = files.source?.file;

@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import AuthGate from "@/components/AuthGate";
+import { UploadHandoffProvider } from "@/components/UploadHandoff";
 
 export const metadata: Metadata = {
   title: "DT Intelligence Hub",
@@ -17,7 +18,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AuthGate>{children}</AuthGate>
+        <UploadHandoffProvider><AuthGate>{children}</AuthGate></UploadHandoffProvider>
       </body>
     </html>
   );

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccessRole } from "@/components/AccessRole";
 import FuelMileagePlanner, { type FuelMileageRow } from "@/components/FuelMileagePlanner";
 import FuelBulkMileageImport from "@/components/FuelBulkMileageImport";
+import { useUploadHandoff } from "@/components/UploadHandoff";
 import FuelDataCleanup from "@/components/FuelDataCleanup";
 import { processFuelReport, type ProcessedFuelReport } from "@/lib/processFuelReport";
 import { supabase } from "@/lib/supabase";
@@ -44,6 +45,7 @@ function fuelPreset(mode: "day" | "week" | "month", anchor: string) {
 }
 
 export default function FuelReports() {
+  const handoff = useUploadHandoff();
   const dashboardFuelOnly = useAccessRole() === "dashboard_fuel_viewer";
   const today = new Date().toISOString().slice(0, 10);
   const [canUpload, setCanUpload] = useState(false);
@@ -141,6 +143,12 @@ export default function FuelReports() {
     catch (cause) { setError(cause instanceof Error ? cause.message : "The Comdata file could not be read."); }
     finally { setParsing(false); }
   }
+  useEffect(() => {
+    const file = handoff.take("fuel_comdata");
+    if (file) void selectFile(file);
+  // Consume the in-memory file once when this page opens.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function importReport() {
     if (!preview || uploading) return;

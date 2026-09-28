@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useUploadHandoff } from "@/components/UploadHandoff";
 import { parseUspsSchedule } from "@/lib/parseUspsSchedule";
-import { parseUspsContractWorkbook } from "@/lib/parseUspsContractWorkbook";
+import { parseUspsContractWorkbook, type WorkbookTrip } from "@/lib/parseUspsContractWorkbook";
 import { supabase } from "@/lib/supabase";
 
 type Candidate = {
@@ -20,6 +22,11 @@ type Candidate = {
   excludedTrips?: number;
   hours?: number | null;
   payment?: number | null;
+  termMiles?: number | null;
+  termDays?: number | null;
+  termStart?: string;
+  termEnd?: string;
+  tripRows?: WorkbookTrip[];
 };
 type ExistingPlan = {
   contract_number: string;
@@ -38,25 +45,34 @@ const overlaps = (start: string, end: string, plan: ExistingPlan) =>
   start <= (plan.effective_end || "9999-12-31") && plan.effective_start <= (end || "9999-12-31");
 
 export default function FuelBulkMileageImport({ onSaved }: { onSaved: () => void }) {
+  const handoff = useUploadHandoff();
   const [rows, setRows] = useState<Candidate[]>([]);
+  const [expanded, setExpanded] = useState(false);
   const [plans, setPlans] = useState<ExistingPlan[]>([]);
   const [commonStart, setCommonStart] = useState("");
   const [commonEnd, setCommonEnd] = useState("");
   const [commonMpg, setCommonMpg] = useState("");
   const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 10));
+  const [sourceWorkbook, setSourceWorkbook] = useState<{ name: string; hash: string } | null>(null);
+  const [canStoreTrips, setCanStoreTrips] = useState(false);
+  const [tripsSaved, setTripsSaved] = useState<string[]>([]);
   const [confirmed, setConfirmed] = useState(false);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  useEffect(() => {
+    void supabase.rpc("is_contract_financial_user").then(({ data }) => setCanStoreTrips(data === true));
+  }, []);
 
   function change(id: string, update: Partial<Candidate>) {
     setRows((current) => current.map((row) => row.id === id ? { ...row, ...update } : row));
     setConfirmed(false);
   }
 
-  async function readFiles(files: FileList | null) {
+  async function readFiles(files: FileList | File[] | null) {
     if (!files?.length) return;
-    setError(""); setMessage(""); setConfirmed(false); setRows([]); setPlans([]);
+    setExpanded(true);
+    setError(""); setMessage(""); setConfirmed(false); setRows([]); setPlans([]); setSourceWorkbook(null); setTripsSaved([]);
     const chosen = Array.from(files);
     const workbookFiles = chosen.filter((file) => /\.(xlsx|xlsm|xls)$/i.test(file.name));
     const pdfFiles = chosen.filter((file) => /\.pdf$/i.test(file.name));
@@ -69,13 +85,17 @@ export default function FuelBulkMileageImport({ onSaved }: { onSaved: () => void
       if (workbookFiles.length) {
         const workbook = workbookFiles[0];
         const summaries = await parseUspsContractWorkbook(workbook, asOf);
+        const digest = await crypto.subtle.digest("SHA-256", await workbook.arrayBuffer());
+        setSourceWorkbook({ name: workbook.name, hash: Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("") });
         for (const [index, summary] of summaries.entries()) {
           candidates.push({ id: `workbook-${index}-${summary.sheet}`, fileName: `${workbook.name} · ${summary.sheet}`,
             contract: summary.contract, miles: summary.annualMiles == null ? "" : String(summary.annualMiles),
-            page: null, start: commonStart || asOf, end: commonEnd || summary.earliestExpiration,
+            page: null, start: commonStart || (summary.termDays ? summary.termStart : asOf), end: commonEnd || summary.earliestExpiration,
             mpg: commonMpg, selected: !summary.issue, issue: summary.issue,
             trips: summary.activeTrips, excludedTrips: summary.excludedTrips,
-            hours: summary.annualHours, payment: summary.scheduledPayment });
+            hours: summary.annualHours, payment: summary.scheduledPayment,
+            termMiles: summary.termMiles, termDays: summary.termDays,
+            termStart: summary.termStart, termEnd: summary.earliestExpiration, tripRows: summary.tripRows });
         }
       }
       for (const [index, file] of pdfFiles.entries()) {
@@ -113,10 +133,18 @@ export default function FuelBulkMileageImport({ onSaved }: { onSaved: () => void
       setError(cause instanceof Error ? cause.message : "The saved mileage plans could not be checked.");
     } finally { setWorking(false); }
   }
+  useEffect(() => {
+    const file = handoff.take("fuel_contracts");
+    if (file) void readFiles([file]);
+  // Consume the in-memory file once when this page opens.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function conflict(row: Candidate) {
     if (!row.start) return "Effective start date required";
     if (row.end && row.end < row.start) return "End date is before start date";
+    if (row.termDays && (!row.end || row.start < row.termStart! || row.end > row.termEnd!))
+      return `${row.termDays}-day plan must stay within ${row.termStart}–${row.termEnd}`;
     const miles = Number(row.miles), mpg = Number(row.mpg);
     if (!row.miles || !Number.isFinite(miles) || miles <= 0) return "Annual miles required";
     if (!row.mpg || !Number.isFinite(mpg) || mpg <= 0) return "MPG required";
@@ -161,20 +189,53 @@ export default function FuelBulkMileageImport({ onSaved }: { onSaved: () => void
     setConfirmed(false); setWorking(false);
   }
 
+  async function saveTrips() {
+    const chosen = rows.filter((row) => row.selected && row.tripRows?.length && !row.issue);
+    if (!confirmed || !sourceWorkbook || !canStoreTrips || !chosen.length) return;
+    setWorking(true); setError(""); setMessage("");
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) { setError("Sign in again before saving contract trips."); setWorking(false); return; }
+    const { data: existing, error: lookupError } = await supabase.from("usps_contract_trip_snapshots")
+      .select("contract_number").eq("source_hash", sourceWorkbook.hash).eq("snapshot_date", asOf)
+      .in("contract_number", chosen.map((row) => row.contract));
+    if (lookupError) { setError("Secure trip storage is not ready. Run usps_contract_trip_snapshots.sql in Supabase before saving."); setWorking(false); return; }
+    const duplicates = new Set((existing || []).map((row) => row.contract_number));
+    const newRows = chosen.filter((row) => !duplicates.has(row.contract));
+    if (newRows.length) {
+      const { error: saveError } = await supabase.from("usps_contract_trip_snapshots").insert(newRows.map((row) => ({
+        contract_number: row.contract, snapshot_date: asOf, source_hash: sourceWorkbook.hash,
+        source_file: sourceWorkbook.name, trip_count: row.tripRows!.length,
+        source_miles: Number(row.tripRows!.reduce((sum, trip) => sum + trip.annual_miles, 0).toFixed(1)),
+        source_hours: Number(row.tripRows!.reduce((sum, trip) => sum + trip.annual_hours, 0).toFixed(2)),
+        scheduled_payment: Number(row.tripRows!.reduce((sum, trip) => sum + trip.scheduled_trip_payment, 0).toFixed(2)),
+        term_days: row.termDays || null,
+        trips: row.tripRows, uploaded_by: userData.user!.id,
+      })));
+      if (saveError) { setError(saveError.message); setWorking(false); return; }
+    }
+    setTripsSaved(chosen.map((row) => row.contract));
+    setMessage(`${newRows.length} new contract trip record${newRows.length === 1 ? "" : "s"} saved; ${duplicates.size} duplicate${duplicates.size === 1 ? "" : "s"} already stored. Open a contract to see its trips and rates.`);
+    setWorking(false);
+  }
+
   const selected = rows.filter((row) => row.selected);
   const blockers = selected.map(conflict).filter(Boolean);
-  return <details className="panel fuel-bulk-import no-print">
+  return <details className="panel fuel-bulk-import no-print" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
     <summary>Import annual miles from a USPS contract workbook or PDFs</summary>
     <div className="fuel-bulk-body">
-      <p>Select the USPS trip workbook for all contracts at once, or several schedule PDFs. The workbook totals active trip rows as of the date below. Files stay in this browser; only confirmed mileage plans are saved.</p>
-      <label className="fuel-bulk-date">Trips active on<input type="date" value={asOf} onChange={(event) => { setAsOf(event.target.value); setRows([]); setConfirmed(false); }} /></label>
+      <p>Select the USPS trip workbook for all contracts at once, or several schedule PDFs. The workbook totals active trip rows as of the date below. Files stay in this browser; reviewed trip rows or confirmed mileage plans are saved only when you choose their respective save buttons.</p>
+      <label className="fuel-bulk-date">Trips active on<input type="date" value={asOf} onChange={(event) => { setAsOf(event.target.value); setRows([]); setSourceWorkbook(null); setConfirmed(false); }} /></label>
       <label className="hub-secondary-link fuel-bulk-file">{working ? "Reading or saving…" : "Choose USPS workbook or PDFs"}<input type="file" accept=".xlsx,.xlsm,.xls,.pdf" multiple disabled={working} onChange={(event) => void readFiles(event.target.files)} /></label>
       {rows.length > 0 && <>
         <div className="fuel-bulk-common"><label>Apply start date to all<input type="date" value={commonStart} onChange={(event) => { const value = event.target.value; setCommonStart(value); setRows((current) => current.map((row) => ({ ...row, start: value }))); setConfirmed(false); }} /></label><label>Apply end date to all (optional)<input type="date" value={commonEnd} onChange={(event) => { const value = event.target.value; setCommonEnd(value); setRows((current) => current.map((row) => ({ ...row, end: value }))); setConfirmed(false); }} /></label><label>Apply MPG to all (optional)<input type="number" min="0.01" step="0.1" value={commonMpg} onChange={(event) => { const value = event.target.value; setCommonMpg(value); setRows((current) => current.map((row) => ({ ...row, mpg: value }))); setConfirmed(false); }} /></label></div>
-        <div className="table-scroll"><table className="data-table fuel-bulk-table"><thead><tr><th>Use</th><th>Source</th><th>Contract</th><th>Active trips</th><th>Annual miles</th><th>Scheduled trip payment</th><th>Annual hours</th><th>Effective from</th><th>Through</th><th>MPG</th><th>Review</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><input type="checkbox" aria-label={`Import ${row.fileName}`} checked={row.selected} disabled={Boolean(row.issue) || working} onChange={(event) => change(row.id, { selected: event.target.checked })} /></td><td>{row.fileName}{row.page && <small>PDF page {row.page}</small>}{Boolean(row.excludedTrips) && <small>{row.excludedTrips} trips outside selected date</small>}</td><td>{row.contract || "—"}</td><td>{row.trips ?? "—"}</td><td><input aria-label={`Annual miles for ${row.fileName}`} type="number" min="0.01" step="0.1" value={row.miles} disabled={working || Boolean(row.issue)} onChange={(event) => change(row.id, { miles: event.target.value })} /></td><td>{row.payment == null ? "—" : row.payment.toLocaleString("en-US", { style: "currency", currency: "USD" })}</td><td>{row.hours == null ? "—" : row.hours.toLocaleString("en-US")}</td><td><input aria-label={`Start for ${row.fileName}`} type="date" value={row.start} disabled={working} onChange={(event) => change(row.id, { start: event.target.value })} /></td><td><input aria-label={`End for ${row.fileName}`} type="date" value={row.end} disabled={working} onChange={(event) => change(row.id, { end: event.target.value })} /></td><td><input aria-label={`MPG for ${row.fileName}`} type="number" min="0.01" step="0.1" value={row.mpg} disabled={working} onChange={(event) => change(row.id, { mpg: event.target.value })} /></td><td>{row.issue || (row.selected ? conflict(row) || "Ready for confirmation" : "Skipped")}</td></tr>)}</tbody></table></div>
-        <p>Scheduled trip payment is a projection from the USPS workbook, not money already earned. The fuel mileage plan saves miles, dates, and MPG; rate and trip history still need a separate secure contract model.</p>
-        <label className="fuel-bulk-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /> I checked each selected contract, its stated annual miles, effective dates, and MPG against the source.</label>
-        <button type="button" className="primary-link" disabled={working || !confirmed || !selected.length || blockers.length > 0} onClick={() => void save()}>{working ? "Saving…" : `Save ${selected.length} mileage plan${selected.length === 1 ? "" : "s"}`}</button>
+        <div className="table-scroll"><table className="data-table fuel-bulk-table"><thead><tr><th>Use</th><th>Source</th><th>Contract</th><th>Active trips</th><th>Annualized miles for fuel estimate</th><th>Scheduled trip payment</th><th>Schedule hours</th><th>Effective from</th><th>Through</th><th>MPG</th><th>Review</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><input type="checkbox" aria-label={`Import ${row.fileName}`} checked={row.selected} disabled={Boolean(row.issue) || working} onChange={(event) => change(row.id, { selected: event.target.checked })} /></td><td>{row.fileName}{row.page && <small>PDF page {row.page}</small>}{Boolean(row.excludedTrips) && <small>{row.excludedTrips} trips outside selected date</small>}{row.termDays && <small>Source: {row.termMiles?.toLocaleString()} miles over {row.termDays} days</small>}</td><td>{row.contract || "—"}</td><td>{row.trips ?? "—"}</td><td><input aria-label={`Annualized miles for ${row.fileName}`} type="number" min="0.01" step="0.1" value={row.miles} disabled={working || Boolean(row.issue)} onChange={(event) => change(row.id, { miles: event.target.value })} /></td><td>{row.payment == null ? "—" : row.payment.toLocaleString("en-US", { style: "currency", currency: "USD" })}{row.termDays && <small>Payment for {row.termDays}-day term</small>}</td><td>{row.hours == null ? "—" : row.hours.toLocaleString("en-US")}</td><td><input aria-label={`Start for ${row.fileName}`} type="date" value={row.start} disabled={working} onChange={(event) => change(row.id, { start: event.target.value })} /></td><td><input aria-label={`End for ${row.fileName}`} type="date" value={row.end} disabled={working} onChange={(event) => change(row.id, { end: event.target.value })} /></td><td><input aria-label={`MPG for ${row.fileName}`} type="number" min="0.01" step="0.1" value={row.mpg} disabled={working} onChange={(event) => change(row.id, { mpg: event.target.value })} /></td><td>{row.issue || (row.selected ? conflict(row) || "Ready for confirmation" : "Skipped")}</td></tr>)}</tbody></table></div>
+        <p>Scheduled trip payment is a projection from the USPS workbook, not money already earned. Reviewed trip rows and rates can be saved to the restricted contract record; mileage plans remain a separate fuel estimate.</p>
+        <label className="fuel-bulk-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /> I checked the selected trip totals and dates against the USPS workbook, and will confirm MPG before saving a fuel plan.</label>
+        <div className="fuel-bulk-actions">
+          {sourceWorkbook && canStoreTrips && <button type="button" className="primary-link" disabled={working || !confirmed || !selected.some((row) => row.tripRows?.length)} onClick={() => void saveTrips()}>{working ? "Saving…" : "Save reviewed trips to Contracts"}</button>}
+          <button type="button" className="hub-secondary-link" disabled={working || !confirmed || !selected.length || blockers.length > 0} onClick={() => void save()}>{working ? "Saving…" : `Save ${selected.length} mileage plan${selected.length === 1 ? "" : "s"}`}</button>
+        </div>
+        {tripsSaved.length > 0 && <div className="fuel-bulk-links">Saved contracts: {tripsSaved.map((contract) => <Link key={contract} href={`/contracts/${encodeURIComponent(contract)}`}>{contract}</Link>)}</div>}
       </>}
       {error && <p className="alert alert-error">{error}</p>}{message && <p className="alert fuel-success">{message}</p>}
     </div>

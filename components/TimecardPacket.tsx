@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useUploadHandoff } from "@/components/UploadHandoff";
 import TimecardComparisons, { type SavedReport, type TimecardSummaryEntry } from "@/components/TimecardComparisons";
 import * as XLSX from "xlsx";
 
@@ -111,6 +112,7 @@ function HoursInline({ current, previous, currentName }: { current: number; prev
   return <span className="timecard-compare-inline">{previous && <span>Previous {previous.name}: <b>{hoursLabel(previous.hours)}</b></span>}<span>Current {currentName}: <b>{hoursLabel(current)}</b></span>{previous && <span className={current < previous.hours ? "timecard-hours-down" : current > previous.hours ? "timecard-hours-up" : ""}>Change from last payroll: <b>{hoursChange(current, previous.hours)}</b></span>}</span>;
 }
 export default function TimecardPacket() {
+  const handoff = useUploadHandoff();
   const [file, setFile] = useState<Source | null>(null);
   const [payrollName, setPayrollName] = useState("");
   const [confirmedPayrollName, setConfirmedPayrollName] = useState("");
@@ -152,6 +154,12 @@ export default function TimecardPacket() {
       setFile(await sourceFromFile(upload));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to read this report."); }
   }
+  useEffect(() => {
+    const file = handoff.take("timecards");
+    if (file) void readFile(file);
+  // Consume the in-memory file once when this page opens.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     let active = true;
     void (async () => {

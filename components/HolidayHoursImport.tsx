@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useUploadHandoff } from "@/components/UploadHandoff";
 import {
   createHolidayHoursImport,
   holidaySourceFingerprint,
@@ -16,7 +17,9 @@ function number(value: number, digits = 2) {
 }
 
 export default function HolidayHoursImport() {
+  const handoff = useUploadHandoff();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [sourceCsv, setSourceCsv] = useState("");
   const [holidayCount, setHolidayCount] = useState<1 | 2>(1);
   const [fileName, setFileName] = useState("");
@@ -26,11 +29,18 @@ export default function HolidayHoursImport() {
   const [holidays, setHolidays] = useState<HolidayDraft[]>([{ name: "", date: "" }]);
   const result = useMemo<HolidayHoursImportResult | null>(() => sourceCsv ? createHolidayHoursImport(sourceCsv, holidayCount) : null, [sourceCsv, holidayCount]);
   const previewRows = useMemo(() => result?.rows.slice(0, 50) ?? [], [result]);
+  useEffect(() => {
+    const file = handoff.take("holiday");
+    if (file) setPendingFile(file);
+  // Consume the in-memory file once when this page opens.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function processFile(file: File) {
     setError("");
     setHistoryMessage("");
     setHistoryError("");
+    setPendingFile(null);
     setSourceCsv("");
     setFileName(file.name);
     try {
@@ -135,6 +145,7 @@ export default function HolidayHoursImport() {
         <p>Select the unmodified CSV exported from the employee-hours report.</p>
       </div>
       <div className="payroll-upload-actions">
+        {pendingFile && <div className="holiday-pending-file"><strong>{pendingFile.name}</strong><span>Enter the holiday date and name, then process this file.</span><button type="button" className="hub-secondary-link" disabled={holidays.some((holiday) => !holiday.name.trim() || !holiday.date)} onClick={() => void processFile(pendingFile)}>Process selected file</button></div>}
         <fieldset className="holiday-count-selector">
           <legend>Number of holidays</legend>
           <div>

@@ -14,6 +14,7 @@ import {
 } from "@/lib/processOperationalExceptions";
 import { saveMissedStopsSnapshot, saveReportSnapshot } from "@/lib/reportHistory";
 import { supabase } from "@/lib/supabase";
+import { useUploadHandoff, type UploadKind } from "@/components/UploadHandoff";
 
 function number(value: number) {
   return value.toLocaleString("en-US");
@@ -166,6 +167,8 @@ function buildEmailHtml(report: ProcessedReport) {
 }
 
 export default function UploadPage() {
+  const handoff = useUploadHandoff();
+  const [unrecognized, setUnrecognized] = useState<File | null>(null);
   const [report, setReport] = useState<ProcessedReport | null>(null);
   const [missedStops, setMissedStops] = useState<MissedStopSummary | null>(null);
   const [reportType, setReportType] = useState<"loads" | "missed" | null>(null);
@@ -210,8 +213,7 @@ export default function UploadPage() {
     }).sort((a, b) => a.percentComplete - b.percentComplete);
   }, [report, selectedDay]);
 
-  async function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  async function processSelected(file?: File) {
     if (!file) return;
     setFileName(file.name);
     setLoading(true);
@@ -247,6 +249,22 @@ export default function UploadPage() {
       setLoading(false);
     }
   }
+  function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    void processSelected(event.target.files?.[0]);
+  }
+  useEffect(() => {
+    const file = handoff.take("usps");
+    if (file) void processSelected(file);
+    else if (handoff.peek()?.kind === "unknown") setUnrecognized(handoff.peek()?.file || null);
+  // Consume the in-memory file once when this page opens.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  function sendUnrecognized(kind: UploadKind) {
+    if (!unrecognized) return;
+    handoff.retarget(kind);
+    setUnrecognized(null);
+    if (kind === "usps") void processSelected(handoff.take("usps") || undefined);
+  }
 
   async function copyEmail() {
     const html = buildEmailHtml(report!);
@@ -273,12 +291,14 @@ export default function UploadPage() {
       </header>
 
       <nav className="upload-destinations" aria-label="Choose an upload type">
-        <a className="panel upload-destination" href="#usps-report"><strong>USPS load details or missed stops</strong><span>Upload daily or weekly performance files here ↓</span></a>
-        {fuelAccess && <Link className="panel upload-destination" href="/fuel#comdata-upload"><strong>Comdata fuel report</strong><span>Import transactions and review fuel spending →</span></Link>}
-        {payrollAccess && <Link className="panel upload-destination" href="/payroll/timecards"><strong>Payroll timecards</strong><span>Prepare and print the timecard report →</span></Link>}
-        {payrollAccess && <Link className="panel upload-destination" href="/payroll/holiday-hours"><strong>Holiday hours</strong><span>Calculate hours and create the ADP import →</span></Link>}
-        <Link className="panel upload-destination" href="/schedule-builder"><strong>USPS contract schedules</strong><span>Review a schedule and its service changes →</span></Link>
+        <a className="panel upload-destination" href="#usps-report" onClick={() => sendUnrecognized("usps")}><strong>USPS load details or missed stops</strong><span>Upload daily or weekly performance files here ↓</span></a>
+        {fuelAccess && <Link className="panel upload-destination" href="/fuel#comdata-upload" onClick={() => sendUnrecognized("fuel_comdata")}><strong>Comdata fuel report</strong><span>Import transactions and review fuel spending →</span></Link>}
+        {fuelAccess && <Link className="panel upload-destination" href="/fuel" onClick={() => sendUnrecognized("fuel_contracts")}><strong>USPS contract workbook</strong><span>Review all trip and mileage tabs together →</span></Link>}
+        {payrollAccess && <Link className="panel upload-destination" href="/payroll/timecards" onClick={() => sendUnrecognized("timecards")}><strong>Payroll timecards</strong><span>Prepare and print the timecard report →</span></Link>}
+        {payrollAccess && <Link className="panel upload-destination" href="/payroll/holiday-hours" onClick={() => sendUnrecognized("holiday")}><strong>Holiday hours</strong><span>Calculate hours and create the ADP import →</span></Link>}
+        <Link className="panel upload-destination" href="/schedule-builder" onClick={() => sendUnrecognized("schedule")}><strong>USPS contract schedules</strong><span>Review a schedule and its service changes →</span></Link>
       </nav>
+      {unrecognized && <section className="alert upload-routing-alert"><strong>{unrecognized.name}</strong> was not recognized automatically. Choose its report type above; the file will open in that tool for review.</section>}
 
       <section id="usps-report" className="panel usps-upload-choice">
         <div><h2>USPS load details or missed stops</h2><p>Select a workbook. The hub recognizes the two USPS report types automatically and checks for duplicates.</p></div>
