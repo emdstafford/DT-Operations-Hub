@@ -6,7 +6,7 @@ import { estimateContractMileage, type MileagePlan } from "@/lib/fuelMileageEsti
 import { supabase } from "@/lib/supabase";
 
 type Totals = { loads: number; total: number; completed: number; incomplete: number };
-type Fuel = { spend: number; gallons: number; expected: number; covered: number; days: number };
+type Fuel = { spend: number; gallons: number; expected: number; covered: number; days: number };\ntype FuelBreakdown = { diesel_gallons: number; diesel_cost: number; gasoline_gallons: number; gasoline_spend: number; misc_cost: number };
 type Schedule = { trip_count: number; scheduled_payment: number; source_hours: number; term_days: number | null; snapshot_date: string };
 type PayRate = { st_hourly: number | null; tt_hourly: number | null; fringe_hourly: number | null; car_hourly: number | null; daily_rate: number | null; needs_review: boolean; effective_start: string | null };
 type PayHours = { hours: number; payrolls: number; first_period: string | null; last_period: string | null };
@@ -15,7 +15,7 @@ const number = (value: number, digits = 0) => Number(value || 0).toLocaleString(
 const money = (value: number) => Number(value || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 export default function ContractAtGlance({ contract, start, end, totals }: { contract: string; start: string; end: string; totals: Totals }) {
-  const [fuel, setFuel] = useState<Fuel | null>(null);
+  const [fuel, setFuel] = useState<Fuel | null>(null);\n  const [fuelBreakdown, setFuelBreakdown] = useState<FuelBreakdown | null>(null);
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [payRate, setPayRate] = useState<PayRate | null>(null);
   const [payHours, setPayHours] = useState<PayHours | null>(null);
@@ -28,9 +28,9 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
   useEffect(() => {
     if (!start || !end || start > end) return;
     let active = true;
-    setLoading(true); setFuel(null); setSchedule(null); setPayRate(null); setPayHours(null); setPayHoursError(""); setPayPeriods([]); setRatePlans([]);
+    setLoading(true); setFuel(null); setFuelBreakdown(null); setSchedule(null); setPayRate(null); setPayHours(null); setPayHoursError(""); setPayPeriods([]); setRatePlans([]);
     void (async () => {
-      const [purchases, plans, access] = await Promise.all([
+      const [purchases, plans, access, breakdown] = await Promise.all([
         supabase.rpc("fuel_contract_purchases_for_estimate", { p_start: start, p_end: end, p_contracts: [contract] }),
         supabase.from("fuel_contract_mileage_plans").select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,tractor_count,straight_truck_count,van_count,alert_above_percent").eq("contract_number", contract).lte("effective_start", end),
         supabase.rpc("is_contract_financial_user"),
@@ -43,7 +43,7 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
         setFuel({ spend: Number(purchased?.purchased_fuel_cost ?? 0), gallons: Number(purchased?.purchased_gallons ?? 0),
           expected: estimate.expectedGallons, covered: estimate.coveredDays, days: estimate.totalDays });
       }
-      setFinancialAccess(access.data === true);
+      if (!breakdown.error) {\n        const row = breakdown.data?.by_contract?.[0];\n        if (row) setFuelBreakdown({ diesel_gallons: Number(row.diesel_gallons ?? 0), diesel_cost: Number(row.diesel_cost ?? 0), gasoline_gallons: Number(row.gasoline_gallons ?? 0), gasoline_spend: Number(row.gasoline_spend ?? 0), misc_cost: Math.max(0, Number(row.total_spend ?? 0) - Number(row.diesel_cost ?? 0) - Number(row.gasoline_spend ?? 0)) });\n      }\n      setFinancialAccess(access.data === true);
       if (access.data === true) {
         const [result, rateResult, hoursResult, periodsResult] = await Promise.all([supabase.from("usps_contract_trip_snapshots")
           .select("trip_count,scheduled_payment,source_hours,term_days,snapshot_date")
@@ -103,8 +103,6 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
         <div><span>Total stops</span><strong>{number(totals.total)}</strong></div>
         <div><span>Incomplete stops</span><strong>{number(totals.incomplete)}</strong></div>
         <div><span>Fuel purchased</span><strong>{fuel ? money(fuel.spend) : "—"}</strong></div>
-        {financialAccess && <div><span>Latest USPS scheduled payment</span><strong>{schedule ? money(schedule.scheduled_payment) : "—"}</strong></div>}
-        {financialAccess && <div><span>Base pay + fringe estimate</span><strong>{estimatedPay === null ? "—" : money(estimatedPay)}</strong></div>}
         <div><span>Trip notes</span><strong>Review</strong></div>
       </div>
       {financialAccess && estimatedPay === null && <p>Pay estimate: {payStatus}.</p>}
@@ -112,11 +110,14 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
     {financialAccess && <section className="print-only panel contract-print-financials">
       <div className="panel-heading"><div><p className="eyebrow">Selected-date financial summary</p><h2>Contract financials</h2><span>{start} – {end}</span></div></div>
       <div className="contract-financial-stats">
-        <div><span>Fuel cost</span><strong>{fuel ? money(fuel.spend) : "—"}</strong></div>
-        <div><span>Gallons purchased</span><strong>{fuel ? number(fuel.gallons, 1) : "—"}</strong></div>
         <div><span>Latest USPS scheduled payment</span><strong>{schedule ? money(schedule.scheduled_payment) : "—"}</strong></div>
         <div><span>Saved payroll hours</span><strong>{payHours && Number(payHours.hours) > 0 ? number(Number(payHours.hours), 2) : "—"}</strong></div>
         <div><span>Base pay + fringe estimate</span><strong>{estimatedPay === null ? "—" : money(estimatedPay)}</strong></div>
+        <div><span>Diesel gallons purchased</span><strong>{fuelBreakdown ? number(fuelBreakdown.diesel_gallons, 1) : "—"}</strong></div>
+        <div><span>Diesel purchased cost</span><strong>{fuelBreakdown ? money(fuelBreakdown.diesel_cost) : "—"}</strong></div>
+        <div><span>Gas gallons purchased</span><strong>{fuelBreakdown ? number(fuelBreakdown.gasoline_gallons, 1) : "—"}</strong></div>
+        <div><span>Gas purchased cost</span><strong>{fuelBreakdown ? money(fuelBreakdown.gasoline_spend) : "—"}</strong></div>
+        <div><span>Misc fuel charges</span><strong>{fuelBreakdown ? money(fuelBreakdown.misc_cost) : "—"}</strong></div>
       </div>
       {payRate && <div className="contract-financial-stats">
         <div><span>Straight truck / hour</span><strong>{payRate.st_hourly === null ? "—" : money(payRate.st_hourly)}</strong></div>
