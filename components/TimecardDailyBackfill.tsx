@@ -85,7 +85,7 @@ async function parseFile(file: File) {
     const date = workDate(cells[inCol] ?? "") ??
       (dateCol >= 0 ? workDate(cells[dateCol] ?? "") : null);
     const hours = Number(hourText);
-    if (!date || !/^[-+]?\\d+(?:\\.\\d{1,2})?$/.test(hourText) || !Number.isFinite(hours)) {
+    if (!date || !/^[-+]?\d+(?:\.\d{1,2})?$/.test(hourText) || !Number.isFinite(hours)) {
       unreadableRows++;
       continue;
     }
