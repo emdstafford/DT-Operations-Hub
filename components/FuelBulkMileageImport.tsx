@@ -26,6 +26,8 @@ type Candidate = {
   termDays?: number | null;
   termStart?: string;
   termEnd?: string;
+  sourceFirstDate?: string;
+  sourceCurrentDate?: string;
   tripRows?: WorkbookTrip[];
   equipment: { code: string; trips: number }[];
   truckType: "average" | "tractor" | "straight" | "van" | "mixed" | "custom";
@@ -121,12 +123,13 @@ export default function FuelBulkMileageImport({ onSaved }: { onSaved: () => void
           for (const trip of summary.tripRows) equipmentCounts.set(trip.equipment_type || "Unspecified", (equipmentCounts.get(trip.equipment_type || "Unspecified") || 0) + 1);
           candidates.push({ id: `workbook-${index}-${summary.sheet}`, fileName: `${workbook.name} · ${summary.sheet}`,
             contract: summary.contract, miles: summary.annualMiles == null ? "" : String(summary.annualMiles),
-            page: null, start: commonStart || (summary.termDays ? summary.termStart : asOf), end: commonEnd || summary.earliestExpiration,
+            page: null, start: commonStart || (summary.termDays ? summary.termStart : summary.latestEffectiveStart), end: commonEnd || summary.earliestExpiration,
             mpg: commonMpg || String(MPG.average), selected: !summary.issue, issue: summary.issue,
             trips: summary.activeTrips, excludedTrips: summary.excludedTrips,
             hours: summary.annualHours, payment: summary.scheduledPayment,
             termMiles: summary.termMiles, termDays: summary.termDays,
-            termStart: summary.termStart, termEnd: summary.earliestExpiration, tripRows: summary.tripRows,
+            termStart: summary.termStart, termEnd: summary.earliestExpiration,
+            sourceFirstDate: summary.termStart, sourceCurrentDate: summary.latestEffectiveStart, tripRows: summary.tripRows,
             equipment: [...equipmentCounts].map(([code, trips]) => ({ code, trips })),
             truckType: commonMpg ? "custom" : "average", tractors: "", straightTrucks: "", vans: "", saveMileage: true });
         }
@@ -270,13 +273,14 @@ export default function FuelBulkMileageImport({ onSaved }: { onSaved: () => void
       <label className="hub-secondary-link fuel-bulk-file">{working ? "Reading or saving…" : "Choose USPS workbook or PDFs"}<input type="file" accept=".xlsx,.xlsm,.xls,.pdf" multiple disabled={working} onChange={(event) => void readFiles(event.target.files)} /></label>
       {rows.length > 0 && <>
         <div className="fuel-bulk-common"><label>Apply start date to all<input type="date" value={commonStart} onChange={(event) => { const value = event.target.value; setCommonStart(value); setRows((current) => current.map((row) => ({ ...row, start: value }))); setConfirmed(false); }} /></label><label>Apply end date to all (optional)<input type="date" value={commonEnd} onChange={(event) => { const value = event.target.value; setCommonEnd(value); setRows((current) => current.map((row) => ({ ...row, end: value }))); setConfirmed(false); }} /></label><label>Apply custom MPG to all (optional)<input type="number" min="0.01" step="0.01" value={commonMpg} onChange={(event) => { const value = event.target.value; setCommonMpg(value); setRows((current) => current.map((row) => ({ ...row, mpg: value || String(MPG.average), truckType: value ? "custom" : "average" }))); setConfirmed(false); }} /></label></div>
-        <p className="fuel-bulk-assumption">Starting estimate: 7.45 MPG, the simple average of tractor 6.4 and straight truck 8.5. USPS equipment codes below describe trip requirements, not how many trucks you own. Choose a type or enter actual counts when known.</p>
+        <p className="fuel-bulk-assumption">Starting estimate: 7.45 MPG, the simple average of tractor 6.4 and straight truck 8.5. Plan dates come from the source schedule. If a contract has service changes, the current mileage total starts on its latest effective date; earlier versions need their own mileage plans. USPS equipment codes describe trip requirements, not how many trucks you own.</p>
         <div className="fuel-bulk-cards">{rows.map((row) => <article className="fuel-bulk-card" key={row.id}>
           <div className="fuel-bulk-card-head"><label><input type="checkbox" aria-label={`Include ${row.contract || row.fileName}`} checked={row.selected} disabled={Boolean(row.issue) || working} onChange={(event) => change(row.id, { selected: event.target.checked })} /><strong>{row.contract || "Contract not found"}</strong></label><span>{row.trips ?? "—"} active trips{row.excludedTrips ? ` · ${row.excludedTrips} outside selected date` : ""}</span></div>
           <p className="fuel-bulk-source">{row.fileName}{row.page ? ` · PDF page ${row.page}` : ""}</p>
           {row.equipment.length > 0 && <div className="fuel-bulk-equipment"><strong>USPS vehicle codes</strong><div>{row.equipment.map(({ code, trips }) => <span key={code}>{code} · {trips} trip{trips === 1 ? "" : "s"}</span>)}</div></div>}
           <div className="fuel-bulk-stats"><span><b>{row.termDays ? "Term miles" : "Schedule miles"}</b>{(row.termMiles ?? Number(row.miles)).toLocaleString("en-US")}</span><span><b>Schedule hours</b>{row.hours?.toLocaleString("en-US") ?? "—"}</span><span><b>Scheduled payment</b>{row.payment == null ? "—" : row.payment.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span></div>
           <div className="fuel-bulk-plan-choice"><label><input type="checkbox" checked={row.saveMileage} disabled={working || Boolean(row.issue)} onChange={(event) => change(row.id, { saveMileage: event.target.checked })} /> Save fuel mileage plan</label>{!row.saveMileage && <span>Mileage plan skipped; reviewed trips can still be saved.</span>}</div>
+          <p className="fuel-bulk-plan-period">Fuel plan: {row.start || "choose start"} through {row.end || "current"}{row.sourceFirstDate && row.sourceCurrentDate && row.sourceFirstDate !== row.sourceCurrentDate ? ` · First trip date ${row.sourceFirstDate}; current mileage version ${row.sourceCurrentDate}` : ""}</p>
           {row.saveMileage && <><div className="fuel-bulk-fields"><label>Truck / MPG estimate<select value={row.truckType} disabled={working} onChange={(event) => chooseTruckType(row, event.target.value as Candidate["truckType"])}><option value="average">Tractor + straight average · 7.45 MPG</option><option value="tractor">Tractor · 6.4 MPG</option><option value="straight">Straight truck · 8.5 MPG</option><option value="van">Van · 12 MPG</option><option value="mixed">Mixed fleet · enter truck counts</option><option value="custom">Custom MPG</option></select></label><label>MPG<input type="number" min="0.01" step="0.01" value={row.mpg} readOnly={row.truckType !== "custom"} disabled={working} onChange={(event) => change(row.id, { mpg: event.target.value })} /></label></div>
             {row.truckType === "mixed" && <div className="fuel-bulk-fields"><label>Tractors<input type="number" min="0" step="1" value={row.tractors} onChange={(event) => changeTruckCount(row, "tractors", event.target.value)} /></label><label>Straight trucks<input type="number" min="0" step="1" value={row.straightTrucks} onChange={(event) => changeTruckCount(row, "straightTrucks", event.target.value)} /></label><label>Vans<input type="number" min="0" step="1" value={row.vans} onChange={(event) => changeTruckCount(row, "vans", event.target.value)} /></label></div>}
             <details className="fuel-bulk-dates"><summary>Review fuel plan miles and dates</summary><div className="fuel-bulk-fields"><label>Annualized miles<input type="number" min="0.01" step="0.1" value={row.miles} disabled={working || Boolean(row.issue)} onChange={(event) => change(row.id, { miles: event.target.value })} /></label><label>Effective from<input type="date" value={row.start} disabled={working} onChange={(event) => change(row.id, { start: event.target.value })} /></label><label>Through<input type="date" value={row.end} disabled={working} onChange={(event) => change(row.id, { end: event.target.value })} /></label></div>{row.termDays && <p>{row.termMiles?.toLocaleString()} miles over {row.termDays} days; fuel estimate is annualized only within this term.</p>}</details></>}

@@ -10,6 +10,7 @@ export type WorkbookContractSummary = {
   excludedTrips: number;
   earliestExpiration: string;
   termStart: string;
+  latestEffectiveStart: string;
   termMiles: number | null;
   termDays: number | null;
   issue: string;
@@ -85,6 +86,7 @@ export async function parseUspsContractWorkbook(file: File, asOf: string): Promi
     }
     const earliestExpiration = active.map((row) => date(field(row, "Expiration Date"))).sort()[0] || "";
     const termStart = active.map((row) => date(field(row, "Effective Date*"))).sort()[0] || "";
+    const latestEffectiveStart = active.map((row) => date(field(row, "Effective Date*"))).sort().at(-1) || "";
     // Short term rows can label a 45-day total "Annual Miles". That is not an
     // annual mileage plan; it needs its own time basis before fuel comparison.
     const termDays = termStart && earliestExpiration
@@ -100,7 +102,7 @@ export async function parseUspsContractWorkbook(file: File, asOf: string): Promi
     const yearDays = new Date(`${asOf}T12:00:00Z`).getUTCFullYear() % 4 === 0 ? 366 : 365;
     summaries.push({ sheet, contract, annualMiles: issue ? null : round(shortTerm ? miles * yearDays / termDays! : miles, 1), annualHours: issue ? null : round(hours, 2),
       scheduledPayment: issue ? null : round(payment, 2), activeTrips: active.length,
-      excludedTrips: validRows.length - active.length, earliestExpiration, termStart,
+      excludedTrips: validRows.length - active.length, earliestExpiration, termStart, latestEffectiveStart,
       termMiles: shortTerm ? round(miles, 1) : null, termDays: shortTerm ? termDays : null,
       tripRows: issue ? [] : tripRows, issue });
   }

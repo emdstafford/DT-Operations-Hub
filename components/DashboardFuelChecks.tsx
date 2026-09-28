@@ -45,7 +45,7 @@ export default function DashboardFuelChecks({ start, end, contracts }: {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [allowed, setAllowed] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<"over" | "plan-needed">("over");
+  const [view, setView] = useState<"auto" | "over" | "plan-needed">("auto");
   const [showAll, setShowAll] = useState(false);
   const contractNumbers = useMemo(() => [...new Set(contracts.map((row) => row.contract_number || "").filter(Boolean))], [contracts]);
   const contractKey = contractNumbers.join("|");
@@ -103,7 +103,7 @@ export default function DashboardFuelChecks({ start, end, contracts }: {
   if (!allowed) return null;
   const over = checks.filter((row) => row.status === "over");
   const planNeeded = checks.filter((row) => row.status === "plan-needed");
-  const activeView = view;
+  const activeView = view === "auto" ? (over.length ? "over" : "plan-needed") : view;
   const matching = activeView === "over" ? over : planNeeded;
   const shown = showAll ? matching : matching.slice(0, 5);
   const purchasedCost = purchases.reduce((sum, row) => sum + Number(row.purchased_fuel_cost || 0), 0);
@@ -115,7 +115,7 @@ export default function DashboardFuelChecks({ start, end, contracts }: {
       <div className="dashboard-fuel-purchases"><div><span>Fuel spend on displayed contracts</span><strong>{purchasedCost.toLocaleString("en-US", { style: "currency", currency: "USD" })}</strong></div><div><span>Fuel gallons purchased</span><strong>{number(purchasedGallons, 1)}</strong></div></div>
       <div className="fuel-check-summary" role="group" aria-label="Fuel checks">
         <button type="button" className={activeView === "over" ? "active fuel-check-alert" : ""} onClick={() => { setView("over"); setShowAll(false); }} aria-pressed={activeView === "over"}><strong>{over.length}</strong><span>Over fuel estimate</span></button>
-        <button type="button" className={activeView === "plan-needed" ? "active fuel-check-warning" : ""} onClick={() => { setView("plan-needed"); setShowAll(false); }} aria-pressed={activeView === "plan-needed"}><strong>{planNeeded.length}</strong><span>Need a mileage plan</span></button>
+        <button type="button" className={activeView === "plan-needed" ? "active fuel-check-warning" : ""} onClick={() => { setView("plan-needed"); setShowAll(false); }} aria-pressed={activeView === "plan-needed"}><strong>{planNeeded.length}</strong><span>Missing plan days</span></button>
         <div><strong>{contractNumbers.length}</strong><span>Contracts in this view</span></div>
       </div>
       {shown.length ? <div className="fuel-check-list">{shown.map((row) => <article key={row.contract} className={`fuel-check-row fuel-check-${row.status}`}>
@@ -123,10 +123,10 @@ export default function DashboardFuelChecks({ start, end, contracts }: {
         <div className="fuel-check-reason"><span>{activeView === "over" ? "Above estimate" : "Plan covers"}</span><strong>{activeView === "over" ? `+${number(row.variancePercent, 1)}%` : `${number(row.coveredDays)} of ${number(row.totalDays)} days`}</strong>{activeView === "over" && <small>Review above {number(row.alertAbovePercent, 1)}%</small>}</div>
         <div className="fuel-check-detail"><span>{activeView === "over" ? "Fuel gallons · bought / expected" : "Fuel gallons purchased"}</span><strong>{activeView === "over" ? `${number(row.purchasedGallons, 1)} / ${number(row.expectedGallons, 1)}` : number(row.purchasedGallons, 1)}</strong></div>
         <div className="fuel-check-detail"><span>USPS completion</span><strong>{percent(row.completion)}</strong><small>{number(row.incomplete)} incomplete stops</small></div>
-      </article>)}</div> : <div className="fuel-check-clear"><strong>{activeView === "over" ? "No contracts are over their fuel estimate." : "Every contract has a mileage plan for these dates."}</strong><span>{activeView === "over" ? "Select “Need a mileage plan” to see contracts without full coverage." : "Select “Over fuel estimate” to see contracts above their saved threshold."}</span></div>}
+      </article>)}</div> : <div className="fuel-check-clear"><strong>{activeView === "over" ? "No contracts are over their fuel estimate." : "Every contract has a mileage plan for these dates."}</strong><span>{activeView === "over" ? "Select “Missing plan days” to see contracts without full coverage." : "Select “Over fuel estimate” to see contracts above their saved threshold."}</span></div>}
       {matching.length > shown.length && <button type="button" className="fuel-check-expand" onClick={() => setShowAll(true)}>Show all {number(matching.length)} contracts ↓</button>}
       {showAll && matching.length > 5 && <button type="button" className="fuel-check-expand" onClick={() => setShowAll(false)}>Show fewer ↑</button>}
-      <p className="fuel-check-more">Fuel is an estimate based on planned miles and MPG. Purchases can move between date ranges when a truck refuels.</p>
+      <p className="fuel-check-more">Only contracts with a plan for every selected day are checked against their fuel estimate. The others appear under “Missing plan days.” Fuel purchases can move between periods when a truck refuels.</p>
     </>}
   </section>;
 }
