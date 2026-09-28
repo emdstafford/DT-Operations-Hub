@@ -777,3 +777,8 @@ button, input { font: inherit; }
   grid-template-columns:repeat(3,minmax(0,1fr))!important;
  }
 }
+
+@media print{
+ .contract-print-page{break-before:page;page-break-before:always}
+ .contract-trend-print-page,.contract-missed-print-page{break-inside:auto;page-break-inside:auto}
+}
