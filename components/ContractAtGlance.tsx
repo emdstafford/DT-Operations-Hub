@@ -6,7 +6,7 @@ import { estimateContractMileage, type MileagePlan } from "@/lib/fuelMileageEsti
 import { supabase } from "@/lib/supabase";
 
 type Totals = { loads: number; total: number; completed: number; incomplete: number };
-type Fuel = { spend: number; gallons: number; expected: number; covered: number; days: number };
+type Fuel = { spend: number; gallons: number; dieselSpend: number | null; dieselGallons: number | null; gasolineSpend: number | null; gasolineGallons: number | null; expected: number; covered: number; days: number };
 type Schedule = { trip_count: number; scheduled_payment: number; source_hours: number; term_days: number | null; snapshot_date: string };
 type PayRate = { st_hourly: number | null; tt_hourly: number | null; fringe_hourly: number | null; car_hourly: number | null; daily_rate: number | null; needs_review: boolean; effective_start: string | null };
 type PayHours = { hours: number; payrolls: number; first_period: string | null; last_period: string | null };
@@ -30,8 +30,9 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
     let active = true;
     setLoading(true); setFuel(null); setSchedule(null); setPayRate(null); setPayHours(null); setPayHoursError(""); setPayPeriods([]); setRatePlans([]);
     void (async () => {
-      const [purchases, plans, access] = await Promise.all([
+      const [purchases, fuelDetail, plans, access] = await Promise.all([
         supabase.rpc("fuel_contract_purchases_for_estimate", { p_start: start, p_end: end, p_contracts: [contract] }),
+        supabase.rpc("fuel_dashboard_v2", { p_start: start, p_end: end, p_grain: "month", p_supervisor: null, p_contract: contract, p_person: null, p_station: null, p_category: null }),
         supabase.from("fuel_contract_mileage_plans").select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,tractor_count,straight_truck_count,van_count,alert_above_percent").eq("contract_number", contract).lte("effective_start", end),
         supabase.rpc("is_contract_financial_user"),
       ]);
@@ -40,7 +41,12 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
         setRatePlans((plans.data ?? []) as MileagePlan[]);
         const purchased = purchases.data?.[0];
         const estimate = estimateContractMileage((plans.data ?? []) as MileagePlan[], start, end);
+        const products = !fuelDetail.error && Array.isArray(fuelDetail.data?.by_product) ? fuelDetail.data.by_product : [];
+        const diesel = products.find((row: { name?: string }) => row.name === "diesel");
+        const gasoline = products.find((row: { name?: string }) => row.name === "gasoline");
         setFuel({ spend: Number(purchased?.purchased_fuel_cost ?? 0), gallons: Number(purchased?.purchased_gallons ?? 0),
+          dieselSpend: diesel ? Number(diesel.total_spend ?? 0) : null, dieselGallons: diesel ? Number(diesel.units ?? 0) : null,
+          gasolineSpend: gasoline ? Number(gasoline.total_spend ?? 0) : null, gasolineGallons: gasoline ? Number(gasoline.units ?? 0) : null,
           expected: estimate.expectedGallons, covered: estimate.coveredDays, days: estimate.totalDays });
       }
       setFinancialAccess(access.data === true);
@@ -101,7 +107,8 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
         <div><span>Completion</span><strong>{totals.total ? `${complete.toFixed(2)}%` : "—"}</strong></div>
         <div><span>Unique loads</span><strong>{number(totals.loads)}</strong></div>
         <div><span>Incomplete stops</span><strong>{number(totals.incomplete)}</strong><small>{number(totals.total)} total stops</small></div>
-        <div><span>Fuel purchased</span><strong>{fuel ? money(fuel.spend) : "—"}</strong><small>{fuel ? `${number(fuel.gallons, 1)} gallons` : "No fuel data"}</small></div>
+        <div><span>Diesel purchased</span><strong>{fuel?.dieselSpend == null ? "—" : money(fuel.dieselSpend)}</strong><small>{fuel?.dieselGallons == null ? "No diesel detail" : `${number(fuel.dieselGallons, 1)} gallons`}</small></div>
+        <div><span>Gasoline purchased</span><strong>{fuel?.gasolineSpend == null ? "—" : money(fuel.gasolineSpend)}</strong><small>{fuel?.gasolineGallons == null ? "No gasoline detail" : `${number(fuel.gasolineGallons, 1)} gallons`}</small></div>
         {financialAccess && <div><span>USPS scheduled payment</span><strong>{schedule ? money(schedule.scheduled_payment) : "—"}</strong><small>{schedule ? `${number(schedule.trip_count)} trips · reviewed ${schedule.snapshot_date}` : "No schedule data"}</small></div>}
         {financialAccess && <div><span>Base pay + fringe</span><strong>{estimatedPay === null ? "—" : money(estimatedPay)}</strong><small>{estimatedPay !== null && payHours ? `${number(Number(payHours.hours), 2)} payroll hours` : payStatus}</small></div>}
         {financialAccess && payRate && payRate.st_hourly != null && <div><span>Straight truck / hour</span><strong>{money(payRate.st_hourly)}</strong><small>{payRate.fringe_hourly !== null ? `+${money(payRate.fringe_hourly)} fringe / worked hour` : "No fringe rate"}</small></div>}
