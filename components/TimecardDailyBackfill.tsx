@@ -141,11 +141,23 @@ export default function TimecardDailyBackfill() {
           continue;
         }
 
-        const { error: updateError } = await supabase.from("timecard_summary_history")
-          .update({ daily_summary: parsed.dailyEntries })
-          .eq("id", match.id)
-          .eq("total_hundredths", parsed.totalHundredths);
+        const { data: backfillStatus, error: updateError } = await supabase.rpc("backfill_timecard_daily_summary", {
+          p_id: match.id,
+          p_expected_total_hundredths: parsed.totalHundredths,
+          p_daily_summary: parsed.dailyEntries,
+        });
         if (updateError) throw updateError;
+        if (backfillStatus === "total_mismatch") {
+          output.push({ file: file.name, status: "review", message: `${match.payroll_name}: saved total changed before the backfill could finish. Nothing changed.` });
+          setResults([...output]);
+          continue;
+        }
+        if (backfillStatus === "already_complete") {
+          output.push({ file: file.name, status: "updated", message: `${match.payroll_name}: daily contract hours were already saved; no change needed.` });
+          setResults([...output]);
+          continue;
+        }
+        if (backfillStatus !== "updated") throw new Error("The daily-hours backfill did not complete.");
 
         output.push({ file: file.name, status: "updated", message: `${match.payroll_name}: daily contract hours added. Historical total stayed at ${(parsed.totalHundredths / 100).toFixed(2)} hours.` });
       } catch (reason) {
