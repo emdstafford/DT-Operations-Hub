@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { parseContractPayRates, type ContractPayRate } from "@/lib/parseContractPayRates";
 import { supabase } from "@/lib/supabase";
@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 const money = (value: number | null) => value === null ? "—" : value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 export default function ContractPayRatesImport() {
+  const fileInput = useRef<HTMLInputElement>(null);
   const [allowed, setAllowed] = useState(false);
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<ContractPayRate[]>([]);
@@ -53,12 +54,12 @@ export default function ContractPayRatesImport() {
   }
   if (!allowed) return <p className="panel">Restricted financial access required.</p>;
   return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">Private financial reference</p><h2>Contract pay rates</h2><span>Review ST, TT, car, and hourly fringe amounts from the workbook. The source file is read in your browser.</span></div></div>
-    <p>Fringe applies to every worked hour. The first daily-rate column applies to all drivers on 364A8, 36463, and 378A5. Other daily rates are ignored, and location-specific amounts remain unresolved. Driver pay is not calculated until dates and work types are verified.</p>
-    <label className="hub-secondary-link" style={{ display: "inline-block", cursor: "pointer" }}>Choose rate workbook<input type="file" accept=".xlsx,.xls" style={{ display: "block", marginTop: 8 }} onChange={(event) => void choose(event.target.files?.[0])}/></label>
+    <p>Fringe applies to every worked hour. The first daily-rate column applies to all drivers on 364A8, 36463, and 378A5. Other daily rates are ignored, and location-specific amounts remain unresolved. Contracts with one hourly truck type can show a planning estimate from saved payroll hours; mixed contracts use reviewed truck counts.</p>
+    <div className="rate-import-actions"><button type="button" className="upload-button" onClick={() => fileInput.current?.click()}>Choose rate workbook</button><input ref={fileInput} type="file" accept=".xlsx,.xls" className="rate-file-input" aria-label="Choose rate workbook file" onChange={(event) => void choose(event.target.files?.[0])}/><span>{fileName || "No workbook chosen"}</span></div>
     {error && <p className="alert alert-error" role="alert">{error}</p>}{message && <p className="alert" role="status">{message}</p>}
     {rows.length > 0 && <><p><strong>{rows.length} contracts found</strong> · {warnings.length} need location review. Saving an existing contract updates its rate reference.</p>
       <div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>ST/hour</th><th>TT/hour</th><th>Fringe/hour</th><th>Car/hour</th><th>Daily</th><th>Review</th></tr></thead><tbody>{rows.map((row) => <tr key={row.contract_number}><td>{row.contract_number}</td><td>{money(row.st_hourly)}</td><td>{money(row.tt_hourly)}</td><td>{money(row.fringe_hourly)}</td><td>{money(row.car_hourly)}</td><td>{money(row.daily_rate)}</td><td>{row.needs_review ? "Location rate" : "—"}</td></tr>)}</tbody></table></div>
-      <button type="button" className="primary-button" disabled={working} onClick={() => void save()}>{working ? "Saving…" : `Save ${rows.length} reviewed contract rates`}</button></>}
+      <button type="button" className="primary-link rate-save-button" disabled={working} onClick={() => void save()}>{working ? "Saving…" : `Save ${rows.length} reviewed contract rates`}</button></>}
     {existing.length > 0 && <details><summary>{existing.length} saved contract rate references</summary><div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>ST/hour</th><th>TT/hour</th><th>Fringe/hour</th><th>Car/hour</th><th>Daily</th><th>Review</th></tr></thead><tbody>{existing.map((row) => <tr key={row.contract_number}><td><Link href={`/contracts/${encodeURIComponent(row.contract_number)}`}>{row.contract_number}</Link></td><td>{money(row.st_hourly)}</td><td>{money(row.tt_hourly)}</td><td>{money(row.fringe_hourly)}</td><td>{money(row.car_hourly)}</td><td>{money(row.daily_rate)}</td><td>{row.needs_review ? "Location rate" : "—"}</td></tr>)}</tbody></table></div></details>}
   </section>;
 }
