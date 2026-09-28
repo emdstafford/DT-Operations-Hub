@@ -10,7 +10,7 @@ export async function classifyUpload(file: File): Promise<UploadKind> {
   }
   if (!/\.(xlsx|xlsm|xls)$/i.test(file.name)) return "unknown";
   const XLSX = await import("xlsx");
-  const book = XLSX.read(await file.arrayBuffer(), { type: "array", sheetRows: 35 });
+  const book = XLSX.read(await file.arrayBuffer(), { type: "array", sheetRows: 100 });
   if (book.SheetNames.includes("Load Details") || book.SheetNames.includes("Non-Compliant Loads")) return "usps";
   for (const name of book.SheetNames.slice(0, 5)) {
     const grid = XLSX.utils.sheet_to_json<unknown[]>(book.Sheets[name], { header: 1, defval: "", raw: false });
