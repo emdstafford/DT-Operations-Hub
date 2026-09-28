@@ -68,6 +68,7 @@ button, input { font: inherit; }
 .upload-button:hover, .primary-link:hover { background: var(--navy-deep); transform: translateY(-1px); }
 .upload-button input { display: none; }
 .rate-import-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0}.rate-import-actions span{color:var(--muted);font-size:.82rem}.rate-file-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}.rate-save-button{border:0;margin-top:16px;font:inherit}.rate-save-button:disabled{opacity:.55;cursor:not-allowed}
+.contract-pay-periods{margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:8px}.contract-pay-periods summary{color:var(--navy);font-weight:800;cursor:pointer}.contract-pay-periods p{font-size:.8rem}.contract-pay-period-list{display:flex;flex-wrap:wrap;gap:8px}.contract-pay-period-list a{font-size:.78rem}
 .secondary-button { border: 1px solid white; color: var(--navy-deep); background: white; }
 .secondary-button:hover { transform: translateY(-1px); background: #edf2f6; }
 .text-button { border: 0; color: var(--navy); background: transparent; font-weight: 700; cursor: pointer; }

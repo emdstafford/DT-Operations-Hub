@@ -7,9 +7,10 @@ import { supabase } from "@/lib/supabase";
 
 type Totals = { loads: number; total: number; completed: number; incomplete: number };
 type Fuel = { spend: number; gallons: number; expected: number; covered: number; days: number };
-type Schedule = { trip_count: number; scheduled_payment: number; term_days: number | null; snapshot_date: string };
+type Schedule = { trip_count: number; scheduled_payment: number; source_hours: number; term_days: number | null; snapshot_date: string };
 type PayRate = { st_hourly: number | null; tt_hourly: number | null; fringe_hourly: number | null; car_hourly: number | null; daily_rate: number | null; needs_review: boolean; effective_start: string | null };
 type PayHours = { hours: number; payrolls: number; first_period: string | null; last_period: string | null };
+type PayPeriod = { payroll_name: string; period_start: string; period_end: string; hours: number };
 const number = (value: number, digits = 0) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: digits });
 const money = (value: number) => Number(value || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
@@ -19,6 +20,7 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
   const [payRate, setPayRate] = useState<PayRate | null>(null);
   const [payHours, setPayHours] = useState<PayHours | null>(null);
   const [payHoursError, setPayHoursError] = useState("");
+  const [payPeriods, setPayPeriods] = useState<PayPeriod[]>([]);
   const [ratePlans, setRatePlans] = useState<MileagePlan[]>([]);
   const [financialAccess, setFinancialAccess] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -26,7 +28,7 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
   useEffect(() => {
     if (!start || !end || start > end) return;
     let active = true;
-    setLoading(true); setFuel(null); setSchedule(null); setPayRate(null); setPayHours(null); setPayHoursError(""); setRatePlans([]);
+    setLoading(true); setFuel(null); setSchedule(null); setPayRate(null); setPayHours(null); setPayHoursError(""); setPayPeriods([]); setRatePlans([]);
     void (async () => {
       const [purchases, plans, access] = await Promise.all([
         supabase.rpc("fuel_contract_purchases_for_estimate", { p_start: start, p_end: end, p_contracts: [contract] }),
@@ -43,17 +45,19 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
       }
       setFinancialAccess(access.data === true);
       if (access.data === true) {
-        const [result, rateResult, hoursResult] = await Promise.all([supabase.from("usps_contract_trip_snapshots")
-          .select("trip_count,scheduled_payment,term_days,snapshot_date")
+        const [result, rateResult, hoursResult, periodsResult] = await Promise.all([supabase.from("usps_contract_trip_snapshots")
+          .select("trip_count,scheduled_payment,source_hours,term_days,snapshot_date")
           .eq("contract_number", contract)
           .order("snapshot_date", { ascending: false }).limit(1).maybeSingle(),
           supabase.from("contract_pay_rates").select("st_hourly,tt_hourly,fringe_hourly,car_hourly,daily_rate,needs_review,effective_start")
             .eq("contract_number", contract).maybeSingle(),
-          supabase.rpc("contract_pay_estimate_hours", { p_contract: contract, p_start: start, p_end: end })]);
+          supabase.rpc("contract_pay_estimate_hours", { p_contract: contract, p_start: start, p_end: end }),
+          supabase.rpc("contract_payroll_periods", { p_contract: contract })]);
         if (active && !result.error) setSchedule(result.data as Schedule | null);
         if (active && !rateResult.error) setPayRate(rateResult.data as PayRate | null);
         if (active && !hoursResult.error) setPayHours((hoursResult.data?.[0] ?? null) as PayHours | null);
         if (active && hoursResult.error) setPayHoursError("Payroll hour summary unavailable. Run contract_pay_estimate_hours.sql in Supabase.");
+        if (active && !periodsResult.error) setPayPeriods((periodsResult.data ?? []) as PayPeriod[]);
       }
       if (active) setLoading(false);
     })();
@@ -74,6 +78,9 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
   const baseRate = applicableRate ? Number(singleRate ?? mixedRate) : 0;
   const estimatedPay = applicableRate && payRate && payHours && Number(payHours.hours) > 0
     ? Number(payHours.hours) * (baseRate + Number(payRate.fringe_hourly ?? 0)) : null;
+  const payStatus = loading ? "Checking payroll hours" : !payRate ? "Rate reference needed" :
+    !applicableRate ? payRate.daily_rate !== null ? "Daily pay needs workdays" : payRate.needs_review ? "Location rate needs review" : "Truck mix needs review" :
+    estimatedPay !== null ? `${payHours?.payrolls} saved payroll periods` : payHoursError ? "Payroll query needs setup" : payPeriods.length ? "Choose saved payroll dates" : "No saved hours in dates";
   return <>
     <section id="contract-overview" className="contract-overview no-print" aria-label="Contract at a glance">
       <div className="contract-overview-heading"><strong>At a glance</strong><span>{start} – {end} · Choose a card to see its detail</span></div>
@@ -84,7 +91,7 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
         <a href="#contract-missed" className="contract-overview-card"><span>Incomplete stops</span><strong>{number(totals.incomplete)}</strong><small>See dates and trips ↓</small></a>
         {fuel && <a href="#contract-fuel" className="contract-overview-card"><span>Fuel purchased</span><strong>{loading ? "…" : money(fuel.spend)}</strong><small>Diesel and gasoline · see detail ↓</small></a>}
         {financialAccess && <a href="#contract-schedule" className="contract-overview-card"><span>Latest USPS scheduled payment</span><strong>{schedule ? money(schedule.scheduled_payment) : "—"}</strong><small>{schedule ? `${number(schedule.trip_count)} trips · reviewed ${schedule.snapshot_date}` : "No reviewed schedule"} ↓</small></a>}
-        {financialAccess && <a href="#contract-driver-pay" className="contract-overview-card"><span>Base pay + fringe estimate</span><strong>{estimatedPay === null ? "—" : money(estimatedPay)}</strong><small>{estimatedPay === null ? payRate ? "See why pending" : "Rate reference needed" : `${payHours?.payrolls} full payroll periods`} ↓</small></a>}
+        {financialAccess && <a href="#contract-driver-pay" className="contract-overview-card"><span>Base pay + fringe estimate</span><strong>{estimatedPay === null ? "—" : money(estimatedPay)}</strong><small>{payStatus} ↓</small></a>}
         <a href="#contract-notes" className="contract-overview-card"><span>Trip notes</span><strong>Review</strong><small>See USPS issues ↓</small></a>
       </nav>
     </section>
@@ -98,7 +105,8 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
       {payRate ? <><div className="contract-financial-stats"><div><span>Straight truck / hour</span><strong>{payRate.st_hourly === null ? "—" : money(payRate.st_hourly)}</strong></div><div><span>Tractor trailer / hour</span><strong>{payRate.tt_hourly === null ? "—" : money(payRate.tt_hourly)}</strong></div><div><span>Fringe / worked hour</span><strong>{payRate.fringe_hourly === null ? "—" : money(payRate.fringe_hourly)}</strong></div><div><span>Car / hour</span><strong>{payRate.car_hourly === null ? "—" : money(payRate.car_hourly)}</strong></div>{payRate.daily_rate !== null && <div><span>Daily / driver</span><strong>{money(payRate.daily_rate)}</strong></div>}</div>
         {estimatedPay !== null && <div className="contract-financial-stats"><div><span>Saved payroll hours</span><strong>{number(Number(payHours?.hours), 2)}</strong></div><div><span>Estimated base + fringe</span><strong>{money(estimatedPay)}</strong></div></div>}
         {estimatedPay !== null ? <p>Estimate = saved hours × ({money(baseRate)} hourly + {money(Number(payRate.fringe_hourly ?? 0))} fringe). {mixedRate !== null && singleRate === null ? `The hourly rate weights ${stCount} straight truck(s) and ${ttCount} tractor(s) equally by truck; actual hours per truck may differ. ` : ""}It covers {payHours?.payrolls} complete saved payroll period{payHours?.payrolls === 1 ? "" : "s"} entirely within {start}–{end}{payHours?.first_period ? ` (${payHours.first_period}–${payHours.last_period})` : ""}. Rate effective date {payRate.effective_start ?? "is unverified"}. This excludes overtime premiums, taxes, benefits, and unsaved or partial payroll periods; it is not actual payroll cost or profit.</p>
-          : <p>{payRate.needs_review ? "A location-specific rate needs review. " : ""}{!applicableRate ? "This contract has multiple work types or a daily rate; timecards do not identify which rate applies to each hour or day. " : !payHoursError ? "No complete saved payroll period for this contract falls within the selected dates. " : ""}Rate effective date {payRate.effective_start ?? "has not been verified"}. No pay estimate is shown.</p>}</> : <p>No rate reference saved for this contract. Import the workbook to make the hourly figures available for review.</p>}
+          : <p>{payHoursError ? "Payroll hours cannot be checked until the database function is installed. " : !applicableRate ? payRate.daily_rate !== null ? "A daily rate needs the number of days worked; timecard summaries only store hours. " : payRate.needs_review ? "A location-specific rate needs review. " : "For mixed ST/TT pay, add dated straight-truck and tractor counts covering the selected dates. " : "No saved hours from a complete payroll period for this contract fall inside the selected dates. Choose a range containing an entire saved payroll period, or check the contract on the payroll upload. "}Rate effective date {payRate.effective_start ?? "has not been verified"}. No pay estimate is shown.</p>}</> : <p>No rate reference saved for this contract. Import the workbook to make the hourly figures available for review.</p>}
+      {payPeriods.length > 0 && <details className="contract-pay-periods" open={estimatedPay === null}><summary>Saved payroll periods for {contract} ({payPeriods.length})</summary><p>Choose a payroll period to use its saved contract hours. The contract page dates will change to that entire payroll period.</p><div className="contract-pay-period-list">{payPeriods.map((period) => <Link key={`${period.period_start}-${period.period_end}`} className="hub-secondary-link" href={`/contracts/${encodeURIComponent(contract)}?start=${period.period_start}&end=${period.period_end}#contract-driver-pay`}>{period.payroll_name} · {period.period_start}–{period.period_end} · {number(Number(period.hours), 2)} hours →</Link>)}</div></details>}
       {payRate?.st_hourly != null && payRate.tt_hourly != null && <p><Link href={`/fuel?contract=${encodeURIComponent(contract)}&start=${start}&end=${end}&view=mileage`}>Set dated straight-truck and tractor counts in the fuel plan →</Link> Counts must cover all selected dates for a mixed-rate estimate.</p>}
       {payHoursError && <p className="alert alert-error">{payHoursError}</p>}
     </section>}
