@@ -219,7 +219,7 @@ export default function FuelBulkMileageImport({ onSaved }: { onSaved: () => void
   }
 
   const selected = rows.filter((row) => row.selected);
-  const blockers = selected.map(conflict).filter(Boolean);
+  const blockers = selected.map((row) => ({ contract: row.contract, reason: conflict(row) })).filter((item) => item.reason);
   return <details className="panel fuel-bulk-import no-print" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
     <summary>Import annual miles from a USPS contract workbook or PDFs</summary>
     <div className="fuel-bulk-body">
@@ -233,8 +233,9 @@ export default function FuelBulkMileageImport({ onSaved }: { onSaved: () => void
         <label className="fuel-bulk-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /> I checked the selected trip totals and dates against the USPS workbook, and will confirm MPG before saving a fuel plan.</label>
         <div className="fuel-bulk-actions">
           {sourceWorkbook && canStoreTrips && <button type="button" className="primary-link" disabled={working || !confirmed || !selected.some((row) => row.tripRows?.length)} onClick={() => void saveTrips()}>{working ? "Saving…" : "Save reviewed trips to Contracts"}</button>}
-          <button type="button" className="hub-secondary-link" disabled={working || !confirmed || !selected.length || blockers.length > 0} onClick={() => void save()}>{working ? "Saving…" : `Save ${selected.length} mileage plan${selected.length === 1 ? "" : "s"}`}</button>
+          <button type="button" className="hub-secondary-link" disabled={working || !confirmed || !selected.length} onClick={() => void save()}>{working ? "Saving…" : `Save ${selected.length} mileage plan${selected.length === 1 ? "" : "s"}`}</button>
         </div>
+        {blockers.length > 0 && <p className="fuel-bulk-review" role="status">Mileage plans need review: {blockers.slice(0, 4).map((item) => `${item.contract}: ${item.reason}`).join("; ")}{blockers.length > 4 ? `; and ${blockers.length - 4} more. See the Review column for every contract.` : "."} Trip records you already saved remain available on Contracts.</p>}
         {tripsSaved.length > 0 && <div className="fuel-bulk-links">Saved contracts: {tripsSaved.map((contract) => <Link key={contract} href={`/contracts/${encodeURIComponent(contract)}`}>{contract}</Link>)}</div>}
       </>}
       {error && <p className="alert alert-error">{error}</p>}{message && <p className="alert fuel-success">{message}</p>}
