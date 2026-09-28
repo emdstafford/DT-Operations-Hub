@@ -135,12 +135,15 @@ export default function ContractSelector() {
       <div className="contract-browser-list">{(showAll ? visible : visible.slice(0, 24)).map(({ contract, row, supervisors }) => {
         const completion = Number(row?.completion_percent ?? 0);
         const status = !row ? "No loads in these dates" : completion >= 0.95 ? "Doing well" : "Needs attention";
-        return <Link className="contract-browser-card" href={`/contracts/${encodeURIComponent(contract)}?start=${start}&end=${end}`} key={contract}>
-          <div className="contract-browser-name"><strong>{contract}</strong><span>{supervisors.join(", ") || "Supervisor not assigned"}</span></div>
-          <div className="contract-browser-stats"><strong>{row ? percent(completion) : "—"}</strong><span>{row ? `${number(row.incomplete_stops)} incomplete stops` : "No results for this period"}</span></div>
-          <span className={`contract-browser-status ${!row ? "status-quiet" : completion >= 0.95 ? "status-good" : "status-attention"}`}>{status}</span>
-          <span className="contract-browser-arrow" aria-hidden="true">→</span>
-        </Link>;
+        return <div className="contract-browser-card" key={contract}>
+          <Link className="contract-browser-card-main" href={`/contracts/${encodeURIComponent(contract)}?start=${start}&end=${end}`}>
+            <div className="contract-browser-name"><strong>{contract}</strong><span>{supervisors.join(", ") || "Supervisor not assigned"}</span></div>
+            <div className="contract-browser-stats"><strong>{row ? percent(completion) : "—"}</strong><span>{row ? `${number(row.incomplete_stops)} incomplete stops` : "No results for this period"}</span></div>
+            <span className={`contract-browser-status ${!row ? "status-quiet" : completion >= 0.95 ? "status-good" : "status-attention"}`}>{status}</span>
+            <span className="contract-browser-arrow" aria-hidden="true">→</span>
+          </Link>
+          <Link className="contract-browser-print-link" href={`/contracts/${encodeURIComponent(contract)}?start=${start}&end=${end}&print=1`}>Print report</Link>
+        </div>;
       })}</div>
       {visible.length > 24 && <button type="button" className="fuel-check-expand" onClick={() => setShowAll(!showAll)}>{showAll ? "Show fewer contracts ↑" : `Show all ${visible.length} contracts ↓`}</button>}
     </> : <div className="location-empty">No contracts match this search and date range. Try another date or clear the search.</div>}
