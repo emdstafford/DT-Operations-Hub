@@ -2,6 +2,8 @@
 -- Run after contract_pay_rates.sql and timecard_summary_history.sql.
 -- New uploads use daily_summary so any selected date range can be calculated exactly.
 -- Older uploads without daily_summary still work when the selected range contains the whole payroll period.
+-- ADP Worked Department values may include a leading zero (for example 02903Y for contract 2903Y).
+-- Normalize only that leading-zero format so the same rule works across all contracts.
 create or replace function public.contract_pay_estimate_hours(
   p_contract text, p_start date, p_end date
 )
@@ -29,7 +31,7 @@ begin
     select l.id, l.period_start, l.period_end, (entry.item ->> 'hundredths')::numeric as hundredths
     from latest l
     cross join lateral jsonb_array_elements(l.daily_summary) as entry(item)
-    where upper(trim(entry.item ->> 'contract')) = upper(trim(p_contract))
+    where ltrim(upper(trim(entry.item ->> 'contract')), '0') = ltrim(upper(trim(p_contract)), '0')
       and (entry.item ->> 'date')::date between p_start and p_end
   ), legacy_matching as (
     select l.id, l.period_start, l.period_end, (entry.item ->> 'hundredths')::numeric as hundredths
@@ -38,7 +40,7 @@ begin
     where jsonb_array_length(l.daily_summary) = 0
       and l.period_start >= p_start
       and l.period_end <= p_end
-      and upper(trim(entry.item ->> 'contract')) = upper(trim(p_contract))
+      and ltrim(upper(trim(entry.item ->> 'contract')), '0') = ltrim(upper(trim(p_contract)), '0')
   ), matching as (
     select * from daily_matching
     union all
@@ -75,7 +77,7 @@ begin
   select l.payroll_name, l.period_start, l.period_end,
          sum((entry.item ->> 'hundredths')::numeric) / 100
   from latest l cross join lateral jsonb_array_elements(l.summary) as entry(item)
-  where upper(trim(entry.item ->> 'contract')) = upper(trim(p_contract))
+  where ltrim(upper(trim(entry.item ->> 'contract')), '0') = ltrim(upper(trim(p_contract)), '0')
   group by l.payroll_name, l.period_start, l.period_end
   order by l.period_end desc, l.period_start desc
   limit 30;
