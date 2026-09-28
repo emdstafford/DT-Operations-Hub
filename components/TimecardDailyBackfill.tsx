@@ -62,13 +62,15 @@ async function parseFile(file: File) {
     const payCode = (cells[payCodeCol] ?? "").trim().toUpperCase();
     if (payCode === "PTO") continue;
     const rawContract = (cells[contractCol] ?? "").trim();
-    if (!rawContract && / total$/i.test((cells[contractCol] ?? "").trim())) continue;
-    const date = workDate(dateCol >= 0 ? (cells[dateCol] ?? "") : (cells[inCol] ?? ""));
     const hourText = (cells[hoursCol] ?? "").trim().replaceAll(",", "");
+    // Historical ADP exports include contract/employee label rows with no hours.
+    // They are not work entries and should not block a backfill.
+    if (!hourText) continue;
+    const date = workDate(cells[inCol] ?? "") ??
+      (dateCol >= 0 ? workDate(cells[dateCol] ?? "") : null);
     const hours = Number(hourText);
-    if (!date || !hourText || !/^[-+]?\d+(?:\.\d{1,2})?$/.test(hourText) || !Number.isFinite(hours)) {
-      // Ignore obvious subtotal/label rows, but flag anything that looks like a work row.
-      if (rawContract || hourText) unreadableRows++;
+    if (!date || !/^[-+]?\\d+(?:\\.\\d{1,2})?$/.test(hourText) || !Number.isFinite(hours)) {
+      unreadableRows++;
       continue;
     }
     const contract = rawContract || "UNASSIGNED_DEPARTMENT";
