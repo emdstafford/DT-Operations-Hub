@@ -1,5 +1,7 @@
 -- Aggregate saved payroll hours without exposing employee-level timecard summaries.
 -- Run after contract_pay_rates.sql and timecard_summary_history.sql.
+-- New uploads use daily_summary so any selected date range can be calculated exactly.
+-- Older uploads without daily_summary still work when the selected range contains the whole payroll period.
 create or replace function public.contract_pay_estimate_hours(
   p_contract text, p_start date, p_end date
 )
@@ -17,14 +19,30 @@ begin
   return query
   with latest as (
     select distinct on (h.period_start, h.period_end)
-      h.id, h.period_start, h.period_end, h.summary
+      h.id, h.period_start, h.period_end, h.summary, h.daily_summary
     from public.timecard_summary_history h
-    where h.archived_at is null and h.period_start >= p_start and h.period_end <= p_end
+    where h.archived_at is null
+      and h.period_start <= p_end
+      and h.period_end >= p_start
     order by h.period_start, h.period_end, h.saved_at desc, h.id desc
-  ), matching as (
+  ), daily_matching as (
     select l.id, l.period_start, l.period_end, (entry.item ->> 'hundredths')::numeric as hundredths
-    from latest l cross join lateral jsonb_array_elements(l.summary) as entry(item)
+    from latest l
+    cross join lateral jsonb_array_elements(l.daily_summary) as entry(item)
     where upper(trim(entry.item ->> 'contract')) = upper(trim(p_contract))
+      and (entry.item ->> 'date')::date between p_start and p_end
+  ), legacy_matching as (
+    select l.id, l.period_start, l.period_end, (entry.item ->> 'hundredths')::numeric as hundredths
+    from latest l
+    cross join lateral jsonb_array_elements(l.summary) as entry(item)
+    where jsonb_array_length(l.daily_summary) = 0
+      and l.period_start >= p_start
+      and l.period_end <= p_end
+      and upper(trim(entry.item ->> 'contract')) = upper(trim(p_contract))
+  ), matching as (
+    select * from daily_matching
+    union all
+    select * from legacy_matching
   )
   select coalesce(sum(m.hundredths), 0) / 100,
          count(distinct m.id)::integer, min(m.period_start), max(m.period_end)
