@@ -109,25 +109,6 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
       </div>
       {financialAccess && estimatedPay === null && <p>Pay estimate: {payStatus}.</p>}
     </section>
-    {financialAccess && <section className="print-only panel contract-print-financials">
-      <div className="panel-heading"><div><p className="eyebrow">Selected-date financial summary</p><h2>Contract financials</h2><span>{start} – {end}</span></div></div>
-      <div className="contract-financial-stats">
-        <div><span>Fuel cost</span><strong>{fuel ? money(fuel.spend) : "—"}</strong></div>
-        <div><span>Gallons purchased</span><strong>{fuel ? number(fuel.gallons, 1) : "—"}</strong></div>
-        <div><span>Latest USPS scheduled payment</span><strong>{schedule ? money(schedule.scheduled_payment) : "—"}</strong></div>
-        <div><span>Saved payroll hours</span><strong>{payHours && Number(payHours.hours) > 0 ? number(Number(payHours.hours), 2) : "—"}</strong></div>
-        <div><span>Base pay + fringe estimate</span><strong>{estimatedPay === null ? "—" : money(estimatedPay)}</strong></div>
-      </div>
-      {payRate && <div className="contract-financial-stats">
-        <div><span>Straight truck / hour</span><strong>{payRate.st_hourly === null ? "—" : money(payRate.st_hourly)}</strong></div>
-        <div><span>Tractor trailer / hour</span><strong>{payRate.tt_hourly === null ? "—" : money(payRate.tt_hourly)}</strong></div>
-        <div><span>Fringe / worked hour</span><strong>{payRate.fringe_hourly === null ? "—" : money(payRate.fringe_hourly)}</strong></div>
-        {payRate.car_hourly !== null && <div><span>Car / hour</span><strong>{money(payRate.car_hourly)}</strong></div>}
-        {payRate.daily_rate !== null && <div><span>Daily / driver</span><strong>{money(payRate.daily_rate)}</strong></div>}
-      </div>}
-      <p>{estimatedPay !== null ? `Payroll estimate uses saved hours worked during the selected dates and the applicable driver rate plus fringe. Payroll source coverage: ${payHours?.first_period ?? "—"}–${payHours?.last_period ?? "—"}.` : `Pay estimate not available: ${payStatus}.`}</p>
-      {schedule && <p>USPS schedule: {number(schedule.trip_count)} trips · reviewed {schedule.snapshot_date}.</p>}
-    </section>}
     {fuel && <section id="contract-fuel" className="panel contract-financial-panel no-print">
       <div className="panel-heading"><div><p className="eyebrow">Selected dates</p><h2>Fuel</h2><span>Diesel and gasoline purchased for {contract} from {start} through {end}</span></div><Link className="hub-secondary-link" href={fuelLink}>Full fuel report →</Link></div>
       <div className="contract-financial-stats"><div><span>Fuel cost</span><strong>{money(fuel.spend)}</strong></div><div><span>Gallons purchased</span><strong>{number(fuel.gallons, 1)}</strong></div><div><span>Plan coverage</span><strong>{fuel.covered} of {fuel.days} days</strong></div>{fuel.covered === fuel.days && <div><span>Estimated gallons</span><strong>{number(fuel.expected, 1)}</strong></div>}</div>
