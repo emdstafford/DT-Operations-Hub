@@ -78,9 +78,11 @@ async function parseFile(file: File) {
     const payCode = (cells[payCodeCol] ?? "").trim().toUpperCase();
     if (payCode === "PTO") continue;
     const rawContract = (cells[contractCol] ?? "").trim();
+    // ADP inserts a subtotal after each contract. These rows have Hours populated
+    // (for example "01SHDR Total" with 579.14 hours) but no work date or punches.
+    // They are summaries of the detail above and must never be counted as work rows.
+    if (/ total$/i.test(rawContract) && !(cells[inCol] ?? "").trim() && (dateCol < 0 || !(cells[dateCol] ?? "").trim())) continue;
     const hourText = (cells[hoursCol] ?? "").trim().replaceAll(",", "");
-    // Historical ADP exports include contract/employee label rows with no hours.
-    // They are not work entries and should not block a backfill.
     if (!hourText) continue;
     const date = workDate(cells[inCol] ?? "") ??
       (dateCol >= 0 ? workDate(cells[dateCol] ?? "") : null);
