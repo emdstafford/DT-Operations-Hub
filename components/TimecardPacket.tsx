@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useUploadHandoff } from "@/components/UploadHandoff";
-import TimecardComparisons, { type SavedReport, type TimecardSummaryEntry } from "@/components/TimecardComparisons";
+import TimecardComparisons, { type SavedReport, type TimecardDailyEntry, type TimecardSummaryEntry } from "@/components/TimecardComparisons";
 import * as XLSX from "xlsx";
 
 type Field = "last" | "first" | "contract" | "inTime" | "outTime" | "hours" | "payCode";
@@ -233,6 +233,15 @@ export default function TimecardPacket() {
   const historyEntries = useMemo<TimecardSummaryEntry[]>(() => contracts.flatMap(({ contract, people }) => people.map((person) => ({
     contract, employeeId: person.employeeId, name: person.name, hundredths: total(person.rows),
   })).filter((entry) => entry.hundredths > 0)), [contracts]);
+  const dailyEntries = useMemo<TimecardDailyEntry[]>(() => {
+    const totals = new Map<string, TimecardDailyEntry>();
+    for (const row of result.rows) {
+      const key = `${row.date}\u0000${row.contract}`;
+      const current = totals.get(key);
+      totals.set(key, { date: row.date, contract: row.contract, hundredths: (current?.hundredths ?? 0) + row.hundredths });
+    }
+    return [...totals.values()].filter((entry) => entry.hundredths > 0);
+  }, [result.rows]);
   const unassigned = supervisorStatus === "ready" ? printContracts.filter(({ contract, people }) => contract !== unassignedDepartment && !approvedWithoutSupervisor.has(contract.trim().toUpperCase()) && !supervisorsFor(contract, people.flatMap((person) => person.rows)).length) : [];
   const knownSupervisors = [...new Set([...supervisorChoices, ...assignments.map((item) => item.supervisor), ...currentAssignments.map((item) => item.supervisor)].map((name) => name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   async function assignSupervisor(contract: string, rows: Shift[]) {
@@ -261,7 +270,7 @@ export default function TimecardPacket() {
       {file && result.invalid > 0 && <details className="timecard-invalid-review"><summary>Review {result.invalid} unreadable rows before saving →</summary><p>These rows are separate from the supervisor assignments. Subtotal lines are skipped automatically; these rows still need review. Excluding them removes their hours from this report and its saved comparison.</p><div className="table-scroll"><table className="data-table"><thead><tr><th>File row</th><th>Reason</th><th>Employee</th><th>Contract</th><th>Work date</th><th>Hours</th></tr></thead><tbody>{result.invalidRows.slice(0, 100).map((row) => <tr key={row.line}><td>{row.line}</td><td>{row.reason}</td><td>{row.name || "—"}</td><td>{row.contract || "—"}</td><td>{row.date || "—"}</td><td>{row.hours || "—"}</td></tr>)}</tbody></table></div>{result.invalid > 100 && <p>Showing the first 100 rows. Correct the source file to review the rest.</p>}<label className="timecard-exclude-confirm"><input type="checkbox" checked={excludeUnreadable} onChange={(event) => setExcludeUnreadable(event.target.checked)} /> I reviewed these rows and want to exclude all {result.invalid} unreadable rows from this payroll packet and saved totals.</label></details>}
     </section>
     <section className="panel timecard-actions no-print"><button className="primary-link" disabled={!ready || !printContracts.length || supervisorStatus === "loading" || comparisonStatus === "loading"} onClick={() => window.print()}>Print by contract</button><span>{ready ? `${printContracts.length} contracts. Each starts on a new page. 030512, 01SHDR, and 011VAN are omitted from this packet.` : "Choose one report. All rows must be readable before printing."}</span></section>
-    {ready && confirmedPayrollName ? <TimecardComparisons entries={historyEntries} start={periodStart} end={periodEnd} sourceName={file?.name || "Timecard report"} payrollName={confirmedPayrollName} /> : ready && <section className="panel no-print timecard-comparisons"><h2>Save and compare payrolls</h2><p>Enter the payroll name or number above, such as #39, to save the hour totals. Reuse it for a corrected report. You can print the timecards now.</p></section>}
+    {ready && confirmedPayrollName ? <TimecardComparisons entries={historyEntries} dailyEntries={dailyEntries} start={periodStart} end={periodEnd} sourceName={file?.name || "Timecard report"} payrollName={confirmedPayrollName} /> : ready && <section className="panel no-print timecard-comparisons"><h2>Save and compare payrolls</h2><p>Enter the payroll name or number above, such as #39, to save the hour totals. Reuse it for a corrected report. You can print the timecards now.</p></section>}
     {ready && <div className="timecard-packet"><div className="timecard-screen-heading no-print"><h2>Packet preview</h2><p>Check the hours and contract assignments before printing the packet.</p></div>{printContracts.map(({ contract, people }) => {
       const contractRows = people.flatMap((person) => person.rows);
       const supervisors = supervisorsFor(contract, contractRows);
