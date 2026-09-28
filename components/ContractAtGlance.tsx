@@ -36,6 +36,7 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
         supabase.rpc("fuel_contract_purchases_for_estimate", { p_start: start, p_end: end, p_contracts: [contract] }),
         supabase.from("fuel_contract_mileage_plans").select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,tractor_count,straight_truck_count,van_count,alert_above_percent").eq("contract_number", contract).lte("effective_start", end),
         supabase.rpc("is_contract_financial_user"),
+        supabase.rpc("fuel_dashboard_v2", { p_start: start, p_end: end, p_grain: "month", p_supervisor: null, p_contract: contract, p_person: null, p_station: null, p_category: null }),
       ]);
       if (!active) return;
       if (!purchases.error && !plans.error) {
