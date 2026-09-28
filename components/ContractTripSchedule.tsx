@@ -47,7 +47,7 @@ export default function ContractTripSchedule({ contract }: { contract: string })
   }, [selected]);
   if (!allowed) return null;
   const current = versions.find((item) => item.id === selected);
-  return <section className="panel contract-trip-panel no-print">
+  return <section id="contract-schedule" className="panel contract-trip-panel no-print">
     <div className="panel-heading"><div><p className="eyebrow">Restricted financial data</p><h2>USPS trip schedule and rates</h2><span>Trips active when the workbook was reviewed. Earlier snapshots remain available.</span></div></div>
     {error && <p className="alert alert-error">{error}</p>}
     {!versions.length && !error && <p className="contract-trip-empty">No reviewed USPS trip workbook is saved for this contract yet. <Link href="/fuel">Import the workbook on Fuel Reports →</Link></p>}

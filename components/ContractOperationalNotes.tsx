@@ -126,7 +126,7 @@ export default function ContractOperationalNotes({ contract }: { contract: strin
   const active = notes.filter((item) => item.status !== "resolved" && !item.effective_end);
   const resolved = notes.filter((item) => item.status === "resolved" || item.effective_end);
 
-  return <section className="panel operational-notes-panel no-print">
+  return <section id="contract-notes" className="panel operational-notes-panel no-print">
     <div className="panel-heading operational-notes-heading">
       <div><p className="eyebrow">Saved operational context</p><h2>Contract and trip notes</h2><span>Document known causes so the same missed-stop issue does not have to be researched again.</span></div>
       {canEdit && <button type="button" className="primary-link" onClick={() => showForm ? resetForm() : startNewNote()}>{showForm ? "Cancel" : "Add note"}</button>}

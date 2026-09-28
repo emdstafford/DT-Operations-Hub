@@ -1,0 +1,76 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { estimateContractMileage, type MileagePlan } from "@/lib/fuelMileageEstimate";
+import { supabase } from "@/lib/supabase";
+
+type Totals = { loads: number; total: number; completed: number; incomplete: number };
+type Fuel = { spend: number; gallons: number; expected: number; covered: number; days: number };
+type Schedule = { trip_count: number; scheduled_payment: number; term_days: number | null; snapshot_date: string };
+const number = (value: number, digits = 0) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: digits });
+const money = (value: number) => Number(value || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
+
+export default function ContractAtGlance({ contract, start, end, totals }: { contract: string; start: string; end: string; totals: Totals }) {
+  const [fuel, setFuel] = useState<Fuel | null>(null);
+  const [schedule, setSchedule] = useState<Schedule | null>(null);
+  const [financialAccess, setFinancialAccess] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!start || !end || start > end) return;
+    let active = true;
+    setLoading(true); setFuel(null); setSchedule(null);
+    void (async () => {
+      const [purchases, plans, access] = await Promise.all([
+        supabase.rpc("fuel_contract_purchases_for_estimate", { p_start: start, p_end: end, p_contracts: [contract] }),
+        supabase.from("fuel_contract_mileage_plans").select("contract_number,effective_start,effective_end,annual_miles,assumed_mpg,alert_above_percent").eq("contract_number", contract).lte("effective_start", end),
+        supabase.rpc("is_contract_financial_user"),
+      ]);
+      if (!active) return;
+      if (!purchases.error && !plans.error) {
+        const purchased = purchases.data?.[0];
+        const estimate = estimateContractMileage((plans.data ?? []) as MileagePlan[], start, end);
+        setFuel({ spend: Number(purchased?.purchased_fuel_cost ?? 0), gallons: Number(purchased?.purchased_gallons ?? 0),
+          expected: estimate.expectedGallons, covered: estimate.coveredDays, days: estimate.totalDays });
+      }
+      setFinancialAccess(access.data === true);
+      if (access.data === true) {
+        const result = await supabase.from("usps_contract_trip_snapshots")
+          .select("trip_count,scheduled_payment,term_days,snapshot_date")
+          .eq("contract_number", contract)
+          .order("snapshot_date", { ascending: false }).limit(1).maybeSingle();
+        if (active && !result.error) setSchedule(result.data as Schedule | null);
+      }
+      if (active) setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [contract, start, end]);
+
+  const fuelLink = `/fuel?contract=${encodeURIComponent(contract)}&start=${start}&end=${end}&view=report`;
+  const complete = totals.total ? totals.completed / totals.total * 100 : 0;
+  return <>
+    <section id="contract-overview" className="contract-overview no-print" aria-label="Contract at a glance">
+      <div className="contract-overview-heading"><strong>At a glance</strong><span>{start} – {end} · Choose a card to see its detail</span></div>
+      <nav className="contract-overview-grid" aria-label="Contract details">
+        <a href="#contract-trend" className="contract-overview-card"><span>Completion</span><strong>{totals.total ? `${complete.toFixed(2)}%` : "—"}</strong><small>See performance trend ↓</small></a>
+        <a href="#contract-trend" className="contract-overview-card"><span>Unique loads</span><strong>{number(totals.loads)}</strong><small>See performance trend ↓</small></a>
+        <a href="#contract-trend" className="contract-overview-card"><span>Total stops</span><strong>{number(totals.total)}</strong><small>See performance trend ↓</small></a>
+        <a href="#contract-missed" className="contract-overview-card"><span>Incomplete stops</span><strong>{number(totals.incomplete)}</strong><small>See dates and trips ↓</small></a>
+        {fuel && <a href="#contract-fuel" className="contract-overview-card"><span>Fuel purchased</span><strong>{loading ? "…" : money(fuel.spend)}</strong><small>Diesel and gasoline · see detail ↓</small></a>}
+        {financialAccess && <a href="#contract-schedule" className="contract-overview-card"><span>Latest USPS scheduled payment</span><strong>{schedule ? money(schedule.scheduled_payment) : "—"}</strong><small>{schedule ? `${number(schedule.trip_count)} trips · reviewed ${schedule.snapshot_date}` : "No reviewed schedule"} ↓</small></a>}
+        {financialAccess && <a href="#contract-driver-pay" className="contract-overview-card"><span>Driver pay</span><strong>Pending rates</strong><small>See what is needed ↓</small></a>}
+        <a href="#contract-notes" className="contract-overview-card"><span>Trip notes</span><strong>Review</strong><small>See USPS issues ↓</small></a>
+      </nav>
+    </section>
+    {fuel && <section id="contract-fuel" className="panel contract-financial-panel no-print">
+      <div className="panel-heading"><div><p className="eyebrow">Selected dates</p><h2>Fuel</h2><span>Diesel and gasoline purchased for {contract} from {start} through {end}</span></div><Link className="hub-secondary-link" href={fuelLink}>Full fuel report →</Link></div>
+      <div className="contract-financial-stats"><div><span>Fuel cost</span><strong>{money(fuel.spend)}</strong></div><div><span>Gallons purchased</span><strong>{number(fuel.gallons, 1)}</strong></div><div><span>Plan coverage</span><strong>{fuel.covered} of {fuel.days} days</strong></div>{fuel.covered === fuel.days && <div><span>Estimated gallons</span><strong>{number(fuel.expected, 1)}</strong></div>}</div>
+      <p>Fuel purchases are assigned to this contract; filling a tank can shift purchases between date ranges. DEF, fees, and adjustments are in the full fuel report.</p>
+    </section>}
+    {financialAccess && <section id="contract-driver-pay" className="panel contract-financial-panel contract-pay-pending no-print">
+      <div className="panel-heading"><div><p className="eyebrow">Cost planning</p><h2>Driver pay</h2><span>Ready to add when effective driver rates and contract assignments are reviewed.</span></div></div>
+      <p>Timecard history contains hours, but hourly, fringe, car, and daily rates have not been connected. Driver pay and profit are not calculated yet.</p>
+    </section>}
+  </>;
+}
