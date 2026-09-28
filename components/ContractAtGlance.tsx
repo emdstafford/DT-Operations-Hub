@@ -104,8 +104,8 @@ export default function ContractAtGlance({ contract, start, end, totals }: { con
         <div><span>Fuel purchased</span><strong>{fuel ? money(fuel.spend) : "—"}</strong><small>{fuel ? `${number(fuel.gallons, 1)} gallons` : "No fuel data"}</small></div>
         {financialAccess && <div><span>USPS scheduled payment</span><strong>{schedule ? money(schedule.scheduled_payment) : "—"}</strong><small>{schedule ? `${number(schedule.trip_count)} trips · reviewed ${schedule.snapshot_date}` : "No schedule data"}</small></div>}
         {financialAccess && <div><span>Base pay + fringe</span><strong>{estimatedPay === null ? "—" : money(estimatedPay)}</strong><small>{estimatedPay !== null && payHours ? `${number(Number(payHours.hours), 2)} payroll hours` : payStatus}</small></div>}
-        {financialAccess && payRate?.st_hourly !== null && <div><span>Straight truck / hour</span><strong>{money(payRate.st_hourly)}</strong><small>{payRate.fringe_hourly !== null ? `+${money(payRate.fringe_hourly)} fringe / worked hour` : "No fringe rate"}</small></div>}
-        {financialAccess && payRate?.tt_hourly !== null && <div><span>Tractor trailer / hour</span><strong>{money(payRate.tt_hourly)}</strong><small>{payRate.fringe_hourly !== null ? `+${money(payRate.fringe_hourly)} fringe / worked hour` : "No fringe rate"}</small></div>}
+        {financialAccess && payRate?.st_hourly != null && <div><span>Straight truck / hour</span><strong>{money(payRate.st_hourly)}</strong><small>{payRate.fringe_hourly !== null ? `+${money(payRate.fringe_hourly)} fringe / worked hour` : "No fringe rate"}</small></div>}
+        {financialAccess && payRate?.tt_hourly != null && <div><span>Tractor trailer / hour</span><strong>{money(payRate.tt_hourly)}</strong><small>{payRate.fringe_hourly !== null ? `+${money(payRate.fringe_hourly)} fringe / worked hour` : "No fringe rate"}</small></div>}
         <div><span>Trip notes</span><strong>Review</strong><small>See operational notes below</small></div>
       </div>
     </section>
