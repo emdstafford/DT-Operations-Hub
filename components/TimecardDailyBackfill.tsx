@@ -9,13 +9,18 @@ type BatchResult = { file: string; status: "updated" | "review" | "error"; messa
 
 const normalize = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const aliases = {
+  last: ["last name", "surname"],
+  first: ["first name", "given name"],
   contract: ["worked department", "contract", "contract number"],
+  inTime: ["in time", "time in", "in punch"],
+  outTime: ["out time", "time out", "out punch"],
   hours: ["hours", "worked hours"],
   payCode: ["pay code", "paycode", "earnings code"],
 };
 const find = (row: string[], names: string[]) => row.findIndex((value) => names.includes(normalize(value)));
 const findDate = (row: string[]) => row.findIndex((value) => ["pay date", "work date", "worked date", "date", "shift date"].includes(normalize(value)));
-const findIn = (row: string[]) => row.findIndex((value) => ["in time", "time in", "in punch"].includes(normalize(value)));
+const findIn = (row: string[]) => find(row, aliases.inTime);
+const findCombinedName = (row: string[]) => row.findIndex((value) => ["payroll name", "employee name", "driver name", "full name"].includes(normalize(value)));
 
 function workDate(value: string): string | null {
   const text = value.trim();
@@ -38,12 +43,20 @@ async function parseFile(file: File) {
     const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], { header: 1, defval: "", raw: false })
       .map((row) => row.map((value) => String(value ?? "")));
     rows.slice(0, 30).forEach((row, header) => {
-      const score = Number(find(row, aliases.contract) >= 0) + Number(find(row, aliases.hours) >= 0) + Number(find(row, aliases.payCode) >= 0) + Number(findDate(row) >= 0 || findIn(row) >= 0);
+      const score =
+        Number(find(row, aliases.last) >= 0) +
+        Number(find(row, aliases.first) >= 0) +
+        Number(find(row, aliases.contract) >= 0) +
+        Number(find(row, aliases.inTime) >= 0) +
+        Number(find(row, aliases.outTime) >= 0) +
+        Number(find(row, aliases.hours) >= 0) +
+        Number(find(row, aliases.payCode) >= 0) +
+        (findCombinedName(row) >= 0 ? 2 : 0);
       if (!best || score > best.score) best = { rows, header, score };
     });
   }
   const selected = best as { rows: string[][]; header: number; score: number } | null;
-  if (!selected || selected.score < 4) throw new Error("Could not identify the timecard columns.");
+  if (!selected) throw new Error("Could not identify the timecard columns.");
 
   const heading: string[] = selected.rows[selected.header];
   const contractCol = find(heading, aliases.contract);
@@ -51,6 +64,9 @@ async function parseFile(file: File) {
   const payCodeCol = find(heading, aliases.payCode);
   const dateCol = findDate(heading);
   const inCol = findIn(heading);
+  if (contractCol < 0 || hoursCol < 0 || payCodeCol < 0 || (dateCol < 0 && inCol < 0)) {
+    throw new Error("Could not identify the timecard columns.");
+  }
   const daily = new Map<string, DailyEntry>();
   let totalHundredths = 0;
   let readableRows = 0;
