@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export type TimecardSummaryEntry = { contract: string; employeeId: string; name: string; hundredths: number };
+export type TimecardDailyEntry = { date: string; contract: string; hundredths: number };
 export type SavedReport = {
   id: string; payroll_name: string; pay_date: string; period_start: string; period_end: string; source_file: string; saved_at: string;
   summary: TimecardSummaryEntry[];
@@ -29,13 +30,17 @@ export function totals(rows: TimecardSummaryEntry[], kind: "driver" | "contract"
   return map;
 }
 
-export default function TimecardComparisons({ entries, start, end, sourceName, payrollName }: { entries: TimecardSummaryEntry[]; start: string; end: string; sourceName: string; payrollName: string }) {
+export default function TimecardComparisons({ entries, dailyEntries, start, end, sourceName, payrollName }: { entries: TimecardSummaryEntry[]; dailyEntries: TimecardDailyEntry[]; start: string; end: string; sourceName: string; payrollName: string }) {
   const [previous, setPrevious] = useState<SavedReport | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [showAll, setShowAll] = useState(false);
   const [saving, setSaving] = useState(false);
-  const signature = useMemo(() => JSON.stringify({ start, end, entries: [...entries].sort((a, b) => `${a.contract}|${a.employeeId}`.localeCompare(`${b.contract}|${b.employeeId}`)) }), [start, end, entries]);
+  const signature = useMemo(() => JSON.stringify({
+    start, end,
+    entries: [...entries].sort((a, b) => `${a.contract}|${a.employeeId}`.localeCompare(`${b.contract}|${b.employeeId}`)),
+    dailyEntries: [...dailyEntries].sort((a, b) => `${a.date}|${a.contract}`.localeCompare(`${b.date}|${b.contract}`)),
+  }), [start, end, entries, dailyEntries]);
   const current = useMemo(() => JSON.parse(signature).entries as TimecardSummaryEntry[], [signature]);
 
   useEffect(() => {
@@ -63,7 +68,7 @@ export default function TimecardComparisons({ entries, start, end, sourceName, p
             employee_count: new Set(current.map((entry) => entry.employeeId)).size,
             contract_count: new Set(current.map((entry) => entry.contract)).size,
             total_hundredths: current.reduce((sum, row) => sum + row.hundredths, 0),
-            summary: current, saved_by: user.user.id,
+            summary: current, daily_summary: dailyEntries, saved_by: user.user.id,
           });
           // Concurrent uploads may save the identical summary at the same instant.
           if (insertError && insertError.code !== "23505") throw insertError;
@@ -80,7 +85,7 @@ export default function TimecardComparisons({ entries, start, end, sourceName, p
       } finally { if (active) setSaving(false); }
     })();
     return () => { active = false; };
-  }, [signature, start, end, sourceName, payrollName, current]);
+  }, [signature, start, end, sourceName, payrollName, current, dailyEntries]);
 
   const drivers = useMemo(() => compare(totals(previous?.summary ?? [], "driver"), totals(current, "driver")), [previous, current]);
   const contracts = useMemo(() => compare(totals(previous?.summary ?? [], "contract"), totals(current, "contract")), [previous, current]);

@@ -27,6 +27,8 @@ create table if not exists public.timecard_summary_history (
   total_hundredths bigint not null check (total_hundredths >= 0),
   -- Array of {contract, employeeId, name, hundredths}; no punch times.
   summary jsonb not null check (jsonb_typeof(summary) = 'array'),
+  -- Array of {date, contract, hundredths}. Aggregate daily contract hours only; no employee names or punch times.
+  daily_summary jsonb not null default '[]'::jsonb check (jsonb_typeof(daily_summary) = 'array'),
   saved_by uuid not null default auth.uid() references auth.users(id),
   saved_at timestamptz not null default now(),
   check (period_start <= period_end),
@@ -36,6 +38,7 @@ create table if not exists public.timecard_summary_history (
 create index if not exists timecard_summary_period_idx
   on public.timecard_summary_history (pay_date desc, saved_at desc);
 alter table public.timecard_summary_history
+  add column if not exists daily_summary jsonb not null default '[]'::jsonb check (jsonb_typeof(daily_summary) = 'array'),
   add column if not exists archived_at timestamptz,
   add column if not exists archived_by uuid references auth.users(id);
 alter table public.timecard_summary_history enable row level security;
