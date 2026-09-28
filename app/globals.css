@@ -696,6 +696,7 @@ button, input { font: inherit; }
   .fuel-report-stack.fuel-print-contracts .fuel-driver-totals,
   .fuel-report-stack.fuel-print-drivers .fuel-monthly-detail,
   .fuel-report-stack.fuel-print-drivers .fuel-contract-totals{display:none!important}
+  .fuel-report-stack.fuel-print-drivers .fuel-driver-totals{display:block!important}
   .fuel-report-stack.fuel-print-drivers.fuel-include-driver-contracts .fuel-contract-totals,
   .fuel-report-stack.fuel-print-contracts.fuel-include-monthly .fuel-monthly-detail{display:block!important}
   .fuel-report-stack .fuel-monthly-detail,
