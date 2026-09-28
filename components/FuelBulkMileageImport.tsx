@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { parseUspsSchedule } from "@/lib/parseUspsSchedule";
+import { parseUspsContractWorkbook } from "@/lib/parseUspsContractWorkbook";
 import { supabase } from "@/lib/supabase";
 
 type Candidate = {
@@ -15,6 +16,10 @@ type Candidate = {
   mpg: string;
   selected: boolean;
   issue: string;
+  trips?: number;
+  excludedTrips?: number;
+  hours?: number | null;
+  payment?: number | null;
 };
 type ExistingPlan = {
   contract_number: string;
@@ -38,6 +43,7 @@ export default function FuelBulkMileageImport({ onSaved }: { onSaved: () => void
   const [commonStart, setCommonStart] = useState("");
   const [commonEnd, setCommonEnd] = useState("");
   const [commonMpg, setCommonMpg] = useState("");
+  const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 10));
   const [confirmed, setConfirmed] = useState(false);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
@@ -52,13 +58,27 @@ export default function FuelBulkMileageImport({ onSaved }: { onSaved: () => void
     if (!files?.length) return;
     setError(""); setMessage(""); setConfirmed(false); setRows([]); setPlans([]);
     const chosen = Array.from(files);
-    if (chosen.length > 30 || chosen.some((file) => !/\.pdf$/i.test(file.name))) {
-      setError("Choose up to 30 USPS schedule PDFs at a time."); return;
+    const workbookFiles = chosen.filter((file) => /\.(xlsx|xlsm|xls)$/i.test(file.name));
+    const pdfFiles = chosen.filter((file) => /\.pdf$/i.test(file.name));
+    if (chosen.length > 30 || workbookFiles.length > 1 || chosen.length !== workbookFiles.length + pdfFiles.length) {
+      setError("Choose one USPS contract workbook or up to 30 schedule PDFs at a time."); return;
     }
     setWorking(true);
     try {
       const candidates: Candidate[] = [];
-      for (const [index, file] of chosen.entries()) {
+      if (workbookFiles.length) {
+        const workbook = workbookFiles[0];
+        const summaries = await parseUspsContractWorkbook(workbook, asOf);
+        for (const [index, summary] of summaries.entries()) {
+          candidates.push({ id: `workbook-${index}-${summary.sheet}`, fileName: `${workbook.name} · ${summary.sheet}`,
+            contract: summary.contract, miles: summary.annualMiles == null ? "" : String(summary.annualMiles),
+            page: null, start: commonStart || asOf, end: commonEnd || summary.earliestExpiration,
+            mpg: commonMpg, selected: !summary.issue, issue: summary.issue,
+            trips: summary.activeTrips, excludedTrips: summary.excludedTrips,
+            hours: summary.annualHours, payment: summary.scheduledPayment });
+        }
+      }
+      for (const [index, file] of pdfFiles.entries()) {
         try {
           const result = await parseUspsSchedule(file);
           const fromName = contractFromName(file.name);
@@ -88,7 +108,7 @@ export default function FuelBulkMileageImport({ onSaved }: { onSaved: () => void
         });
       }
       setRows(candidates);
-      setMessage(`${candidates.length} PDF${candidates.length === 1 ? "" : "s"} read locally. Check the figures, dates, and MPG before importing.`);
+      setMessage(`${candidates.length} contract source${candidates.length === 1 ? "" : "s"} read locally. Check the figures, dates, and MPG before importing.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The saved mileage plans could not be checked.");
     } finally { setWorking(false); }
@@ -144,13 +164,15 @@ export default function FuelBulkMileageImport({ onSaved }: { onSaved: () => void
   const selected = rows.filter((row) => row.selected);
   const blockers = selected.map(conflict).filter(Boolean);
   return <details className="panel fuel-bulk-import no-print">
-    <summary>Import annual miles from several USPS contracts</summary>
+    <summary>Import annual miles from a USPS contract workbook or PDFs</summary>
     <div className="fuel-bulk-body">
-      <p>Select schedule PDFs together. Files are read in this browser; only confirmed contract mileage plans are saved. Scanned pages or missing totals need manual review.</p>
-      <label className="hub-secondary-link fuel-bulk-file">{working ? "Reading or saving…" : "Choose contract PDFs"}<input type="file" accept=".pdf" multiple disabled={working} onChange={(event) => void readFiles(event.target.files)} /></label>
+      <p>Select the USPS trip workbook for all contracts at once, or several schedule PDFs. The workbook totals active trip rows as of the date below. Files stay in this browser; only confirmed mileage plans are saved.</p>
+      <label className="fuel-bulk-date">Trips active on<input type="date" value={asOf} onChange={(event) => { setAsOf(event.target.value); setRows([]); setConfirmed(false); }} /></label>
+      <label className="hub-secondary-link fuel-bulk-file">{working ? "Reading or saving…" : "Choose USPS workbook or PDFs"}<input type="file" accept=".xlsx,.xlsm,.xls,.pdf" multiple disabled={working} onChange={(event) => void readFiles(event.target.files)} /></label>
       {rows.length > 0 && <>
         <div className="fuel-bulk-common"><label>Apply start date to all<input type="date" value={commonStart} onChange={(event) => { const value = event.target.value; setCommonStart(value); setRows((current) => current.map((row) => ({ ...row, start: value }))); setConfirmed(false); }} /></label><label>Apply end date to all (optional)<input type="date" value={commonEnd} onChange={(event) => { const value = event.target.value; setCommonEnd(value); setRows((current) => current.map((row) => ({ ...row, end: value }))); setConfirmed(false); }} /></label><label>Apply MPG to all (optional)<input type="number" min="0.01" step="0.1" value={commonMpg} onChange={(event) => { const value = event.target.value; setCommonMpg(value); setRows((current) => current.map((row) => ({ ...row, mpg: value }))); setConfirmed(false); }} /></label></div>
-        <div className="table-scroll"><table className="data-table fuel-bulk-table"><thead><tr><th>Use</th><th>PDF</th><th>Contract</th><th>Annual miles</th><th>Effective from</th><th>Through</th><th>MPG</th><th>Review</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><input type="checkbox" aria-label={`Import ${row.fileName}`} checked={row.selected} disabled={Boolean(row.issue) || working} onChange={(event) => change(row.id, { selected: event.target.checked })} /></td><td>{row.fileName}{row.page && <small>PDF page {row.page}</small>}</td><td>{row.contract || "—"}</td><td><input aria-label={`Annual miles for ${row.fileName}`} type="number" min="0.01" step="0.1" value={row.miles} disabled={working || Boolean(row.issue)} onChange={(event) => change(row.id, { miles: event.target.value })} /></td><td><input aria-label={`Start for ${row.fileName}`} type="date" value={row.start} disabled={working} onChange={(event) => change(row.id, { start: event.target.value })} /></td><td><input aria-label={`End for ${row.fileName}`} type="date" value={row.end} disabled={working} onChange={(event) => change(row.id, { end: event.target.value })} /></td><td><input aria-label={`MPG for ${row.fileName}`} type="number" min="0.01" step="0.1" value={row.mpg} disabled={working} onChange={(event) => change(row.id, { mpg: event.target.value })} /></td><td>{row.issue || (row.selected ? conflict(row) || "Ready for confirmation" : "Skipped")}</td></tr>)}</tbody></table></div>
+        <div className="table-scroll"><table className="data-table fuel-bulk-table"><thead><tr><th>Use</th><th>Source</th><th>Contract</th><th>Active trips</th><th>Annual miles</th><th>Scheduled trip payment</th><th>Annual hours</th><th>Effective from</th><th>Through</th><th>MPG</th><th>Review</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><input type="checkbox" aria-label={`Import ${row.fileName}`} checked={row.selected} disabled={Boolean(row.issue) || working} onChange={(event) => change(row.id, { selected: event.target.checked })} /></td><td>{row.fileName}{row.page && <small>PDF page {row.page}</small>}{Boolean(row.excludedTrips) && <small>{row.excludedTrips} trips outside selected date</small>}</td><td>{row.contract || "—"}</td><td>{row.trips ?? "—"}</td><td><input aria-label={`Annual miles for ${row.fileName}`} type="number" min="0.01" step="0.1" value={row.miles} disabled={working || Boolean(row.issue)} onChange={(event) => change(row.id, { miles: event.target.value })} /></td><td>{row.payment == null ? "—" : row.payment.toLocaleString("en-US", { style: "currency", currency: "USD" })}</td><td>{row.hours == null ? "—" : row.hours.toLocaleString("en-US")}</td><td><input aria-label={`Start for ${row.fileName}`} type="date" value={row.start} disabled={working} onChange={(event) => change(row.id, { start: event.target.value })} /></td><td><input aria-label={`End for ${row.fileName}`} type="date" value={row.end} disabled={working} onChange={(event) => change(row.id, { end: event.target.value })} /></td><td><input aria-label={`MPG for ${row.fileName}`} type="number" min="0.01" step="0.1" value={row.mpg} disabled={working} onChange={(event) => change(row.id, { mpg: event.target.value })} /></td><td>{row.issue || (row.selected ? conflict(row) || "Ready for confirmation" : "Skipped")}</td></tr>)}</tbody></table></div>
+        <p>Scheduled trip payment is a projection from the USPS workbook, not money already earned. The fuel mileage plan saves miles, dates, and MPG; rate and trip history still need a separate secure contract model.</p>
         <label className="fuel-bulk-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /> I checked each selected contract, its stated annual miles, effective dates, and MPG against the source.</label>
         <button type="button" className="primary-link" disabled={working || !confirmed || !selected.length || blockers.length > 0} onClick={() => void save()}>{working ? "Saving…" : `Save ${selected.length} mileage plan${selected.length === 1 ? "" : "s"}`}</button>
       </>}
