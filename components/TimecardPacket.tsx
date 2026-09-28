@@ -142,7 +142,7 @@ export default function TimecardPacket() {
     }
     return [...groups].sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true })).map(([contract, people]) => ({
       contract,
-      people: [...people].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name: `${rows[0].last}, ${rows[0].first}`, employeeId: rows[0].employeeId, rows: rows.sort((a, b) => a.inTime.localeCompare(b.inTime)) })),
+      people: [...people].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name: `${rows[0].last}, ${rows[0].first}`, employeeId: rows[0].employeeId, rows: rows.sort((a, b) => a.date.localeCompare(b.date) || a.inTime.localeCompare(b.inTime)) })),
     }));
   }, [result.rows]);
   const printContracts = contracts.filter(({ contract }) => !omitFromTimecardPrint(contract));
