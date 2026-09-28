@@ -167,8 +167,12 @@ begin
     'by_person', coalesce((select jsonb_agg(to_jsonb(x) order by x.total_spend desc) from (
       select person_name as name, count(distinct transaction_group_key)::integer as transactions,
         coalesce(sum(unit_gallons) filter (where product_category in ('diesel','gasoline')),0) as fuel_gallons,
-        coalesce(sum(net_cost),0) as total_spend,
-        coalesce(sum(net_cost) filter (where product_category = 'gasoline'),0) as gasoline_spend
+        coalesce(sum(unit_gallons) filter (where product_category = 'diesel'),0) as diesel_gallons,
+        coalesce(sum(net_cost) filter (where product_category = 'diesel'),0) as diesel_cost,
+        coalesce(sum(unit_gallons) filter (where product_category = 'gasoline'),0) as gasoline_gallons,
+        coalesce(sum(net_cost) filter (where product_category = 'gasoline'),0) as gasoline_spend,
+        coalesce(sum(net_cost) filter (where product_category not in ('diesel','gasoline')),0) as misc_cost,
+        coalesce(sum(net_cost),0) as total_spend
       from filtered group by person_name
     ) x), '[]'::jsonb),
     'by_station', coalesce((select jsonb_agg(to_jsonb(x) order by x.total_spend desc) from (
