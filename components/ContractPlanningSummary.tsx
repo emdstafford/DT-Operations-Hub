@@ -52,7 +52,7 @@ export default function ContractPlanningSummary({ contract }: { contract: string
 
   if (!supervisors.length && !fuelAccess) return null;
 
-  return <section id="contract-fuel-plan" className="panel contract-planning-panel">
+  return <section id="contract-fuel-plan" className="panel contract-planning-panel contract-print-page contract-planning-print-page">
     <div className="panel-heading"><div><p className="eyebrow">Contract planning</p><h2>Assignment and fuel plan</h2></div>{fuelAccess && <Link className="hub-secondary-link no-print" href={`/fuel?contract=${encodeURIComponent(contract)}&view=mileage`}>See contract fuel report →</Link>}</div>
     {supervisors.length > 0 && <div className="contract-supervisor-summary">
       <span>Current supervisor{supervisors.length === 1 ? "" : "s"}</span>
