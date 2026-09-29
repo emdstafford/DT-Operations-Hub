@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export type TimecardSummaryEntry = { contract: string; employeeId: string; name: string; hundredths: number };
-export type TimecardDailyEntry = { date: string; contract: string; hundredths: number };\nexport type TimecardDetailEntry = { contract: string; last: string; first: string; employeeId: string; date: string; inTime: string; outTime: string; hundredths: number };
+export type TimecardDailyEntry = { date: string; contract: string; hundredths: number };
+export type TimecardDetailEntry = { contract: string; last: string; first: string; employeeId: string; date: string; inTime: string; outTime: string; hundredths: number };
 export type SavedReport = {
   id: string; payroll_name: string; pay_date: string; period_start: string; period_end: string; source_file: string; saved_at: string;
   summary: TimecardSummaryEntry[];
