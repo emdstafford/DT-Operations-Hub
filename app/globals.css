@@ -723,6 +723,11 @@ button, input { font: inherit; }
 }
 
 .fuel-driver-contract-heading th{background:#e7eef5;color:#102f4c;text-align:left!important;font-weight:800}
+.fuel-metric-grid.fuel-metric-layout,.fuel-print-summary.fuel-print-summary-layout{grid-template-columns:repeat(6,minmax(0,1fr))}
+.fuel-metric-layout>*:nth-child(-n+3),.fuel-print-summary-layout>div:nth-child(-n+3){grid-column:span 2}
+.fuel-metric-layout>*:nth-child(n+4),.fuel-print-summary-layout>div:nth-child(n+4){grid-column:span 3}
+@media(max-width:700px){.fuel-metric-grid.fuel-metric-layout,.fuel-print-summary.fuel-print-summary-layout{grid-template-columns:repeat(2,minmax(0,1fr))}.fuel-metric-layout>*:nth-child(n),.fuel-print-summary-layout>div:nth-child(n){grid-column:span 1}.fuel-metric-layout>*:nth-child(3),.fuel-print-summary-layout>div:nth-child(3){grid-column:span 2}}
+@media print{.fuel-print-summary.fuel-print-summary-layout{grid-template-columns:repeat(6,minmax(0,1fr))}.fuel-print-summary-layout>div:nth-child(-n+3){grid-column:span 2}.fuel-print-summary-layout>div:nth-child(n+4){grid-column:span 3}}
 .fuel-driver-contract-heading span{font-weight:600;color:#3c566b}
 .fuel-driver-contract-total th,.fuel-driver-contract-total td{background:#eff4f8;font-weight:800;border-top:2px solid #b4c7d7}
 .fuel-comparison-actions{display:flex;align-items:end;gap:12px}
