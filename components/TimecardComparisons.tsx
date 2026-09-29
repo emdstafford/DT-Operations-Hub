@@ -81,7 +81,7 @@ export default function TimecardComparisons({ entries, dailyEntries, start, end,
         setPrevious((data as SavedReport | null) ?? null);
         setStatus(existing?.archived_at ? `${existing.payroll_name} was already saved and has been restored from the archive.` : existing ? `Duplicate upload skipped. These totals are already saved as ${existing.payroll_name}.` : "Hour totals saved for future comparisons.");
       } catch (cause) {
-        if (active) { setError(cause instanceof Error && cause.message.includes("timecard_summary_history") ? "History setup needed: run timecard_summary_history.sql in Supabase. Printing still works." : cause instanceof Error ? cause.message : "Could not save timecard totals."); setStatus(""); }
+        if (active) { const detail = cause && typeof cause === "object" && "message" in cause ? String((cause as { message?: unknown }).message || "") : cause instanceof Error ? cause.message : ""; setError(detail ? `Could not save payroll history: ${detail}` : "Could not save timecard totals."); setStatus(""); }
       } finally { if (active) setSaving(false); }
     })();
     return () => { active = false; };
