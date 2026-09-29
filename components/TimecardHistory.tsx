@@ -55,7 +55,7 @@ export default function TimecardHistory() {
     if (!active) return;
     setUserId(auth.data.user?.id ?? "");
     setCanDelete(auth.data.user?.email?.trim().toLowerCase() === "estafford@dtexpress.net");
-    if (historyError) setError(historyError.message.includes("timecard_summary_history") ? "Run timecard_summary_history.sql in Supabase to enable private payroll comparisons." : historyError.message);
+    if (historyError) setError(`Payroll history could not load (${historyError.code || "Supabase"}): ${historyError.message}`);
     else { const allItems = (data ?? []) as HistoryRow[]; const items = allItems.filter((item) => !item.archived_at); setReports(allItems); const seenPayrolls = new Set<string>(); setSelectedIds(items.filter((item) => { const key = item.payroll_name.trim().toLowerCase(); if (seenPayrolls.has(key)) return false; seenPayrolls.add(key); return true; }).map((item) => item.id)); if (items.length) {
       const savedBaseline = items.find((item) => item.id === baseline.data?.report_id);
       setBaselineId(savedBaseline?.id || ""); setBaselineChoice(savedBaseline?.id || items[items.length - 1].id);
