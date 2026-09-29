@@ -12,14 +12,20 @@ type Row = Accumulated & { supervisor: string };
 
 const cleanContract = (value: string) => value === "UNASSIGNED_DEPARTMENT" ? "Unassigned" : value;
 const csvCell = (value: string) => `"${value.replaceAll('"', '""')}"`;
+const contractKey = (value: string) => {
+  const normalized = value.trim().toUpperCase().replace(/\s+/g, "");
+  if (!normalized || normalized === "UNASSIGNED_DEPARTMENT") return normalized;
+  return normalized.replace(/^0+(?=\d)/, "");
+};
 function names(values: string[]) { return [...new Set(values.flatMap((value) => value.split("/")).map((value) => value.trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b)); }
 
 function supervisorFor(contract: string, date: string, dated: Assignment[], current: CurrentAssignment[]) {
-  const exact = dated.filter((item) => item.contract_number === contract && date >= item.start_date && (!item.end_date || date <= item.end_date));
+  const key = contractKey(contract);
+  const exact = dated.filter((item) => contractKey(item.contract_number) === key && date >= item.start_date && (!item.end_date || date <= item.end_date));
   if (exact.length) return names(exact.map((item) => item.supervisor)).join(" / ");
-  const currentMatches = current.filter((item) => item.contract_number === contract);
+  const currentMatches = current.filter((item) => contractKey(item.contract_number) === key);
   if (currentMatches.length) return names(currentMatches.map((item) => item.supervisor)).join(" / ");
-  const latest = dated.filter((item) => item.contract_number === contract).sort((a,b) => b.start_date.localeCompare(a.start_date));
+  const latest = dated.filter((item) => contractKey(item.contract_number) === key).sort((a,b) => b.start_date.localeCompare(a.start_date));
   return latest.length ? names(latest.map((item) => item.supervisor)).join(" / ") : "Unassigned";
 }
 
@@ -50,9 +56,10 @@ export default function DriverContractSupervisorReport() {
     const accumulated = new Map<string, Accumulated>();
     for (const report of history) for (const entry of report.summary ?? []) {
       if (!entry.name?.trim() || !entry.contract?.trim()) continue;
-      const contractKey = entry.contract.trim().toUpperCase();
-      const key = `${entry.employeeId || entry.name.toLowerCase()}|${contractKey}`;
-      if (!accumulated.has(key)) accumulated.set(key, { driver: entry.name.trim(), employeeId: entry.employeeId, contract: contractKey, lastSeen: report.period_end });
+      const displayContract = entry.contract.trim().toUpperCase();
+      const normalizedContract = contractKey(displayContract);
+      const key = `${entry.employeeId || entry.name.toLowerCase()}|${normalizedContract}`;
+      if (!accumulated.has(key)) accumulated.set(key, { driver: entry.name.trim(), employeeId: entry.employeeId, contract: displayContract, lastSeen: report.period_end });
     }
     return [...accumulated.values()].map((item) => {
       const displayContract = cleanContract(item.contract);
