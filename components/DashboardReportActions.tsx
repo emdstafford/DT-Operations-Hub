@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 export default function DashboardReportActions() {
   const router = useRouter();
   const handoff = useUploadHandoff();
+  const [approved, setApproved] = useState(false);
   const [canManageReports, setCanManageReports] = useState(false);
   const [canFuel, setCanFuel] = useState(false);
   const [canPayroll, setCanPayroll] = useState(false);
@@ -17,29 +18,24 @@ export default function DashboardReportActions() {
 
   useEffect(() => {
     let active = true;
-
     void (async () => {
       const { data: userData } = await supabase.auth.getUser();
       const email = userData.user?.email?.toLowerCase();
       if (!email) return;
-
       const [operations, fuel, payroll] = await Promise.all([
         supabase.from("approved_users").select("role").eq("email", email).eq("active", true).maybeSingle(),
         supabase.from("fuel_tool_users").select("can_upload").eq("email", email).eq("active", true).maybeSingle(),
         supabase.from("payroll_tool_users").select("email").eq("email", email).eq("active", true).maybeSingle(),
       ]);
-
       if (active) {
+        setApproved(Boolean(operations.data));
         setCanManageReports(operations.data?.role === "admin" || operations.data?.role === "uploader");
         setCanFuel(Boolean(fuel.data?.can_upload));
         setCanPayroll(Boolean(payroll.data));
       }
     })();
-
     return () => { active = false; };
   }, []);
-
-  if (!canManageReports) return null;
 
   async function chooseFile(file?: File) {
     if (!file) return;
@@ -55,8 +51,9 @@ export default function DashboardReportActions() {
     } finally { setReading(false); }
   }
 
+  if (!approved) return null;
   return <div className="hub-actions">
-    <label className="primary-link dashboard-direct-upload">{reading ? "Reading file…" : "Upload a file"}<input type="file" accept=".xlsx,.xlsm,.xls,.csv,.pdf" disabled={reading} onChange={(event) => void chooseFile(event.target.files?.[0])} /></label>
-    <Link href="/upload" className="hub-secondary-link">All upload options</Link>
+    <Link href="/reports/driver-contract-supervisor" className="hub-secondary-link">Driver / Contract / Supervisor</Link>
+    {canManageReports && <><label className="primary-link dashboard-direct-upload">{reading ? "Reading file…" : "Upload a file"}<input type="file" accept=".xlsx,.xlsm,.xls,.csv,.pdf" disabled={reading} onChange={(event) => void chooseFile(event.target.files?.[0])} /></label><Link href="/upload" className="hub-secondary-link">All upload options</Link></>}
   </div>;
 }
