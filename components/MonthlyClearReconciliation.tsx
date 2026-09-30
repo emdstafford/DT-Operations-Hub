@@ -18,10 +18,13 @@ export default function MonthlyClearReconciliation() {
   const [rows, setRows] = useState<ClearRow[]>([]);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   async function upload(file?: File) {
     if (!file) return;
-    setError(''); setName(file.name);
+    setError('');
+    setName(file.name);
+    setLoading(true);
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -35,7 +38,12 @@ export default function MonthlyClearReconciliation() {
         return out;
       });
       setRows(data.filter(r => TONYA[s(r.CONTRACT)]?.has(s(r['SV TRIP ID']))));
-    } catch (e) { setRows([]); setError(e instanceof Error ? e.message : 'Unable to read workbook.'); }
+    } catch (e) {
+      setRows([]);
+      setError(e instanceof Error ? e.message : 'Unable to read workbook.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   const summary = useMemo(() => {
@@ -48,7 +56,8 @@ export default function MonthlyClearReconciliation() {
       const d = r['PLANNED START'];
       const date = d instanceof Date ? d.toISOString().slice(0,10) : s(d).slice(0,10);
       if (date) item.dates.add(date);
-      const miles = n(r['FINAL MILES']); if (miles) item.miles.push(miles);
+      const miles = n(r['FINAL MILES']);
+      if (miles) item.miles.push(miles);
     }
     return [...map.entries()].map(([key, v]): Summary => {
       const [contract, trip] = key.split('|');
@@ -57,28 +66,129 @@ export default function MonthlyClearReconciliation() {
     }).sort((a,b) => a.contract.localeCompare(b.contract) || Number(a.trip)-Number(b.trip));
   }, [rows]);
 
-  const totals = useMemo(() => summary.reduce<Record<string, number>>((a,r) => { a[r.contract]=(a[r.contract]||0)+r.totalPaidMiles; return a; },{}), [summary]);
+  const totals = useMemo(() => summary.reduce<Record<string, number>>((a,r) => {
+    a[r.contract] = (a[r.contract] || 0) + r.totalPaidMiles;
+    return a;
+  }, {}), [summary]);
+
+  const totalDays = useMemo(() => summary.reduce((sum, r) => sum + r.days, 0), [summary]);
+  const totalMiles = useMemo(() => summary.reduce((sum, r) => sum + r.totalPaidMiles, 0), [summary]);
 
   return <>
-    <section className="card" style={{marginBottom:16}}>
-      <h2>Upload CLEAR</h2>
-      <p>Upload the original CLEAR workbook. The Hub finds the real header row automatically (including the standard row 13 export) and ignores trips not assigned to Tonya.</p>
-      <input type="file" accept=".xlsx,.xls" onChange={e => upload(e.target.files?.[0])}/>
-      {name && <p className="muted">Loaded: <strong>{name}</strong></p>}
-      {error && <p style={{color:'crimson'}}>{error}</p>}
-      <p className="muted"><strong>No CLEAR charge, billed, paid, interest, discount, payment, or check fields are displayed.</strong></p>
+    <section className="card" style={{ marginBottom: 18 }}>
+      <p className="eyebrow">Step 3</p>
+      <h2 style={{ marginTop: 0, marginBottom: 6 }}>Upload CLEAR</h2>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Use the untouched CLEAR workbook. The Hub finds the real header row automatically, including the standard row 13 export.
+      </p>
+
+      <label
+        style={{
+          display: 'block',
+          marginTop: 16,
+          padding: '28px 18px',
+          border: '2px dashed #b9c6d6',
+          borderRadius: 12,
+          background: '#f8fafc',
+          textAlign: 'center',
+          cursor: 'pointer',
+        }}
+      >
+        <div style={{ fontSize: 30, marginBottom: 8 }}>⇧</div>
+        <div style={{ fontWeight: 800, color: '#0f2747', fontSize: 16 }}>
+          {loading ? 'Reading CLEAR workbook…' : 'Choose CLEAR workbook'}
+        </div>
+        <div className="muted" style={{ fontSize: 13, marginTop: 5 }}>
+          Excel .xlsx or .xls • no cleanup required before upload
+        </div>
+        <input
+          type="file"
+          accept=".xlsx,.xls"
+          disabled={loading}
+          onChange={e => upload(e.target.files?.[0])}
+          style={{ display: 'none' }}
+        />
+      </label>
+
+      {name && !error && (
+        <div style={{ marginTop: 12, padding: 11, borderRadius: 9, background: '#eef4fb', color: '#0f2747' }}>
+          <strong>Loaded:</strong> {name}
+        </div>
+      )}
+      {error && (
+        <div style={{ marginTop: 12, padding: 11, borderRadius: 9, background: '#fff1f2', color: '#9f1239', border: '1px solid #fecdd3' }}>
+          {error}
+        </div>
+      )}
+
+      <div style={{ marginTop: 14, padding: 12, borderRadius: 9, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+        <strong style={{ color: '#0f2747' }}>Privacy rule:</strong>{' '}
+        <span className="muted">CLEAR charge, billed, paid, interest, discount, payment, and check fields are never shown on this report.</span>
+      </div>
     </section>
 
-    {summary.length > 0 && <section className="card" style={{marginBottom:16}}>
-      <h2>Tonya CLEAR actuals</h2>
-      <div style={{display:'flex',gap:20,flexWrap:'wrap',marginBottom:12}}>
-        <strong>{summary.length} assigned trips found</strong>
-        {Object.entries(totals).map(([c,t]) => <span key={c}><strong>{c}:</strong> {t.toLocaleString(undefined,{maximumFractionDigits:1})} CLEAR miles</span>)}
+    {summary.length === 0 && !loading && name && !error && (
+      <section className="card" style={{ marginBottom: 18, textAlign: 'center', padding: 26 }}>
+        <h3 style={{ marginTop: 0 }}>No Tonya-assigned trips found</h3>
+        <p className="muted" style={{ marginBottom: 0 }}>Check that the workbook contains 296B8 or 296C2 CLEAR activity for the selected month.</p>
+      </section>
+    )}
+
+    {summary.length > 0 && <section className="card" style={{ marginBottom: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div>
+          <p className="eyebrow">Step 4</p>
+          <h2 style={{ marginTop: 0, marginBottom: 5 }}>Tonya CLEAR actuals</h2>
+          <p className="muted" style={{ marginTop: 0 }}>Only assigned contract trips are included below.</p>
+        </div>
+        <span style={{ padding: '6px 10px', borderRadius: 999, background: '#ecfdf5', color: '#166534', fontWeight: 800, fontSize: 12 }}>
+          FILE READ SUCCESSFULLY
+        </span>
       </div>
-      <div className="table-wrap"><table><thead><tr><th>Contract</th><th>CLEAR Trip</th><th>Days Ran</th><th>Final Miles / Trip</th><th>Actual CLEAR Miles</th></tr></thead><tbody>
-        {summary.map(r => <tr key={`${r.contract}-${r.trip}`}><td>{r.contract}</td><td>{r.trip}</td><td>{r.days}</td><td>{r.finalMiles.toFixed(1)}</td><td>{r.totalPaidMiles.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}</td></tr>)}
-      </tbody></table></div>
-      <p className="muted">This first pass proves the raw CLEAR import and Tonya filtering. Contract-frequency expected days, SVC mileage caps, EIA-approved rates, exceptions, saved history, and the combined printable report are added on top of this result.</p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, margin: '16px 0' }}>
+        <div style={{ padding: 14, borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div className="muted" style={{ fontSize: 12 }}>ASSIGNED TRIPS FOUND</div>
+          <div style={{ fontSize: 26, fontWeight: 850, color: '#0f2747' }}>{summary.length}</div>
+        </div>
+        <div style={{ padding: 14, borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div className="muted" style={{ fontSize: 12 }}>TOTAL DAYS RAN</div>
+          <div style={{ fontSize: 26, fontWeight: 850, color: '#0f2747' }}>{totalDays}</div>
+        </div>
+        <div style={{ padding: 14, borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div className="muted" style={{ fontSize: 12 }}>ACTUAL CLEAR MILES</div>
+          <div style={{ fontSize: 26, fontWeight: 850, color: '#0f2747' }}>{totalMiles.toLocaleString(undefined,{maximumFractionDigits:1})}</div>
+        </div>
+        <div style={{ padding: 14, borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div className="muted" style={{ fontSize: 12 }}>CONTRACTS</div>
+          <div style={{ fontSize: 18, fontWeight: 850, color: '#0f2747', marginTop: 6 }}>{Object.keys(totals).join(' • ')}</div>
+        </div>
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>Contract</th><th>CLEAR Trip</th><th>Days Ran</th><th>Final Miles / Trip</th><th>Actual CLEAR Miles</th></tr></thead>
+          <tbody>
+            {summary.map(r => (
+              <tr key={`${r.contract}-${r.trip}`}>
+                <td><strong>{r.contract}</strong></td>
+                <td>{r.trip}</td>
+                <td>{r.days}</td>
+                <td>{r.finalMiles.toFixed(1)}</td>
+                <td>{r.totalPaidMiles.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 14 }}>
+        {Object.entries(totals).map(([c,t]) => (
+          <div key={c} style={{ padding: '10px 12px', borderRadius: 9, background: '#eef4fb', color: '#0f2747' }}>
+            <strong>{c}</strong> · {t.toLocaleString(undefined,{maximumFractionDigits:1})} CLEAR miles
+          </div>
+        ))}
+      </div>
     </section>}
   </>;
 }
