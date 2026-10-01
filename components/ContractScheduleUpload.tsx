@@ -156,10 +156,11 @@ export default function ContractScheduleUpload() {
 
       <div style={{ marginTop: 18, overflowX: "auto", border: "1px solid #d7e0ea", borderRadius: 10 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead><tr style={{ background: "#f4f7fa", textAlign: "left" }}>{["Trip","Status","Vehicle","Freq","Freq days","Miles","Hours","Effective","Expires"].map(h => <th key={h} style={{ padding: 9, borderBottom: "1px solid #d7e0ea" }}>{h}</th>)}</tr></thead>
+          <thead><tr style={{ background: "#f4f7fa", textAlign: "left" }}>{["Trip","Status","Stops","Vehicle","Freq","Freq days","Miles","Hours","Effective","Expires"].map(h => <th key={h} style={{ padding: 9, borderBottom: "1px solid #d7e0ea" }}>{h}</th>)}</tr></thead>
           <tbody>{changes.map(({ trip, status }) => <tr key={`${trip.tripNumber}-${trip.effectiveFrom}`} style={{ borderBottom: "1px solid #edf1f5" }}>
             <td style={{ padding: 9, fontWeight: 800 }}>{trip.tripNumber}</td>
             <td style={{ padding: 9, textTransform: "capitalize" }}>{status}</td>
+            <td style={{ padding: 9 }}>{trip.stopCount}</td>
             <td style={{ padding: 9 }}>{trip.vehicleType || "—"}</td>
             <td style={{ padding: 9 }}>{trip.frequencyCode || "—"}</td>
             <td style={{ padding: 9 }}>{trip.frequencyDays ?? "—"}</td>
