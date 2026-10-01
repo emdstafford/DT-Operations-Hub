@@ -1,4 +1,4 @@
-import ScheduleBuilder from "@/components/ScheduleBuilder";
+import ContractScheduleUpload from "@/components/ContractScheduleUpload";
 
 export default function ContractSchedulesPage() {
   return <main className="page-shell">
@@ -6,13 +6,13 @@ export default function ContractSchedulesPage() {
       <div>
         <p className="eyebrow">Contract source of truth</p>
         <h1>USPS Contract Schedules</h1>
-        <p>Upload the current USPS schedule and service-change documents here. Review contract, trips, effective dates and changes before using the data downstream.</p>
+        <p>Upload official USPS contract schedules and revised schedules here. The Hub reads the contract data and keeps Schedule Builder separate.</p>
       </div>
     </header>
     <section style={{ marginBottom: 18, padding: "14px 16px", border: "1px solid #cbd7e4", borderRadius: 12, background: "#f6f9fc", color: "#314b66" }}>
       <strong>Historical contract record</strong>
-      <div style={{ marginTop: 4, fontSize: 13, lineHeight: 1.5 }}>Use this workspace for base schedules and SVC/service changes. Effective dates matter: prior versions must remain available so reconciliation can use the trip terms that were active on the actual service date.</div>
+      <div style={{ marginTop: 4, fontSize: 13, lineHeight: 1.5 }}>As service changes arrive, upload the revised USPS schedule here. Effective-dated versions will let the Hub use the contract terms that applied on the actual service date while preserving prior history.</div>
     </section>
-    <ScheduleBuilder />
+    <ContractScheduleUpload />
   </main>;
 }
