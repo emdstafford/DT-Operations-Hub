@@ -71,14 +71,24 @@ function pageLines(items: TextItem[]) {
 function parseTripRows(lines: string[]): ScheduleTrip[] {
   const trips = new Map<string, ScheduleTrip>();
   let activeTrip = "";
+  let awaitingTotalsFor = "";
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
+
+    // A USPS schedule can split a trip at a PDF page boundary. The next page may
+    // begin with the prior trip's "Trip Miles / Trip Hrs / Drive Time" block
+    // before the next trip starts, so page markers and repeated headers must not
+    // reset the active trip.
+    if (/^--- PDF PAGE \d+ ---$/i.test(line) || /^Trip\s+ID\b/i.test(line) || /^Stop\s*#\b/i.test(line) || /^(Nass Code|Facility|Arrive Time|Load\/|Unload|Depart Time|Vehicle|Freq|Freq Days|Eff\. Date|Exp\. Date)/i.test(line) || /^LOGISTICS APPROVED$/i.test(line)) {
+      continue;
+    }
 
     // First stop row contains the per-trip vehicle/frequency/effective-date fields.
     const firstStop = line.match(/^\s*(\d{1,4})\s+1\s+\S+\s+.+?\s+(\S+)\s+([A-Z0-9]{1,5})\s+([\d.]+)\s+(\d{2}\/\d{2}\/20\d{2})\s+(\d{2}\/\d{2}\/20\d{2})\s*$/i);
     if (firstStop) {
       activeTrip = String(Number(firstStop[1]));
+      awaitingTotalsFor = "";
       trips.set(activeTrip, {
         tripNumber: activeTrip,
         vehicleType: firstStop[2] || null,
@@ -93,16 +103,22 @@ function parseTripRows(lines: string[]): ScheduleTrip[] {
     }
 
     if (/^Trip\s+Miles\s+Trip\s+Hrs/i.test(line) && activeTrip) {
-      for (let look = index + 1; look <= Math.min(index + 3, lines.length - 1); look += 1) {
-        const totals = lines[look].match(/^\s*([\d,.]+)\s+([\d,.]+)(?:\s+[\d,.]+)?\s*$/);
-        if (!totals) continue;
-        const current = trips.get(activeTrip);
+      awaitingTotalsFor = activeTrip;
+      continue;
+    }
+
+    // Pair the next numeric totals row with the trip whose totals heading we just
+    // saw. This deliberately works across PDF page markers/repeated headers.
+    if (awaitingTotalsFor) {
+      const totals = line.match(/^\s*([\d,.]+)\s+([\d,.]+)(?:\s+([\d,.]+))?\s*$/);
+      if (totals) {
+        const current = trips.get(awaitingTotalsFor);
         if (current) {
           current.tripMiles = Number(totals[1].replaceAll(",", ""));
           current.tripHours = Number(totals[2].replaceAll(",", ""));
-          trips.set(activeTrip, current);
+          trips.set(awaitingTotalsFor, current);
         }
-        break;
+        awaitingTotalsFor = "";
       }
     }
   }
