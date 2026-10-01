@@ -89,7 +89,23 @@ alter table public.load_source_records enable row level security;
 alter table public.load_service_code_rules enable row level security;
 alter table public.load_status_events enable row level security;
 
--- Shared operational read access for authenticated DT users. Writes will be restricted through import paths.
+-- Approved DT users can feed operational imports into the shared Load Master.
+create or replace function public.is_approved_dt_user()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $
+  select exists (
+    select 1 from public.approved_users a
+    where a.email = lower(auth.jwt() ->> 'email') and a.active
+  );
+$;
+revoke all on function public.is_approved_dt_user() from public;
+grant execute on function public.is_approved_dt_user() to authenticated;
+
+-- Shared operational read access for authenticated DT users.
 drop policy if exists load_master_read on public.load_master;
 create policy load_master_read on public.load_master for select to authenticated using (true);
 drop policy if exists load_source_records_read on public.load_source_records;
@@ -98,6 +114,23 @@ drop policy if exists load_service_code_rules_read on public.load_service_code_r
 create policy load_service_code_rules_read on public.load_service_code_rules for select to authenticated using (true);
 drop policy if exists load_status_events_read on public.load_status_events;
 create policy load_status_events_read on public.load_status_events for select to authenticated using (true);
+
+drop policy if exists load_master_insert on public.load_master;
+create policy load_master_insert on public.load_master for insert to authenticated
+  with check (public.is_approved_dt_user());
+drop policy if exists load_master_update on public.load_master;
+create policy load_master_update on public.load_master for update to authenticated
+  using (public.is_approved_dt_user()) with check (public.is_approved_dt_user());
+
+drop policy if exists load_source_records_insert on public.load_source_records;
+create policy load_source_records_insert on public.load_source_records for insert to authenticated
+  with check (public.is_approved_dt_user() and imported_by = auth.uid());
+
+drop policy if exists load_status_events_insert on public.load_status_events;
+create policy load_status_events_insert on public.load_status_events for insert to authenticated
+  with check (public.is_approved_dt_user());
+
+-- Service-code classifications can be maintained later through a restricted admin UI.
 
 comment on table public.load_master is
 'One operational load record used across CLEAR, FourKites, contract history, extras/cancellations, and USPS payment reconciliation.';
