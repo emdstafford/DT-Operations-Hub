@@ -1,6 +1,6 @@
 -- DT Intelligence Hub: Company-wide Load Master
 -- Central operational record joining CLEAR, FourKites, Contract/SVC history and later USPS payments.
--- Run once in Supabase SQL Editor before enabling Load Master imports.
+-- Safe to rerun in Supabase SQL Editor.
 
 create extension if not exists pgcrypto;
 
@@ -35,7 +35,6 @@ create index if not exists load_master_trip_date_idx on public.load_master(contr
 create index if not exists load_master_payment_idx on public.load_master(payment_status, service_date desc);
 create index if not exists load_master_service_class_idx on public.load_master(service_class, service_date desc);
 
--- Keep source evidence separately so matching never destroys the original values.
 create table if not exists public.load_source_records (
   id uuid primary key default gen_random_uuid(),
   load_id uuid not null references public.load_master(id) on delete cascade,
@@ -55,7 +54,6 @@ create table if not exists public.load_source_records (
 
 create index if not exists load_source_records_load_idx on public.load_source_records(load_id, source_system);
 
--- Learn service-code classifications without hard-coding FEV/FCU as the only extras.
 create table if not exists public.load_service_code_rules (
   service_code text primary key,
   service_class text not null check (service_class in ('regular','extra','adjustment_special','non_revenue','needs_review')),
@@ -71,7 +69,6 @@ values
   ('FCU','extra','Known USPS extra-service code')
 on conflict (service_code) do nothing;
 
--- Preserve source-specific cancellation/status evidence. Conflicts are reviewed, not guessed.
 create table if not exists public.load_status_events (
   id uuid primary key default gen_random_uuid(),
   load_id uuid not null references public.load_master(id) on delete cascade,
@@ -96,12 +93,12 @@ language sql
 stable
 security definer
 set search_path = public
-as $
+as $$
   select exists (
     select 1 from public.approved_users a
     where a.email = lower(auth.jwt() ->> 'email') and a.active
   );
-$;
+$$;
 revoke all on function public.is_approved_dt_user() from public;
 grant execute on function public.is_approved_dt_user() to authenticated;
 
@@ -129,8 +126,6 @@ create policy load_source_records_insert on public.load_source_records for inser
 drop policy if exists load_status_events_insert on public.load_status_events;
 create policy load_status_events_insert on public.load_status_events for insert to authenticated
   with check (public.is_approved_dt_user());
-
--- Service-code classifications can be maintained later through a restricted admin UI.
 
 comment on table public.load_master is
 'One operational load record used across CLEAR, FourKites, contract history, extras/cancellations, and USPS payment reconciliation.';
