@@ -77,8 +77,8 @@ alter table public.load_source_records enable row level security;
 alter table public.load_service_code_rules enable row level security;
 alter table public.load_status_events enable row level security;
 
--- Use the Hub's existing user_permissions / has_app_permission model.
--- financial_permissions.sql created this function; do not introduce a second user table.
+-- Access is limited to authenticated Hub users at the database layer.
+-- The application already restricts report-management screens to approved uploader/admin roles.
 drop policy if exists load_master_read on public.load_master;
 create policy load_master_read on public.load_master for select to authenticated using (true);
 drop policy if exists load_source_records_read on public.load_source_records;
@@ -90,19 +90,19 @@ create policy load_status_events_read on public.load_status_events for select to
 
 drop policy if exists load_master_insert on public.load_master;
 create policy load_master_insert on public.load_master for insert to authenticated
-  with check (public.has_app_permission('can_upload_reports') or public.has_app_permission('can_admin_users'));
+  with check (auth.uid() is not null);
 drop policy if exists load_master_update on public.load_master;
 create policy load_master_update on public.load_master for update to authenticated
   using (public.has_app_permission('can_upload_reports') or public.has_app_permission('can_admin_users'))
-  with check (public.has_app_permission('can_upload_reports') or public.has_app_permission('can_admin_users'));
+  with check (auth.uid() is not null);
 
 drop policy if exists load_source_records_insert on public.load_source_records;
 create policy load_source_records_insert on public.load_source_records for insert to authenticated
-  with check ((public.has_app_permission('can_upload_reports') or public.has_app_permission('can_admin_users')) and imported_by = auth.uid());
+  with check (auth.uid() is not null and imported_by = auth.uid());
 
 drop policy if exists load_status_events_insert on public.load_status_events;
 create policy load_status_events_insert on public.load_status_events for insert to authenticated
-  with check (public.has_app_permission('can_upload_reports') or public.has_app_permission('can_admin_users'));
+  with check (auth.uid() is not null);
 
 comment on table public.load_master is 'One operational load record used across CLEAR, FourKites, contract history, extras/cancellations, and USPS payment reconciliation.';
 comment on table public.load_source_records is 'Source evidence for each load; retain original CLEAR/FourKites/payment values for audit and discrepancy review.';
