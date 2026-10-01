@@ -11,25 +11,21 @@ create table if not exists public.load_master (
   contract_number text,
   trip_number text,
   service_code text,
-  service_class text not null default 'needs_review'
-    check (service_class in ('regular','extra','adjustment_special','non_revenue','needs_review')),
+  service_class text not null default 'needs_review' check (service_class in ('regular','extra','adjustment_special','non_revenue','needs_review')),
   clear_present boolean not null default false,
   fourkites_present boolean not null default false,
   clear_miles numeric(12,3),
   fourkites_miles numeric(12,3),
   reconciled_miles numeric(12,3),
-  operation_status text not null default 'needs_review'
-    check (operation_status in ('operated','usps_cancelled','davenport_not_operated','extra_service','needs_review')),
+  operation_status text not null default 'needs_review' check (operation_status in ('operated','usps_cancelled','davenport_not_operated','extra_service','needs_review')),
   cancellation_reason text,
-  payment_status text not null default 'not_checked'
-    check (payment_status in ('not_checked','matched','not_matched','partial','duplicate','needs_review')),
+  payment_status text not null default 'not_checked' check (payment_status in ('not_checked','matched','not_matched','partial','duplicate','needs_review')),
   expected_payment numeric(14,2),
   actual_payment numeric(14,2),
   first_seen_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(load_number, service_date)
 );
-
 create index if not exists load_master_contract_date_idx on public.load_master(contract_number, service_date desc);
 create index if not exists load_master_trip_date_idx on public.load_master(contract_number, trip_number, service_date desc);
 create index if not exists load_master_payment_idx on public.load_master(payment_status, service_date desc);
@@ -51,7 +47,6 @@ create table if not exists public.load_source_records (
   imported_by uuid references auth.users(id),
   imported_at timestamptz not null default now()
 );
-
 create index if not exists load_source_records_load_idx on public.load_source_records(load_id, source_system);
 
 create table if not exists public.load_service_code_rules (
@@ -62,11 +57,8 @@ create table if not exists public.load_service_code_rules (
   updated_at timestamptz not null default now(),
   updated_by uuid references auth.users(id)
 );
-
 insert into public.load_service_code_rules(service_code, service_class, description)
-values
-  ('FEV','extra','Known USPS extra-service code'),
-  ('FCU','extra','Known USPS extra-service code')
+values ('FEV','extra','Known USPS extra-service code'), ('FCU','extra','Known USPS extra-service code')
 on conflict (service_code) do nothing;
 
 create table if not exists public.load_status_events (
@@ -78,7 +70,6 @@ create table if not exists public.load_status_events (
   event_at timestamptz,
   created_at timestamptz not null default now()
 );
-
 create index if not exists load_status_events_load_idx on public.load_status_events(load_id, created_at desc);
 
 alter table public.load_master enable row level security;
@@ -86,23 +77,8 @@ alter table public.load_source_records enable row level security;
 alter table public.load_service_code_rules enable row level security;
 alter table public.load_status_events enable row level security;
 
--- Approved DT users can feed operational imports into the shared Load Master.
-create or replace function public.is_approved_dt_user()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.approved_users a
-    where a.email = lower(auth.jwt() ->> 'email') and a.active
-  );
-$$;
-revoke all on function public.is_approved_dt_user() from public;
-grant execute on function public.is_approved_dt_user() to authenticated;
-
--- Shared operational read access for authenticated DT users.
+-- Use the Hub's existing user_permissions / has_app_permission model.
+-- financial_permissions.sql created this function; do not introduce a second user table.
 drop policy if exists load_master_read on public.load_master;
 create policy load_master_read on public.load_master for select to authenticated using (true);
 drop policy if exists load_source_records_read on public.load_source_records;
@@ -114,22 +90,20 @@ create policy load_status_events_read on public.load_status_events for select to
 
 drop policy if exists load_master_insert on public.load_master;
 create policy load_master_insert on public.load_master for insert to authenticated
-  with check (public.is_approved_dt_user());
+  with check (public.has_app_permission('can_upload_reports') or public.has_app_permission('can_admin_users'));
 drop policy if exists load_master_update on public.load_master;
 create policy load_master_update on public.load_master for update to authenticated
-  using (public.is_approved_dt_user()) with check (public.is_approved_dt_user());
+  using (public.has_app_permission('can_upload_reports') or public.has_app_permission('can_admin_users'))
+  with check (public.has_app_permission('can_upload_reports') or public.has_app_permission('can_admin_users'));
 
 drop policy if exists load_source_records_insert on public.load_source_records;
 create policy load_source_records_insert on public.load_source_records for insert to authenticated
-  with check (public.is_approved_dt_user() and imported_by = auth.uid());
+  with check ((public.has_app_permission('can_upload_reports') or public.has_app_permission('can_admin_users')) and imported_by = auth.uid());
 
 drop policy if exists load_status_events_insert on public.load_status_events;
 create policy load_status_events_insert on public.load_status_events for insert to authenticated
-  with check (public.is_approved_dt_user());
+  with check (public.has_app_permission('can_upload_reports') or public.has_app_permission('can_admin_users'));
 
-comment on table public.load_master is
-'One operational load record used across CLEAR, FourKites, contract history, extras/cancellations, and USPS payment reconciliation.';
-comment on table public.load_source_records is
-'Immutable-ish source evidence for each load; retain original CLEAR/FourKites/payment values for audit and discrepancy review.';
-
+comment on table public.load_master is 'One operational load record used across CLEAR, FourKites, contract history, extras/cancellations, and USPS payment reconciliation.';
+comment on table public.load_source_records is 'Source evidence for each load; retain original CLEAR/FourKites/payment values for audit and discrepancy review.';
 notify pgrst, 'reload schema';
