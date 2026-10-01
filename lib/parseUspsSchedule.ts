@@ -35,8 +35,12 @@ function isoDate(value: string | undefined) {
   return match ? `${match[3]}-${match[1]}-${match[2]}` : null;
 }
 
-// Only an explicitly labeled annual total is a contract total. Trip miles and
-// frequency-day counts must never be substituted for it.
+function cleanPdfLine(value: string) {
+  // USPS schedule PDFs may inject approval stamps into otherwise valid data rows.
+  // Strip only known page furniture; do not alter contract/trip content.
+  return value.replace(/\bLOGISTICS\s+APPROVED\b/gi, " ").replace(/\s+/g, " ").trim();
+}
+
 function statedAnnualTotal(text: string, unit: "miles" | "hours"): StatedTotal {
   const pages = text.split(/--- PDF PAGE (\d+) ---/i);
   const chunks = pages.length > 1
@@ -66,7 +70,10 @@ function pageLines(items: TextItem[]) {
     row.push({ x: transform[4], text });
     rows.set(y, row);
   }
-  return [...rows.entries()].sort((a, b) => b[0] - a[0]).map(([, row]) => row.sort((a, b) => a.x - b.x).map((part) => part.text).join(" "));
+  return [...rows.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([, row]) => cleanPdfLine(row.sort((a, b) => a.x - b.x).map((part) => part.text).join(" ")))
+    .filter(Boolean);
 }
 
 function parseTripRows(lines: string[]): ScheduleTrip[] {
@@ -75,17 +82,13 @@ function parseTripRows(lines: string[]): ScheduleTrip[] {
   let awaitingTotalsFor = "";
 
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
+    const line = cleanPdfLine(lines[index]);
+    if (!line) continue;
 
-    // A USPS schedule can split a trip at a PDF page boundary. The next page may
-    // begin with the prior trip's "Trip Miles / Trip Hrs / Drive Time" block
-    // before the next trip starts, so page markers and repeated headers must not
-    // reset the active trip.
-    if (/^--- PDF PAGE \d+ ---$/i.test(line) || /^Trip\s+ID\b/i.test(line) || /^Stop\s*#\b/i.test(line) || /^(Nass Code|Facility|Arrive Time|Load\/|Unload|Depart Time|Vehicle|Freq|Freq Days|Eff\. Date|Exp\. Date)/i.test(line) || /^LOGISTICS APPROVED$/i.test(line)) {
+    if (/^--- PDF PAGE \d+ ---$/i.test(line) || /^Trip\s+ID\b/i.test(line) || /^Stop\s*#\b/i.test(line) || /^(Nass Code|Facility|Arrive Time|Load\/|Unload|Depart Time|Vehicle|Freq|Freq Days|Eff\. Date|Exp\. Date)/i.test(line)) {
       continue;
     }
 
-    // First stop row contains the per-trip vehicle/frequency/effective-date fields.
     const firstStop = line.match(/^\s*(\d{1,4})\s+1\s+\S+\s+.+?\s+(\S+)\s+([A-Z0-9]{1,5})\s+([\d.]+)\s+(\d{2}\/\d{2}\/20\d{2})\s+(\d{2}\/\d{2}\/20\d{2})\s*$/i);
     if (firstStop) {
       activeTrip = String(Number(firstStop[1]));
@@ -121,13 +124,7 @@ function parseTripRows(lines: string[]): ScheduleTrip[] {
       continue;
     }
 
-    // Pair the next numeric totals row with the trip whose totals heading we just
-    // saw. This deliberately works across PDF page markers/repeated headers.
     if (awaitingTotalsFor) {
-      // USPS PDF text sometimes injects page furniture directly into the totals
-      // row (for example: "3.5 0.65LOGISTICS APPROVED"). We only need the
-      // leading Miles and Hours values, so accept those even when the remainder
-      // of the extracted line is contaminated by a page header/footer.
       const totals = line.match(/^\s*([\d,.]+)\s+([\d,.]+)/);
       if (totals) {
         const current = trips.get(awaitingTotalsFor);
@@ -145,9 +142,10 @@ function parseTripRows(lines: string[]): ScheduleTrip[] {
 }
 
 export function analyzeScheduleText(text: string, pageCount: number, fileName = ""): ScheduleAnalysis {
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const cleanedText = text.split(/\r?\n/).map(cleanPdfLine).filter(Boolean).join("\n");
+  const lines = cleanedText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const contractPattern = "(\\d{4}[A-Z]|\\d{3}[A-Z]\\d|\\d{2}[A-Z]\\d{2})";
-  const headerContract = text.match(new RegExp(`\\bHCR(?:#|\\s+ID)?[\\s\\S]{0,120}?\\b${contractPattern}\\b`, "i"))?.[1];
+  const headerContract = cleanedText.match(new RegExp(`\\bHCR(?:#|\\s+ID)?[\\s\\S]{0,120}?\\b${contractPattern}\\b`, "i"))?.[1];
   const filenameContract = fileName.match(new RegExp(`\\b${contractPattern}\\b`, "i"))?.[1];
   const contractNumber = (headerContract || filenameContract || "").toUpperCase();
 
@@ -174,11 +172,11 @@ export function analyzeScheduleText(text: string, pageCount: number, fileName = 
 
   const effectiveDates = [...new Set((parsedTrips.length
     ? parsedTrips.flatMap((trip) => [trip.effectiveFrom, trip.effectiveTo].filter(Boolean) as string[])
-    : (text.match(/\b\d{2}\/\d{2}\/20\d{2}\b/g) || []).map((value) => isoDate(value)!).filter(Boolean)
+    : (cleanedText.match(/\b\d{2}\/\d{2}\/20\d{2}\b/g) || []).map((value) => isoDate(value)!).filter(Boolean)
   ))].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
 
-  const miles = statedAnnualTotal(text, "miles");
-  const hours = statedAnnualTotal(text, "hours");
+  const miles = statedAnnualTotal(cleanedText, "miles");
+  const hours = statedAnnualTotal(cleanedText, "hours");
   const warnings: string[] = [];
   if (!contractNumber) warnings.push("Contract number was not confidently identified.");
   if (!tripIds.length) warnings.push("No trip rows were confidently identified.");
@@ -200,7 +198,7 @@ export function analyzeScheduleText(text: string, pageCount: number, fileName = 
     annualHours: hours.value,
     annualMilesPage: miles.page,
     annualHoursPage: hours.page,
-    changeSummaryFound: /Trip Change Summary/i.test(text),
+    changeSummaryFound: /Trip Change Summary/i.test(cleanedText),
     warnings,
   };
 }
