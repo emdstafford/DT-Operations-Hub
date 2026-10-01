@@ -124,7 +124,11 @@ function parseTripRows(lines: string[]): ScheduleTrip[] {
     // Pair the next numeric totals row with the trip whose totals heading we just
     // saw. This deliberately works across PDF page markers/repeated headers.
     if (awaitingTotalsFor) {
-      const totals = line.match(/^\s*([\d,.]+)\s+([\d,.]+)(?:\s+([\d,.]+))?\s*$/);
+      // USPS PDF text sometimes injects page furniture directly into the totals
+      // row (for example: "3.5 0.65LOGISTICS APPROVED"). We only need the
+      // leading Miles and Hours values, so accept those even when the remainder
+      // of the extracted line is contaminated by a page header/footer.
+      const totals = line.match(/^\s*([\d,.]+)\s+([\d,.]+)/);
       if (totals) {
         const current = trips.get(awaitingTotalsFor);
         if (current) {
