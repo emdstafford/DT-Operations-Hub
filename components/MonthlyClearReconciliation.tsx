@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { syncClearRowsToLoadMaster } from '@/lib/loadMaster';
 
 type ClearRow = Record<string, unknown>;
 type Summary = { contract: string; trip: string; days: number; finalMiles: number; payableMiles: number; totalPaidMiles: number; overContract: boolean };
@@ -19,12 +20,14 @@ export default function MonthlyClearReconciliation() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadMasterMessage, setLoadMasterMessage] = useState('');
 
   async function upload(file?: File) {
     if (!file) return;
     setError('');
     setName(file.name);
     setLoading(true);
+    setLoadMasterMessage('');
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -37,6 +40,9 @@ export default function MonthlyClearReconciliation() {
         headers.forEach((h, i) => { if (h) out[h] = (r as unknown[])[i]; });
         return out;
       });
+      const operationalRows = data.filter(r => Object.values(r).some(v => s(v)));
+      const imported = await syncClearRowsToLoadMaster(operationalRows, file.name);
+      setLoadMasterMessage(`${imported.synced.toLocaleString()} CLEAR loads added/updated in the company Load Master${imported.skippedWithoutIdentity ? ` · ${imported.skippedWithoutIdentity.toLocaleString()} rows skipped because load number/date could not be identified` : ''}.`);
       setRows(data.filter(r => TONYA[s(r.CONTRACT)]?.has(s(r['SV TRIP ID']))));
     } catch (e) {
       setRows([]);
@@ -113,6 +119,7 @@ export default function MonthlyClearReconciliation() {
       {name && !error && (
         <div style={{ marginTop: 12, padding: 11, borderRadius: 9, background: '#eef4fb', color: '#0f2747' }}>
           <strong>Loaded:</strong> {name}
+          {loadMasterMessage && <div style={{ marginTop: 5, fontSize: 13 }}>{loadMasterMessage}</div>}
         </div>
       )}
       {error && (
