@@ -13,6 +13,9 @@ export default function Page() {
     </div><ContractPayRateLink /></header>
 
     <div className="no-print" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(290px,1fr))", gap: 12, marginBottom: 18 }}>
+      <Link href="/contracts/schedules" style={card}>
+        <div><div style={{ fontSize: 12, fontWeight: 800, opacity: .72, letterSpacing: ".08em" }}>CONTRACT SOURCE OF TRUTH</div><div style={{ fontSize: 19, fontWeight: 850, marginTop: 3 }}>USPS Contract Schedules</div><div style={{ fontSize: 13, opacity: .82, marginTop: 3 }}>Upload base schedules and SVCs, review effective dates, trips and service changes</div></div><div style={{ fontSize: 25 }}>→</div>
+      </Link>
       <Link href="/contracts/monthly-reconciliation" style={card}>
         <div><div style={{ fontSize: 12, fontWeight: 800, opacity: .72, letterSpacing: ".08em" }}>CONTRACT FINANCIALS</div><div style={{ fontSize: 19, fontWeight: 850, marginTop: 3 }}>Monthly Reconciliation</div><div style={{ fontSize: 13, opacity: .82, marginTop: 3 }}>CLEAR actuals, monthly rates, approvals, and final supervisor reports</div></div><div style={{ fontSize: 25 }}>→</div>
       </Link>
