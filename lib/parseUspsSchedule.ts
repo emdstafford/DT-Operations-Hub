@@ -9,6 +9,7 @@ export type ScheduleTrip = {
   effectiveTo: string | null;
   tripMiles: number | null;
   tripHours: number | null;
+  stopCount: number;
 };
 
 export type ScheduleAnalysis = {
@@ -98,8 +99,21 @@ function parseTripRows(lines: string[]): ScheduleTrip[] {
         effectiveTo: isoDate(firstStop[6]),
         tripMiles: null,
         tripHours: null,
+        stopCount: 1,
       });
       continue;
+    }
+
+    const stopRow = line.match(/^\s*(\d{1,4})\s+(\d{1,2})\s+\S+\b/);
+    if (stopRow) {
+      const tripNumber = String(Number(stopRow[1]));
+      const stopNumber = Number(stopRow[2]);
+      const current = trips.get(tripNumber);
+      if (current && Number.isFinite(stopNumber)) {
+        current.stopCount = Math.max(current.stopCount || 0, stopNumber);
+        trips.set(tripNumber, current);
+        activeTrip = tripNumber;
+      }
     }
 
     if (/^Trip\s+Miles\s+Trip\s+Hrs/i.test(line) && activeTrip) {
