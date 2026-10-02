@@ -20,9 +20,7 @@ export default function TimecardHistory() {
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
   const [printAll, setPrintAll] = useState(false);
-  const [printMode, setPrintMode] = useState<"comparison" | "saved" | null>(null);
-  const [savedPrintId, setSavedPrintId] = useState("");
-  const [savedCompareId, setSavedCompareId] = useState("");
+  const [printMode, setPrintMode] = useState<"comparison" | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedContracts, setSelectedContracts] = useState<string[] | null>(null);
   const [baselineId, setBaselineId] = useState("");
@@ -61,7 +59,6 @@ export default function TimecardHistory() {
       const savedBaseline = items.find((item) => item.id === baseline.data?.report_id);
       setBaselineId(savedBaseline?.id || ""); setBaselineChoice(savedBaseline?.id || items[items.length - 1].id);
       setAfterId(items[0].id);
-      setSavedPrintId(items[0].id);
       setBeforeId(savedBaseline?.id ?? items.find((item) => item.period_end < items[0].period_start)?.id ?? items[1]?.id ?? "");
     } if (baseline.error) setBaselineMessage("Baseline setting unavailable. Run the updated timecard_summary_history.sql in Supabase."); }
     setLoading(false);
@@ -71,9 +68,6 @@ export default function TimecardHistory() {
   const archivedReports = reports.filter((item) => !!item.archived_at);
   const before = activeReports.find((item) => item.id === beforeId);
   const after = activeReports.find((item) => item.id === afterId);
-  const savedPrint = activeReports.find((item) => item.id === savedPrintId) ?? activeReports[0];
-  const earlierSaved = savedPrint ? activeReports.filter((item) => item.period_end < savedPrint.period_start).sort((a, b) => b.period_end.localeCompare(a.period_end) || b.saved_at.localeCompare(a.saved_at)) : [];
-  const savedCompare = savedCompareId ? earlierSaved.find((item) => item.id === savedCompareId) : earlierSaved[0];
   const availableContracts = useMemo(() => [...new Set([...(before?.summary ?? []), ...(after?.summary ?? [])].map((entry) => entry.contract))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [before, after]);
   const contractIncluded = (contract: string) => selectedContracts === null || selectedContracts.includes(contract);
   const beforeEntries = (before?.summary ?? []).filter((entry) => contractIncluded(entry.contract));
@@ -108,19 +102,6 @@ export default function TimecardHistory() {
   }, [before, after, selectedContracts]);
   const selectedBeforeTotal = beforeEntries.reduce((sum, entry) => sum + entry.hundredths, 0);
   const selectedAfterTotal = afterEntries.reduce((sum, entry) => sum + entry.hundredths, 0);
-  const savedContractGroups = useMemo(() => {
-    const current = savedPrint?.summary ?? [], previous = savedCompare?.summary ?? [], first = baseline?.summary ?? [];
-    return [...new Set([...current, ...previous, ...first].map((entry) => entry.contract))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map((contract) => {
-      const rows = current.filter((entry) => entry.contract === contract);
-      const prior = previous.filter((entry) => entry.contract === contract);
-      const firstRows = first.filter((entry) => entry.contract === contract);
-      const currentDrivers = totals(rows, "driver"), previousDrivers = totals(prior, "driver"), firstDrivers = totals(firstRows, "driver");
-      const drivers = [...new Set([...currentDrivers.keys(), ...previousDrivers.keys(), ...firstDrivers.keys()])].map((id) => ({ id, name: currentDrivers.get(id)?.label ?? previousDrivers.get(id)?.label ?? firstDrivers.get(id)?.label ?? id,
-        hours: currentDrivers.get(id)?.hours ?? 0, prior: previousDrivers.get(id)?.hours ?? 0, first: firstDrivers.get(id)?.hours ?? 0,
-      })).sort((a, b) => a.name.localeCompare(b.name));
-      return { contract, drivers, total: rows.reduce((sum, entry) => sum + entry.hundredths, 0), priorTotal: prior.reduce((sum, entry) => sum + entry.hundredths, 0), firstTotal: firstRows.reduce((sum, entry) => sum + entry.hundredths, 0) };
-    });
-  }, [savedPrint, savedCompare, baseline]);
   function supervisorFor(contract: string, report: HistoryRow | undefined) {
     if (assignmentError) return "Supervisor unavailable";
     if (!report) return "—";
@@ -177,33 +158,27 @@ export default function TimecardHistory() {
     }
     setBusyId("");
   }
-  function startPrint(mode: "comparison" | "saved") {
-    if (mode === "saved" && !savedPrint) return;
-    if (mode === "comparison" && (!before || !after || beforeId === afterId || selectedContracts?.length === 0)) return;
-    setPrintMode(mode);
+  function printComparison() {
+    if (!before || !after || beforeId === afterId || selectedContracts?.length === 0) return;
+    setPrintMode("comparison");
     setPrintAll(true);
     const reset = () => { setPrintAll(false); setPrintMode(null); window.removeEventListener("afterprint", reset); };
     window.addEventListener("afterprint", reset);
     window.setTimeout(() => window.print(), 150);
   }
-  function printComparison() {
-    if (!before || !after || beforeId === afterId || selectedContracts?.length === 0) return;
-    startPrint("comparison");
-  }
-  return <div className={`report-stack timecard-history ${printMode === "saved" ? "timecard-print-saved-mode" : "timecard-print-compare-mode"}`}>
+  return <div className={`report-stack timecard-history ${printMode === "comparison" ? "timecard-print-compare-mode" : ""}`}>
     {loading && <section className="panel"><p>Loading saved payroll summaries…</p></section>}
     {error && <section className="alert alert-error">{error}</section>}
     {!loading && !error && !reports.length && <section className="panel"><p>No payroll summaries saved yet. Open Timecard Report and upload a file to start.</p></section>}
     {!!reports.length && <>
-      <section className="panel timecard-history-summary"><div className="panel-heading"><div><h2>Saved payrolls</h2><span>{activeReports.length} active versions · {sequence.length} selected · Raw time punches stay in the browser.</span></div><button type="button" className="primary-link" disabled={!before || !after || beforeId === afterId || selectedContracts?.length === 0} onClick={printComparison}>Print payroll comparison</button></div>
-        <div className="timecard-saved-print-controls"><label>Print a saved payroll by contract<select value={savedPrint?.id ?? ""} onChange={(event) => { setSavedPrintId(event.target.value); setSavedCompareId(""); }}>{activeReports.map((row) => <option key={row.id} value={row.id}>{version(row)}</option>)}</select></label><label>Compare with earlier payroll<select value={savedCompare?.id ?? ""} onChange={(event) => setSavedCompareId(event.target.value)}><option value="">{earlierSaved.length ? "Choose earlier payroll" : "No earlier payroll saved"}</option>{earlierSaved.map((row) => <option key={row.id} value={row.id}>{version(row)}</option>)}</select></label><button type="button" className="hub-secondary-link" disabled={!savedPrint} onClick={() => startPrint("saved")}>Print saved payroll by contract</button><p>This saved summary contains driver and contract hours. For individual time-in and time-out rows, reopen the original file in Timecard Report.</p></div>
+      <section className="panel timecard-history-summary"><div className="panel-heading"><div><h2>Saved payrolls</h2><span>{activeReports.length} active versions · {sequence.length} selected · Raw time punches stay in the browser.</span></div></div>
         {actionMessage && <p className="timecard-action-status" role="status">{actionMessage}</p>}
         <details className="timecard-history-pick"><summary>Choose payrolls to show ({sequence.length} selected)</summary><div className="timecard-history-picker-actions"><button type="button" onClick={() => setSelectedIds(activeReports.map((item) => item.id))}>Select every active version</button><button type="button" onClick={() => setSelectedIds([])}>Clear selection</button></div><div className="timecard-history-options">{activeReports.map((item) => <label key={item.id}><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => setSelectedIds(selectedIds.includes(item.id) ? selectedIds.filter((id) => id !== item.id) : [...selectedIds, item.id])} />{version(item)}</label>)}</div></details>
         <div className="table-scroll"><table className="data-table"><thead><tr><th>Payroll</th><th>Timecard dates</th><th>Drivers</th><th>Contracts</th><th>Total hours</th><th>Change vs prior saved payroll</th></tr></thead><tbody>{sequence.map((row, index) => { const previous = [...sequence.slice(0, index)].reverse().find((item) => item.period_end < row.period_start); const delta = previous ? Number(row.total_hundredths) - Number(previous.total_hundredths) : null; return <tr key={row.id}><td>{row.payroll_name}</td><td>{formatDate(row.period_start)}–{formatDate(row.period_end)}</td><td>{row.employee_count}</td><td>{row.contract_count}</td><td>{hour(Number(row.total_hundredths))}</td><td>{delta === null ? "First saved period" : `${delta > 0 ? "+" : ""}${hour(delta)}`}</td></tr>; })}</tbody></table></div>
         <div className="timecard-versions"><h3>Manage saved versions</h3><p>Archive an upload entered by mistake. Archived versions stay available to restore; they do not count toward reports. Only Emily can permanently delete one.</p>{activeReports.map((row) => <div className="timecard-version-row" key={row.id}><span>{version(row)} · {hour(Number(row.total_hundredths))} hours {row.id === baselineId ? "· First payroll baseline" : ""}</span><div><button type="button" disabled={!!busyId || row.id === baselineId} onClick={() => void changeArchive(row, false)}>Archive</button>{canDelete && <button type="button" className="timecard-delete" disabled={!!busyId || row.id === baselineId} onClick={() => void deleteReport(row)}>Delete</button>}</div></div>)}</div>
         {!!archivedReports.length && <details className="timecard-history-pick"><summary>Archived payroll uploads ({archivedReports.length})</summary><div className="timecard-history-options">{archivedReports.map((row) => <div className="timecard-version-row" key={row.id}><span>{version(row)} · {hour(Number(row.total_hundredths))} hours</span><div><button type="button" disabled={!!busyId} onClick={() => void changeArchive(row, true)}>Restore</button>{canDelete && <button type="button" className="timecard-delete" disabled={!!busyId} onClick={() => void deleteReport(row)}>Delete</button>}</div></div>)}</div></details>}
       </section>
-      {!!activeReports.length && <section className="panel timecard-comparisons timecard-print-comparison"><div className="panel-heading"><div><h2>Compare two payrolls</h2><span>Select any active payrolls, then choose all contracts or only the contracts payroll needs.</span></div><button type="button" className="hub-secondary-link" disabled={!before || !after || beforeId === afterId || selectedContracts?.length === 0} onClick={printComparison}>Print selected comparison</button></div>
+      {!!activeReports.length && <section className="panel timecard-comparisons timecard-print-comparison"><div className="panel-heading"><div><h2>Compare two payrolls</h2><span>Select any active payrolls, then choose all contracts or only the contracts payroll needs.</span></div><button type="button" className="hub-secondary-link" disabled={!before || !after || beforeId === afterId || selectedContracts?.length === 0} onClick={printComparison}>Print comparison</button></div>
         <div className="timecard-print-title print-only"><p>Davenport Transportation · Payroll hour comparison</p><h1>{before?.payroll_name} → {after?.payroll_name}</h1><span>{before && after ? `${formatDate(before.period_start)}–${formatDate(before.period_end)} compared with ${formatDate(after.period_start)}–${formatDate(after.period_end)}` : ""}</span><span>{selectedContracts === null ? " · All contracts" : ` · Contracts: ${selectedContracts.join(", ")}`}</span></div>
         <div className="timecard-baseline"><label>First payroll in the new system<select value={baselineChoice} onChange={(event) => setBaselineChoice(event.target.value)}>{activeReports.map((row) => <option key={row.id} value={row.id}>{version(row)}</option>)}</select></label><button type="button" className="hub-secondary-link" onClick={() => void setBaseline()}>Save shared baseline</button></div>
         {baselineMessage && <p role="status">{baselineMessage}</p>}
@@ -229,10 +204,6 @@ export default function TimecardHistory() {
           <div className="timecard-contract-breakdown-heading"><h3>Contract {contract}</h3><div><span>{before.payroll_name}: {supervisorFor(contract, before)}</span><span>{after.payroll_name}: {supervisorFor(contract, after)}</span></div></div>
           <div className="table-scroll"><table className="data-table"><thead><tr><th>Driver</th><th>{before.payroll_name} hours</th><th>{after.payroll_name} hours</th><th>Up / down</th></tr></thead><tbody>{contractDrivers.map((driver) => <tr key={driver.key}><td>{driver.name}</td><td>{hour(driver.earlier)}</td><td>{hour(driver.later)}</td><td className={driver.later < driver.earlier ? "timecard-hours-down" : driver.later > driver.earlier ? "timecard-hours-up" : ""}>{driver.later - driver.earlier > 0 ? "+" : ""}{hour(driver.later - driver.earlier)}</td></tr>)}</tbody><tfoot><tr><th>Contract total</th><th>{hour(earlier)}</th><th>{hour(later)}</th><th>{later - earlier > 0 ? "+" : ""}{hour(later - earlier)}</th></tr></tfoot></table></div>
         </div>)}
-      </section>}
-      {savedPrint && <section className="panel timecard-comparisons timecard-saved-packet"><div className="timecard-print-title"><p>Davenport Transportation · Saved timecard hours</p><h1>{savedPrint.payroll_name} · Contract hours</h1><span>{formatDate(savedPrint.period_start)}–{formatDate(savedPrint.period_end)} · {savedContractGroups.length} contracts · {hour(Number(savedPrint.total_hundredths))} total hours</span>{baseline && <span> · First payroll: {baseline.payroll_name} ({formatDate(baseline.period_start)}–{formatDate(baseline.period_end)})</span>}{savedCompare && <span> · Previous payroll: {savedCompare.payroll_name} ({formatDate(savedCompare.period_start)}–{formatDate(savedCompare.period_end)}); change {Number(savedPrint.total_hundredths) - Number(savedCompare.total_hundredths) > 0 ? "+" : ""}{hour(Number(savedPrint.total_hundredths) - Number(savedCompare.total_hundredths))} hours</span>}</div>
-        {savedContractGroups.map(({ contract, drivers: contractDrivers, total, priorTotal, firstTotal }) => <div className="timecard-contract-breakdown" key={contract}><div className="timecard-contract-breakdown-heading"><h3>Contract {contract}</h3><div>{baseline && <span>{baseline.payroll_name} supervisor: {supervisorFor(contract, baseline)}</span>}{savedCompare && <span>{savedCompare.payroll_name} supervisor: {supervisorFor(contract, savedCompare)}</span>}<span>{savedPrint.payroll_name} supervisor: {supervisorFor(contract, savedPrint)}</span><span>{contractDrivers.length} drivers</span></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Driver</th>{baseline && <th>First {baseline.payroll_name}</th>}{savedCompare && <th>Previous {savedCompare.payroll_name}</th>}<th>Current {savedPrint.payroll_name}</th>{savedCompare && <th>Change vs previous</th>}</tr></thead><tbody>{contractDrivers.map((driver) => <tr key={driver.id}><td>{driver.name}</td>{baseline && <td>{hour(driver.first)}</td>}{savedCompare && <td>{hour(driver.prior)}</td>}<td>{hour(driver.hours)}</td>{savedCompare && <td className={driver.hours < driver.prior ? "timecard-hours-down" : driver.hours > driver.prior ? "timecard-hours-up" : ""}>{driver.hours - driver.prior > 0 ? "+" : ""}{hour(driver.hours - driver.prior)}</td>}</tr>)}</tbody><tfoot><tr><th>Contract total</th>{baseline && <th>{hour(firstTotal)}</th>}{savedCompare && <th>{hour(priorTotal)}</th>}<th>{hour(total)}</th>{savedCompare && <th>{total - priorTotal > 0 ? "+" : ""}{hour(total - priorTotal)}</th>}</tr></tfoot></table></div></div>)}
-        <p className="timecard-comparison-note">Saved hour totals only. Individual punch dates and times are available when the original file is opened in Timecard Report.</p>
       </section>}
     </>}
   </div>;
