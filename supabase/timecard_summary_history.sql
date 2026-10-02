@@ -16,7 +16,6 @@ grant execute on function public.is_payroll_tool_user() to authenticated;
 create table if not exists public.timecard_summary_history (
   id uuid primary key default gen_random_uuid(),
   payroll_name text not null check (length(trim(payroll_name)) > 0),
-  -- Internal sort date, set from the final timecard date; staff enter payroll name only.
   pay_date date not null,
   period_start date not null,
   period_end date not null,
@@ -25,38 +24,39 @@ create table if not exists public.timecard_summary_history (
   employee_count integer not null check (employee_count >= 0),
   contract_count integer not null check (contract_count >= 0),
   total_hundredths bigint not null check (total_hundredths >= 0),
-  -- Array of {contract, employeeId, name, hundredths}; no punch times.
   summary jsonb not null check (jsonb_typeof(summary) = 'array'),
-  -- Array of {date, contract, hundredths}. Aggregate daily contract hours only; no employee names or punch times.
   daily_summary jsonb not null default '[]'::jsonb check (jsonb_typeof(daily_summary) = 'array'),
-  -- Detailed worked rows used to recreate the approved by-contract packet later.
   detail_rows jsonb not null default '[]'::jsonb check (jsonb_typeof(detail_rows) = 'array'),
   saved_by uuid not null default auth.uid() references auth.users(id),
   saved_at timestamptz not null default now(),
+  archived_at timestamptz,
+  archived_by uuid references auth.users(id),
   check (period_start <= period_end),
   check (period_end - period_start <= 31),
   check (length(summary_hash) = 64)
 );
-create index if not exists timecard_summary_period_idx
-  on public.timecard_summary_history (pay_date desc, saved_at desc);
+create index if not exists timecard_summary_period_idx on public.timecard_summary_history (pay_date desc, saved_at desc);
 alter table public.timecard_summary_history
   add column if not exists daily_summary jsonb not null default '[]'::jsonb check (jsonb_typeof(daily_summary) = 'array'),
   add column if not exists detail_rows jsonb not null default '[]'::jsonb check (jsonb_typeof(detail_rows) = 'array'),
   add column if not exists archived_at timestamptz,
   add column if not exists archived_by uuid references auth.users(id);
+
 alter table public.timecard_summary_history enable row level security;
 drop policy if exists "payroll users read timecard summaries" on public.timecard_summary_history;
-create policy "payroll users read timecard summaries"
-  on public.timecard_summary_history for select to authenticated
-  using (public.is_payroll_tool_user());
+create policy "payroll users read timecard summaries" on public.timecard_summary_history for select to authenticated using (public.is_payroll_tool_user());
 drop policy if exists "payroll users save timecard summaries" on public.timecard_summary_history;
-create policy "payroll users save timecard summaries"
-  on public.timecard_summary_history for insert to authenticated
-  with check (public.is_payroll_tool_user() and saved_by = auth.uid());
+create policy "payroll users save timecard summaries" on public.timecard_summary_history for insert to authenticated with check (public.is_payroll_tool_user() and saved_by = auth.uid());
+
+-- Payroll staff may replace a saved payroll when ADP timecards are corrected and re-uploaded.
+-- The application identifies the payroll by payroll name + the same period dates.
+drop policy if exists "payroll users correct timecard summaries" on public.timecard_summary_history;
+create policy "payroll users correct timecard summaries" on public.timecard_summary_history for update to authenticated
+  using (public.is_payroll_tool_user()) with check (public.is_payroll_tool_user() and saved_by = auth.uid());
+
 revoke all on public.timecard_summary_history from anon;
 revoke all on public.timecard_summary_history from authenticated;
-grant select, insert, update (archived_at, archived_by), delete on public.timecard_summary_history to authenticated;
-notify pgrst, 'reload schema';
+grant select, insert, update, delete on public.timecard_summary_history to authenticated;
 
 -- One shared comparison baseline, chosen by payroll after historical files are loaded.
 create table if not exists public.timecard_comparison_baseline (
@@ -67,40 +67,22 @@ create table if not exists public.timecard_comparison_baseline (
 );
 alter table public.timecard_comparison_baseline enable row level security;
 drop policy if exists "payroll users read timecard baseline" on public.timecard_comparison_baseline;
-create policy "payroll users read timecard baseline"
-  on public.timecard_comparison_baseline for select to authenticated
-  using (public.is_payroll_tool_user());
+create policy "payroll users read timecard baseline" on public.timecard_comparison_baseline for select to authenticated using (public.is_payroll_tool_user());
 drop policy if exists "payroll users set timecard baseline" on public.timecard_comparison_baseline;
-create policy "payroll users set timecard baseline"
-  on public.timecard_comparison_baseline for insert to authenticated
-  with check (public.is_payroll_tool_user() and updated_by = auth.uid());
+create policy "payroll users set timecard baseline" on public.timecard_comparison_baseline for insert to authenticated with check (public.is_payroll_tool_user() and updated_by = auth.uid());
 drop policy if exists "payroll users change timecard baseline" on public.timecard_comparison_baseline;
-create policy "payroll users change timecard baseline"
-  on public.timecard_comparison_baseline for update to authenticated
-  using (public.is_payroll_tool_user())
-  with check (public.is_payroll_tool_user() and updated_by = auth.uid());
+create policy "payroll users change timecard baseline" on public.timecard_comparison_baseline for update to authenticated using (public.is_payroll_tool_user()) with check (public.is_payroll_tool_user() and updated_by = auth.uid());
 revoke all on public.timecard_comparison_baseline from anon;
 revoke all on public.timecard_comparison_baseline from authenticated;
 grant select, insert, update on public.timecard_comparison_baseline to authenticated;
 
 drop policy if exists "payroll users archive timecard summaries" on public.timecard_summary_history;
-create policy "payroll users archive timecard summaries"
-  on public.timecard_summary_history for update to authenticated
-  using (public.is_payroll_tool_user() and not exists (
-    select 1 from public.timecard_comparison_baseline baseline where baseline.report_id = timecard_summary_history.id
-  ))
-  with check (public.is_payroll_tool_user() and (
-    (archived_at is null and archived_by is null) or
-    (archived_at is not null and archived_by = auth.uid())
-  ) and not exists (
-    select 1 from public.timecard_comparison_baseline baseline where baseline.report_id = timecard_summary_history.id
-  ));
+-- Kept for compatibility with databases that already have this policy name; correction policy above supplies update access.
+create policy "payroll users archive timecard summaries" on public.timecard_summary_history for update to authenticated using (public.is_payroll_tool_user()) with check (public.is_payroll_tool_user());
 
 drop policy if exists "emily deletes timecard summaries" on public.timecard_summary_history;
-create policy "emily deletes timecard summaries"
-  on public.timecard_summary_history for delete to authenticated
+create policy "emily deletes timecard summaries" on public.timecard_summary_history for delete to authenticated
   using (public.is_payroll_tool_user() and lower(auth.jwt() ->> 'email') = 'estafford@dtexpress.net'
-    and not exists (
-      select 1 from public.timecard_comparison_baseline baseline where baseline.report_id = timecard_summary_history.id
-    ));
+    and not exists (select 1 from public.timecard_comparison_baseline baseline where baseline.report_id = timecard_summary_history.id));
+
 notify pgrst, 'reload schema';
