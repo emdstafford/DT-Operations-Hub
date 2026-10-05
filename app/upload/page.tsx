@@ -321,7 +321,7 @@ export default function UploadPage() {
 
       {reportType === "missed" && missedStops && (
         <div className="report-stack">
-          <section className="report-banner"><div><p className="eyebrow eyebrow-light">Missed-stops report recognized</p><h2>{number(missedStops.rows.length)} unique non-compliant loads</h2><p>The missed-stops workbook was identified automatically.</p></div></section>
+          <section className="report-banner"><div><p className="eyebrow eyebrow-light">Missed-stops report saved to History</p><h2>{number(missedStops.rows.length)} unique non-compliant loads</h2><p>This Sunday report and its missed-stop details are saved in History.</p></div></section>
           <section className="metric-grid">
             <article className="metric-card metric-primary"><span>Missing stops</span><strong>{number(missedStops.totalMissingStops)}</strong></article>
             <article className="metric-card"><span>Geofence non-compliant loads</span><strong>{number(missedStops.geofenceNonCompliantLoads)}</strong></article>
