@@ -119,40 +119,95 @@ async function upsertLoad(row: {
 
 export async function syncFourKitesReportToLoadMaster(report: ProcessedReport) {
   const userId = await currentUserId();
-  let synced = 0;
-  for (const load of report.historicalLoads) {
-    if (!load.loadNumber || !load.operatingDate) continue;
+  const sourceLoads = report.historicalLoads.filter((load) => load.loadNumber && load.operatingDate);
+  if (!sourceLoads.length) return 0;
+
+  // Resolve service classes and existing load records in batches. The previous
+  // implementation made three sequential Supabase requests for every load.
+  const codes = Array.from(new Set(sourceLoads.map((load) => normalizeCode(load.trip || "")).filter(Boolean)));
+  const classByCode = new Map<string, string>();
+  if (codes.length) {
+    const { data, error } = await supabase.from("load_service_code_rules")
+      .select("service_code, service_class")
+      .in("service_code", codes)
+      .eq("active", true);
+    if (error) throw error;
+    for (const rule of data ?? []) classByCode.set(String(rule.service_code), String(rule.service_class));
+  }
+
+  const loadNumbers = Array.from(new Set(sourceLoads.map((load) => load.loadNumber)));
+  const existingByKey = new Map<string, any>();
+  for (let index = 0; index < loadNumbers.length; index += 250) {
+    const numbers = loadNumbers.slice(index, index + 250);
+    const dates = Array.from(new Set(sourceLoads.filter((load) => numbers.includes(load.loadNumber)).map((load) => load.operatingDate)));
+    const { data, error } = await supabase.from("load_master")
+      .select("id,load_number,service_date,contract_number,trip_number,service_code,service_class,clear_present,fourkites_present,clear_miles,fourkites_miles,reconciled_miles,operation_status,cancellation_reason,payment_status,expected_payment,actual_payment")
+      .in("load_number", numbers)
+      .in("service_date", dates);
+    if (error) throw error;
+    for (const existing of data ?? []) existingByKey.set(`${existing.load_number}|${existing.service_date}`, existing);
+  }
+
+  const now = new Date().toISOString();
+  const loadRows = sourceLoads.map((load) => {
     const trip = load.trip || "";
     const code = normalizeCode(trip);
-    const klass = await serviceClass(code, trip);
-    const loadId = await upsertLoad({
+    const klass = classByCode.get(code) || (/^\d+$/.test(trip) ? "regular" : "needs_review");
+    const existing = existingByKey.get(`${load.loadNumber}|${load.operatingDate}`);
+    return {
       load_number: load.loadNumber,
       service_date: load.operatingDate,
-      contract_number: load.contract || null,
-      trip_number: load.trip,
-      service_code: code || null,
-      service_class: klass,
+      contract_number: load.contract || existing?.contract_number || null,
+      trip_number: load.trip || existing?.trip_number || null,
+      service_code: code || existing?.service_code || null,
+      service_class: klass || existing?.service_class || "needs_review",
+      clear_present: Boolean(existing?.clear_present),
       fourkites_present: true,
+      clear_miles: existing?.clear_miles ?? null,
+      fourkites_miles: existing?.fourkites_miles ?? null,
+      reconciled_miles: existing?.reconciled_miles ?? null,
       operation_status: klass === "extra" ? "extra_service" : "operated",
+      cancellation_reason: existing?.cancellation_reason ?? null,
+      payment_status: existing?.payment_status || "not_checked",
+      expected_payment: existing?.expected_payment ?? null,
+      actual_payment: existing?.actual_payment ?? null,
+      updated_at: now,
+    };
+  });
+
+  let synced = 0;
+  for (let index = 0; index < loadRows.length; index += 250) {
+    const batch = loadRows.slice(index, index + 250);
+    const { data, error } = await supabase.from("load_master")
+      .upsert(batch, { onConflict: "load_number,service_date" })
+      .select("id,load_number,service_date");
+    if (error) throw new Error(`Load Master sync stopped near row ${index + 1}: ${error.message}`);
+
+    const idByKey = new Map((data ?? []).map((row) => [`${row.load_number}|${row.service_date}`, String(row.id)]));
+    const sourceRows = sourceLoads.slice(index, index + 250).map((load) => {
+      const id = idByKey.get(`${load.loadNumber}|${load.operatingDate}`);
+      if (!id) throw new Error(`Load Master did not return an ID for load ${load.loadNumber}.`);
+      const code = normalizeCode(load.trip || "");
+      return {
+        load_id: id,
+        source_system: "fourkites",
+        source_file: report.fileName,
+        source_status: "present",
+        source_service_code: code || null,
+        source_contract_number: load.contract || null,
+        source_trip_number: load.trip,
+        raw_data: {
+          total_stops: load.totalStops,
+          completed_stops: load.completedStops,
+          incomplete_stops: load.incompleteStops,
+          tags: load.tags,
+        },
+        imported_by: userId,
+      };
     });
-    const { error } = await supabase.from("load_source_records").insert({
-      load_id: loadId,
-      source_system: "fourkites",
-      source_file: report.fileName,
-      source_status: "present",
-      source_service_code: code || null,
-      source_contract_number: load.contract || null,
-      source_trip_number: load.trip,
-      raw_data: {
-        total_stops: load.totalStops,
-        completed_stops: load.completedStops,
-        incomplete_stops: load.incompleteStops,
-        tags: load.tags,
-      },
-      imported_by: userId,
-    });
-    if (error) throw error;
-    synced += 1;
+    const { error: sourceError } = await supabase.from("load_source_records").insert(sourceRows);
+    if (sourceError) throw new Error(`FourKites source history stopped near row ${index + 1}: ${sourceError.message}`);
+    synced += batch.length;
   }
   return synced;
 }
