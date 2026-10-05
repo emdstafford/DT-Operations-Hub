@@ -802,3 +802,28 @@ button, input { font: inherit; }
  .contract-print-page{break-before:page;page-break-before:always}
  .contract-trend-print-page,.contract-missed-print-page{break-inside:auto;page-break-inside:auto}
 }
+
+
+/* Payroll comparison: focused driver review and notes. */
+.timecard-changed-driver-review{margin:14px 20px}
+.timecard-changed-driver-review>button{min-height:44px}
+.timecard-changed-driver-panel{display:grid;gap:12px;margin-top:12px;padding:16px;border:1px solid var(--line);border-radius:10px;background:#f8fafc}
+.timecard-changed-driver-panel>p{margin:0;color:var(--muted);font-size:.88rem;line-height:1.5}
+.timecard-changed-driver-list{display:grid;gap:12px}
+.timecard-changed-driver-card{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:9px;background:#fff}
+.timecard-changed-driver-card>header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.timecard-changed-driver-card h3{margin:0;color:var(--navy);font-size:1rem}
+.timecard-changed-driver-card header span{display:block;margin-top:3px;color:var(--muted);font-size:.83rem}
+.timecard-changed-driver-card>p{margin:0;color:var(--muted);font-size:.86rem;line-height:1.45}
+.timecard-change-hour-summary{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:.88rem;color:var(--ink)}
+.timecard-change-entries summary{cursor:pointer;color:var(--navy);font-weight:700;padding:7px 0}
+.timecard-change-periods{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.timecard-change-period h4{margin:5px 0;color:var(--navy);font-size:.88rem}
+.timecard-change-period p{color:var(--muted);font-size:.85rem}
+.timecard-review-note{display:grid;gap:5px;color:var(--navy);font-weight:700;font-size:.88rem}
+.timecard-review-note textarea{width:100%;min-height:64px;border:1px solid var(--line);border-radius:7px;padding:9px;font:inherit;color:var(--ink);resize:vertical}
+.timecard-review-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.timecard-review-actions>label{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:.88rem}
+.timecard-review-actions input{width:18px;height:18px}
+@media(max-width:700px){.timecard-changed-driver-review{margin:12px 0}.timecard-changed-driver-panel{padding:11px}.timecard-change-periods{grid-template-columns:1fr}.timecard-changed-driver-card>header{align-items:flex-start}}
+@media print{.timecard-changed-driver-review>button,.timecard-review-actions button{display:none!important}.timecard-changed-driver-panel{background:#fff;border:0;padding:0}.timecard-changed-driver-card{break-inside:avoid}}
