@@ -13,6 +13,7 @@ import {
   type MissedStopSummary,
 } from "@/lib/processOperationalExceptions";
 import { saveMissedStopsSnapshot, saveReportSnapshot } from "@/lib/reportHistory";
+import { syncFourKitesReportToLoadMaster } from "@/lib/loadMaster";
 import { supabase } from "@/lib/supabase";
 import { useUploadHandoff, type UploadKind } from "@/components/UploadHandoff";
 
@@ -174,6 +175,7 @@ export default function UploadPage() {
   const [reportType, setReportType] = useState<"loads" | "missed" | null>(null);
   const [fileName, setFileName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadMasterStatus, setLoadMasterStatus] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [selectedDay, setSelectedDay] = useState("");
@@ -218,6 +220,7 @@ export default function UploadPage() {
     setFileName(file.name);
     setLoading(true);
     setError("");
+    setLoadMasterStatus("");
     setReport(null);
     setSelectedDay("");
     setMissedStops(null);
@@ -231,7 +234,6 @@ export default function UploadPage() {
         setReportType("missed");
       } else if (workbook.SheetNames.includes("Load Details")) {
         const processed = await processReport(file);
-        setReport(processed);
         await saveReportSnapshot(processed);
         window.localStorage.setItem("dt-latest-supervisor-report", JSON.stringify({
           fileName: processed.fileName,
@@ -239,7 +241,12 @@ export default function UploadPage() {
           periodEnd: processed.periodEnd,
           supervisors: processed.supervisors,
         }));
+        setReport(processed);
         setReportType("loads");
+        setLoadMasterStatus("Load Master is syncing in the background…");
+        void syncFourKitesReportToLoadMaster(processed)
+          .then((count) => setLoadMasterStatus(`Load Master sync complete: ${number(count)} loads.`))
+          .catch((syncError) => setLoadMasterStatus(`Report saved. Load Master sync needs review: ${syncError instanceof Error ? syncError.message : String(syncError)}`));
       } else {
         throw new Error("This does not look like a USPS load-details file or a missed-stops file.");
       }
@@ -348,7 +355,7 @@ export default function UploadPage() {
             <div>
               <p className="eyebrow eyebrow-light">Weekly report ready</p>
               <h2>{displayDate(report.periodStart)} - {displayDate(report.periodEnd)}</h2>
-              <p>{number(report.reportLoads.length)} unique loads included. This period is saved in History.</p>
+              <p>{number(report.reportLoads.length)} unique loads included. This period is saved in History.</p>{loadMasterStatus && <p role="status">{loadMasterStatus}</p>}
             </div>
             <button className="secondary-button" onClick={copyEmail}>{copied ? "Copied" : "Copy email report"}</button>
           </section>
