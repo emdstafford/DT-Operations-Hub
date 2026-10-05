@@ -32,7 +32,7 @@ export default function MonthlyClearReconciliation() {
       const headers=(matrix[headerIndex] as unknown[]).map(v=>s(v).toUpperCase());
       const data=matrix.slice(headerIndex+1).map(r=>{const out:ClearRow={};headers.forEach((h,i)=>{if(h)out[h]=(r as unknown[])[i];});return out;});
       const operationalRows=data.filter(r=>Object.values(r).some(v=>s(v)));
-      const tonyaRows=data.filter(r=>isTonyaTrip(s(r.CONTRACT),s(r['SV TRIP ID']))).map(r=>({...r,__serviceDate:iso(r['PLANNED START'])}));
+      const tonyaRows: Array<ClearRow & { __serviceDate: string }> = data.filter(r=>isTonyaTrip(s(r.CONTRACT),s(r['SV TRIP ID']))).map((r): ClearRow & { __serviceDate: string } => ({...r,__serviceDate:iso(r['PLANNED START'])}));
       const contracts=[...new Set(tonyaRows.map(r=>s(r.CONTRACT)).filter(Boolean))];
       let versions:TripVersion[]=[];
       if(contracts.length){
