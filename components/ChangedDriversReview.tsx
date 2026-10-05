@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Comparison, SavedReport, TimecardDetailEntry } from "@/components/TimecardComparisons";
 
-type ReviewReport = Pick<SavedReport, "id" | "payroll_name"> & { detail_rows?: TimecardDetailEntry[] };
+type ReviewReport = Pick<SavedReport, "id" | "payroll_name" | "period_start" | "period_end"> & { detail_rows?: TimecardDetailEntry[] };
 type ReviewDraft = { note: string; approved: boolean; saved: boolean };
 type SavedReview = { employee_id: string; driver_name: string; review_note: string; approved: boolean };
 
