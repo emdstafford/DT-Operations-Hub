@@ -1,7 +1,6 @@
 import type { ProcessedReport, SummaryRow, Totals } from "./processors/reportProcessor";
 import type { MissedStopSummary } from "./processOperationalExceptions";
 import { supabase } from "./supabase";
-import { syncFourKitesReportToLoadMaster } from "./loadMaster";
 
 export const REPORT_HISTORY_KEY = "dt-usps-report-history-v1";
 export const MISSED_STOPS_HISTORY_KEY = "dt-missed-stops-history-v1";
@@ -104,9 +103,6 @@ export async function saveReportSnapshot(report: ProcessedReport) {
     if (loadError) throw new Error(`Load history stopped near row ${index + 1}: ${loadError.message}`);
   }
 
-  // The same FourKites/USPS load-details upload now feeds the shared Load Master.
-  // This is intentionally after legacy history succeeds so existing reporting behavior stays intact.
-  await syncFourKitesReportToLoadMaster(report);
 }
 
 export async function getMissedStopsHistory(): Promise<MissedStopsSnapshot[]> {
