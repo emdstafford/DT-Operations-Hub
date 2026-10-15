@@ -27,7 +27,6 @@ export default function TimecardHistory() {
   const [beforeId, setBeforeId] = useState("");
   const [afterId, setAfterId] = useState("");
   const [selectedContracts, setSelectedContracts] = useState<string[] | null>(null);
-  const [baselineId, setBaselineId] = useState("");
   const [userId, setUserId] = useState("");
   const [canDelete, setCanDelete] = useState(false);
   const [busyId, setBusyId] = useState("");
@@ -35,9 +34,8 @@ export default function TimecardHistory() {
   const [printMode, setPrintMode] = useState(false);
 
   useEffect(() => { let active = true; void (async () => {
-    const [history, baseline, auth] = await Promise.all([
+    const [history, auth] = await Promise.all([
       supabase.from("timecard_summary_history").select("id,payroll_name,pay_date,period_start,period_end,source_file,saved_at,employee_count,contract_count,total_hundredths,summary,archived_at").order("pay_date", { ascending: false }).order("saved_at", { ascending: false }).limit(250),
-      supabase.from("timecard_comparison_baseline").select("report_id").eq("id", true).maybeSingle(),
       supabase.auth.getUser(),
     ]);
     if (!active) return;
@@ -49,12 +47,9 @@ export default function TimecardHistory() {
       const items = allItems.filter((item) => !item.archived_at);
       setReports(allItems);
       if (items.length) {
-        const savedBaseline = items.find((item) => item.id === baseline.data?.report_id);
-        setBaselineId(savedBaseline?.id ?? "");
         setAfterId(items[0].id);
-        setBeforeId(savedBaseline?.id ?? items.find((item) => item.period_end < items[0].period_start)?.id ?? items[1]?.id ?? "");
+        setBeforeId(items.find((item) => item.period_end < items[0].period_start)?.id ?? items[1]?.id ?? "");
       }
-      if (baseline.error) setActionMessage("Using the most recent earlier payroll; the saved starting payroll setting is unavailable.");
     }
     setLoading(false);
   })(); return () => { active = false; }; }, []);
@@ -87,7 +82,6 @@ export default function TimecardHistory() {
     window.setTimeout(() => window.print(), 150);
   }
   async function changeArchive(row: HistoryRow, restore: boolean) {
-    if (row.id === baselineId) { setActionMessage("This payroll is the saved starting point. Choose another baseline before archiving it."); return; }
     if (!userId || busyId) return;
     setBusyId(row.id); setActionMessage("");
     const archived_at = restore ? null : new Date().toISOString();
@@ -103,7 +97,6 @@ export default function TimecardHistory() {
   }
   async function deleteReport(row: HistoryRow) {
     if (!canDelete || busyId) return;
-    if (row.id === baselineId) { setActionMessage("Choose another starting payroll before deleting this one."); return; }
     if (!window.confirm(`Permanently delete ${version(row)}? This cannot be undone.`)) return;
     setBusyId(row.id); setActionMessage("");
     const { error: deleteError } = await supabase.from("timecard_summary_history").delete().eq("id", row.id);
@@ -126,7 +119,7 @@ export default function TimecardHistory() {
         <div className="panel-heading"><div><h2>Saved payrolls</h2><span>{activeReports.length} available · raw time punches stay in the browser</span></div></div>
         {actionMessage && <p className="timecard-action-status" role="status">{actionMessage}</p>}
         <div className="table-scroll"><table className="data-table"><thead><tr><th>Payroll</th><th>Timecard dates</th><th>Drivers</th><th>Contracts</th><th>Total hours</th><th>Manage</th></tr></thead><tbody>
-          {activeReports.map((row) => <tr key={row.id}><td>{version(row)}</td><td>{formatDate(row.period_start)}–{formatDate(row.period_end)}</td><td>{row.employee_count}</td><td>{row.contract_count}</td><td>{hour(Number(row.total_hundredths))}</td><td><button type="button" className="hub-secondary-link" disabled={!!busyId || row.id === baselineId} onClick={() => void changeArchive(row, false)}>Archive</button>{canDelete && <button type="button" className="timecard-delete" disabled={!!busyId || row.id === baselineId} onClick={() => void deleteReport(row)}>Delete</button>}</td></tr>)}
+          {activeReports.map((row) => <tr key={row.id}><td>{version(row)}</td><td>{formatDate(row.period_start)}–{formatDate(row.period_end)}</td><td>{row.employee_count}</td><td>{row.contract_count}</td><td>{hour(Number(row.total_hundredths))}</td><td><button type="button" className="hub-secondary-link" disabled={!!busyId} onClick={() => void changeArchive(row, false)}>Archive</button>{canDelete && <button type="button" className="timecard-delete" disabled={!!busyId} onClick={() => void deleteReport(row)}>Delete</button>}</td></tr>)}
         </tbody></table></div>
         {!!archivedReports.length && <details className="timecard-history-pick"><summary>Archived payrolls ({archivedReports.length})</summary><div className="timecard-versions">{archivedReports.map((row) => <div className="timecard-version-row" key={row.id}><span>{version(row)} · {hour(Number(row.total_hundredths))} hours</span><div><button type="button" disabled={!!busyId} onClick={() => void changeArchive(row, true)}>Restore</button>{canDelete && <button type="button" className="timecard-delete" disabled={!!busyId} onClick={() => void deleteReport(row)}>Delete</button>}</div></div>)}</div></details>}
       </section>
