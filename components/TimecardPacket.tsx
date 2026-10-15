@@ -261,7 +261,7 @@ export default function TimecardPacket() {
     finally { setAssignmentSaving(""); }
   }
   return <div className="report-stack timecard-stack">
-    <section className="panel timecard-intro no-print"><strong>One report, grouped by contract</strong><p>Choose the timecard report for this pay period. The file stays in this browser tab and clears when you refresh or close it. The printed packet can be compared with notes from the previous pay period.</p></section>
+    <section className="panel timecard-intro no-print"><strong>One report, grouped by contract</strong><p>Choose the timecard report for this pay period. The uploaded file is not changed; it stays in this browser tab and clears when you refresh or close it.</p><div className="timecard-inclusion-note"><h3>What is included and excluded</h3><p><strong>Included:</strong> readable timecard work rows, including holiday-coded hours. These hours appear in the packet and saved comparisons.</p><p><strong>Excluded:</strong> rows with the pay code <strong>PTO</strong> and subtotal lines. The printed packet also leaves out contracts <strong>030512, 01SHDR, and 011VAN</strong>; those contracts can still appear in saved comparison totals.</p></div></section>
     {error && <div className="alert alert-error no-print">{error}</div>}
     <section className="panel timecard-settings no-print">
       <div className="panel-heading"><div><h2>Timecard report</h2><span>{file?.name || "Choose a report"}</span></div><label className="primary-link timecard-file-button">Choose report<input type="file" accept=".csv,.xlsx,.xls" onChange={(event) => void readFile(event.target.files?.[0])} /></label></div>
