@@ -10,7 +10,7 @@ const formatDate = (value: string) => new Intl.DateTimeFormat("en-US", { month: 
 const version = (row: HistoryRow) => `${row.payroll_name} · ${formatDate(row.period_start)}–${formatDate(row.period_end)} · saved ${new Date(row.saved_at).toLocaleDateString("en-US")}`;
 
 function ChangeTable({ title, rows }: { title: string; rows: ReturnType<typeof compare> }) {
-  return <div className="timecard-comparison-table">
+  return <div className="timecard-comparison-table timecard-change-table">
     <h3>{title} · {rows.length}</h3>
     <div className="table-scroll"><table className="data-table">
       <thead><tr><th>{title === "Driver hours" ? "Driver" : "Contract"}</th><th>Earlier</th><th>Later</th><th>Change</th></tr></thead>
