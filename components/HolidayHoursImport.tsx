@@ -50,6 +50,7 @@ export default function HolidayHoursImport() {
     setHistoryError("");
     setPendingFile(null);
     setSourceCsv("");
+    setEmployeeSearch("");
     setFileName(file.name);
     try {
       if (holidays.some((holiday) => !holiday.name.trim() || !holiday.date)) {
