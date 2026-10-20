@@ -1,6 +1,8 @@
 export type HolidayHoursImportRow = {
   companyCode: string;
   fileNumber: string;
+  employeeName: string;
+  payClass: string;
   totalHours: number;
   holidayHours: number;
   sourceRows: number;
@@ -12,7 +14,17 @@ export type HolidayHoursImportResult = {
   totalSourceHours: number;
   totalHolidayHours: number;
   cappedEmployeeCount: number;
+  excludedEmployeeCount: number;
 };
+
+function normalizePayClass(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isExcludedPayClass(payClass: string) {
+  const normalized = normalizePayClass(payClass);
+  return normalized === "salary" || normalized === "salarymanager" || normalized === "managersalary";
+}
 
 function parseCsv(text: string) {
   const rows: string[][] = [];
@@ -81,14 +93,22 @@ export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 
   const companyIndex = headerIndex.get("company code");
   const fileIndex = headerIndex.get("file number");
   const hoursIndex = headerIndex.get("hours");
+  const payClassIndex = headerIndex.get("pay class");
+  const employeeNameIndex = headerIndex.get("employee name") ?? headerIndex.get("name");
+  const firstNameIndex = headerIndex.get("employee first name") ?? headerIndex.get("first name");
+  const lastNameIndex = headerIndex.get("employee last name") ?? headerIndex.get("last name");
+  const hasNameFields = employeeNameIndex !== undefined || (firstNameIndex !== undefined && lastNameIndex !== undefined);
 
-  if (companyIndex === undefined || fileIndex === undefined || hoursIndex === undefined) {
-    throw new Error("This file must contain Company Code, File Number, and Hours columns.");
+  if (companyIndex === undefined || fileIndex === undefined || hoursIndex === undefined || payClassIndex === undefined || !hasNameFields) {
+    throw new Error("This file must contain Company Code, File Number, Hours, Pay Class, and Employee Name columns (or First Name and Last Name columns).");
   }
 
   const totals = new Map<string, {
     companyCode: string;
     fileNumber: string;
+    employeeName: string;
+    payClass: string;
+    normalizedPayClass: string;
     hoursHundredths: number;
     sourceRows: number;
   }>();
@@ -101,8 +121,19 @@ export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 
     const companyCode = sourceRow[companyIndex]?.trim();
     const fileNumber = sourceRow[fileIndex]?.trim();
     const hoursValue = sourceRow[hoursIndex]?.trim();
+    const payClassValue = sourceRow[payClassIndex]?.trim() ?? "";
+    const employeeName = employeeNameIndex !== undefined
+      ? sourceRow[employeeNameIndex]?.trim() ?? ""
+      : `${sourceRow[firstNameIndex!]?.trim() ?? ""} ${sourceRow[lastNameIndex!]?.trim() ?? ""}`.trim();
     if (!companyCode || !fileNumber) {
       throw new Error(`Row ${rowNumber} is missing Company Code or File Number.`);
+    }
+    if (!employeeName) {
+      throw new Error(`Row ${rowNumber} is missing the employee name.`);
+    }
+    const normalizedPayClass = normalizePayClass(payClassValue);
+    if (!normalizedPayClass) {
+      throw new Error(`Row ${rowNumber} is missing Pay Class.`);
     }
     const hoursHundredths = parseHoursHundredths(hoursValue);
     if (hoursHundredths === null) {
@@ -112,23 +143,32 @@ export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 
     sourceRowCount += 1;
     totalSourceHundredths += hoursHundredths;
     const key = `${companyCode}\u0000${fileNumber}`;
-    const current = totals.get(key) ?? { companyCode, fileNumber, hoursHundredths: 0, sourceRows: 0 };
-    current.hoursHundredths += hoursHundredths;
-    current.sourceRows += 1;
-    totals.set(key, current);
+    const current = totals.get(key);
+    if (current && current.normalizedPayClass !== normalizedPayClass) {
+      throw new Error(`Employee ${fileNumber} has more than one Pay Class in the source file.`);
+    }
+    const employee = current ?? { companyCode, fileNumber, employeeName, payClass: payClassValue, normalizedPayClass, hoursHundredths: 0, sourceRows: 0 };
+    employee.hoursHundredths += hoursHundredths;
+    employee.sourceRows += 1;
+    totals.set(key, employee);
   });
 
-  const rows = [...totals.values()]
+  const allEmployees = [...totals.values()];
+  const excludedEmployeeCount = allEmployees.filter((employee) => isExcludedPayClass(employee.payClass)).length;
+  const rows = allEmployees
+    .filter((employee) => !isExcludedPayClass(employee.payClass))
     .sort((left, right) => left.companyCode.localeCompare(right.companyCode)
       || left.fileNumber.localeCompare(right.fileNumber, undefined, { numeric: true }))
     .map((employee) => {
-      // Formula: total hours / 2 / 40 * 8, equivalent to total hours / 10.
+      // All included classes use PTO-inclusive timecard hours for the existing holiday formula.
       // Integer arithmetic gives payroll-style half-up rounding at two decimals.
       const singleHolidayHundredths = Math.min(800, Math.floor((employee.hoursHundredths + 5) / 10));
       const holidayHundredths = singleHolidayHundredths * holidayCount;
       return {
         companyCode: employee.companyCode,
         fileNumber: employee.fileNumber,
+        employeeName: employee.employeeName,
+        payClass: employee.payClass,
         totalHours: employee.hoursHundredths / 100,
         holidayHours: holidayHundredths / 100,
         sourceRows: employee.sourceRows,
@@ -141,6 +181,7 @@ export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 
     totalSourceHours: totalSourceHundredths / 100,
     totalHolidayHours: rows.reduce((total, employee) => total + employee.holidayHours, 0),
     cappedEmployeeCount: rows.filter((employee) => employee.holidayHours === 8 * holidayCount).length,
+    excludedEmployeeCount,
   };
 }
 

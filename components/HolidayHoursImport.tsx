@@ -174,17 +174,17 @@ export default function HolidayHoursImport() {
         <li><strong>Open All Standard Reports.</strong></li>
         <li><strong>Select Employee Hours for Holiday Import File.</strong></li>
         <li><strong>Set Employee Information Effective Date As of.</strong> Choose the specific date needed for this holiday-hours calculation.</li>
-        <li><strong>Select Run and download the report as a CSV.</strong> Do not rename or remove the Company Code, File Number, or Hours columns.</li>
+        <li><strong>Select Run and download the report as a CSV.</strong> Keep the Employee Name, Company Code, File Number, Hours, and Pay Class columns. First Name and Last Name columns are also accepted.</li>
         <li><strong>Select whether this import covers one or two holidays, then enter each holiday name and date.</strong> The file chooser becomes available after these details are complete. Two holidays doubles each employee’s calculated amount.</li>
-        <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, checks for duplicates, and automatically saves the summary to Holiday Hours History.</li>
-        <li><strong>Review the results.</strong> Check the employee count, combined source hours, employees capped at 8.00, and several individual employees.</li>
+        <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, including PTO, applies the employee’s Pay Class rule, checks for duplicates, and automatically saves the summary to Holiday Hours History.</li>
+        <li><strong>Review the results.</strong> Check the employees in the import, excluded salary employees, source hours across all classes, employees capped at 8.00, and several individual employees.</li>
         <li><strong>Download the import CSV.</strong> The file is named epihne23.csv and contains Co Code, Batch ID, File #, Hours 3 Code, and Hours 3 Amount.</li>
         <li><strong>In ADP, go to Payroll Dashboard.</strong> Select Manage Payroll, then go to Worksheets.</li>
         <li><strong>Select Import File and choose the downloaded CSV.</strong> Review the ADP import preview and any warnings before completing the import.</li>
       </ol>
       <div className="calculation-note">
         <strong>Calculation used</strong>
-        <span>Total employee hours ÷ 2 ÷ 40 × 8, rounded to two decimals. Each holiday is capped at 8.00 hours. A two-holiday import doubles the result and has a 16.00-hour maximum.</span>
+        <span>All included pay classes: PTO-inclusive timecard hours ÷ 2 ÷ 40 × 8 per holiday, rounded to two decimals and capped at 8.00. Salary and Salary Manager: excluded from the import. A two-holiday import doubles eligible amounts.</span>
       </div>
       <p className="privacy-note"><strong>Private processing:</strong> The source file, employee rows, and calculated CSV remain in this browser. Only summary totals, holiday names, dates, and audit information are saved automatically.</p>
     </details>
@@ -194,10 +194,11 @@ export default function HolidayHoursImport() {
 
     {result && <>
       <section className="payroll-summary-grid" aria-label="Import summary">
-        <article><span>Source rows</span><strong>{result.sourceRowCount.toLocaleString()}</strong></article>
-        <article><span>Unique employees</span><strong>{result.rows.length.toLocaleString()}</strong></article>
-        <article><span>Combined source hours</span><strong>{number(result.totalSourceHours)}</strong></article>
-        <article><span>Capped at {holidayCount === 2 ? "16.00" : "8.00"}</span><strong>{result.cappedEmployeeCount.toLocaleString()}</strong></article>
+        <article><span>Source rows (all classes)</span><strong>{result.sourceRowCount.toLocaleString()}</strong></article>
+        <article><span>Employees in import</span><strong>{result.rows.length.toLocaleString()}</strong></article>
+        <article><span>Salary employees excluded</span><strong>{result.excludedEmployeeCount.toLocaleString()}</strong></article>
+        <article><span>Source hours (all classes)</span><strong>{number(result.totalSourceHours)}</strong></article>
+        <article><span>Employees capped at {holidayCount === 2 ? "16.00" : "8.00"}</span><strong>{result.cappedEmployeeCount.toLocaleString()}</strong></article>
         <article><span>Total holiday hours</span><strong>{number(result.totalHolidayHours)}</strong></article>
       </section>
 
@@ -208,9 +209,9 @@ export default function HolidayHoursImport() {
         </div>
         <div className="table-scroll">
           <table className="data-table payroll-preview-table">
-            <thead><tr><th>Co Code</th><th>Batch ID</th><th>File #</th><th>Hours 3 Code</th><th>Combined source hours</th><th>Source rows</th><th>Hours 3 Amount</th></tr></thead>
+            <thead><tr><th>Co Code</th><th>Batch ID</th><th>Employee Name</th><th>File #</th><th>Pay Class</th><th>Hours 3 Code</th><th>Combined source hours</th><th>Source rows</th><th>Hours 3 Amount</th></tr></thead>
             <tbody>{previewRows.map((row) => <tr key={`${row.companyCode}-${row.fileNumber}`}>
-              <td>HNE</td><td>Holiday</td><td>{row.fileNumber}</td><td>HOL</td><td>{number(row.totalHours)}</td><td>{row.sourceRows}</td><td><strong>{number(row.holidayHours)}</strong></td>
+              <td>HNE</td><td>Holiday</td><td>{row.employeeName}</td><td>{row.fileNumber}</td><td>{row.payClass}</td><td>HOL</td><td>{number(row.totalHours)}</td><td>{row.sourceRows}</td><td><strong>{number(row.holidayHours)}</strong></td>
             </tr>)}</tbody>
           </table>
         </div>
