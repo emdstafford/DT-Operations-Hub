@@ -52,10 +52,15 @@ export default function HolidayHoursImport() {
       }
       const csv = await file.text();
       const processed = createHolidayHoursImport(csv, holidayCount);
+      const holidayKeys = holidays.map((holiday) => `${holiday.date}\u0000${holiday.name.trim().toLowerCase()}`);
+      if (new Set(holidayKeys).size !== holidayKeys.length) {
+        throw new Error("Each holiday in this import must have a different name or date.");
+      }
+      const replacementKeys = new Set(holidayKeys);
       const sourceFingerprint = await holidaySourceFingerprint(csv);
       const { data: duplicates, error: duplicateError } = await supabase
         .from("holiday_import_history")
-        .select("holiday_name, holiday_date")
+        .select("id, holiday_name, holiday_date")
         .eq("source_fingerprint", sourceFingerprint)
         .is("archived_at", null);
       if (duplicateError) {
@@ -63,15 +68,42 @@ export default function HolidayHoursImport() {
         setHistoryError("The payroll file was calculated, but its history could not be checked or saved. Try again or contact an administrator.");
         return;
       }
-      if (duplicates?.length) {
+      const sameHoliday = (row: { holiday_name: string; holiday_date: string }) => replacementKeys.has(`${row.holiday_date}\u0000${row.holiday_name.trim().toLowerCase()}`);
+      if (duplicates?.length && !duplicates.some(sameHoliday)) {
         const savedAs = duplicates.map((row) => `${row.holiday_name} (${row.holiday_date})`).join(", ");
         throw new Error(`Duplicate source file: it is already saved as ${savedAs}.`);
       }
-      setSourceCsv(csv);
+      const holidayDates = [...new Set(holidays.map((holiday) => holiday.date))];
+      const { data: sameHolidays, error: sameHolidayError } = await supabase
+        .from("holiday_import_history")
+        .select("id, holiday_name, holiday_date")
+        .in("holiday_date", holidayDates)
+        .is("archived_at", null);
+      if (sameHolidayError) {
+        setSourceCsv(csv);
+        setHistoryError("The payroll file was calculated, but existing holiday history could not be checked for replacement.");
+        return;
+      }
+      const previousRecords = (sameHolidays ?? []).filter(sameHoliday);
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) {
+        setSourceCsv(csv);
         setHistoryError("The payroll file was calculated, but your session expired before its history could be saved.");
         return;
+      }
+      setSourceCsv(csv);
+      const savedAt = new Date().toISOString();
+      if (previousRecords.length) {
+        const { error: archiveError } = await supabase.from("holiday_import_history").update({
+          archived_at: savedAt,
+          archived_by: userData.user.id,
+          archived_by_email: userData.user.email?.toLowerCase(),
+          updated_at: savedAt,
+        }).in("id", previousRecords.map((row) => row.id)).is("archived_at", null);
+        if (archiveError) {
+          setHistoryError("The payroll file was calculated, but the previous matching holiday could not be archived, so no new history was saved.");
+          return;
+        }
       }
       const perHolidayHours = processed.totalHolidayHours / holidayCount;
       const { error: saveError } = await supabase.from("holiday_import_history").insert(holidays.map((holiday) => ({
@@ -88,9 +120,21 @@ export default function HolidayHoursImport() {
         processed_by_email: userData.user.email?.toLowerCase(),
       })));
       if (saveError) {
-        setHistoryError("The payroll file was calculated, but its summary could not be saved to shared history.");
+        if (previousRecords.length) {
+          const { error: restoreError } = await supabase.from("holiday_import_history").update({
+            archived_at: null,
+            archived_by: null,
+            archived_by_email: null,
+            updated_at: new Date().toISOString(),
+          }).in("id", previousRecords.map((row) => row.id));
+          setHistoryError(restoreError
+            ? "The new holiday summary could not be saved, and the previous matching record could not be restored. Contact an administrator."
+            : "The new holiday summary could not be saved. The previous matching record was restored.");
+        } else {
+          setHistoryError("The payroll file was calculated, but its summary could not be saved to shared history.");
+        }
       } else {
-        setHistoryMessage(`${holidays.length === 1 ? holidays[0].name : "Both holidays"} automatically saved to Holiday Hours History.`);
+        setHistoryMessage(`${holidays.length === 1 ? holidays[0].name : "Both holidays"} automatically saved to Holiday Hours History.${previousRecords.length ? " The previous matching record was archived." : ""}`);
       }
     } catch (caught) {
       setFileName("");
