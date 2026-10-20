@@ -15,6 +15,10 @@ export type HolidayHoursImportResult = {
   totalHolidayHours: number;
   cappedEmployeeCount: number;
   excludedEmployeeCount: number;
+  holidayTotals: number[];
+  holidayEmployeeCounts: number[];
+  holidayAtEightEmployeeCounts: number[];
+  fullTimeExcludedEmployeeCount: number;
 };
 
 function normalizePayClass(value: string) {
@@ -28,7 +32,7 @@ function isExcludedPayClass(payClass: string) {
 
 function hasFixedEightHourHoliday(payClass: string) {
   const normalized = normalizePayClass(payClass);
-  return normalized === "mechanicft" || normalized === "mechanicsft" || normalized === "officeft";
+  return normalized === "mechanicft" || normalized === "mechanicsft" || normalized === "officeft" || normalized === "officestaffft";
 }
 
 function normalizeHeader(value: string) {
@@ -93,7 +97,11 @@ export async function holidaySourceFingerprint(contents: string) {
     .join("");
 }
 
-export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 = 1): HolidayHoursImportResult {
+export function createHolidayHoursImport(
+  sourceCsv: string,
+  holidayCount: 1 | 2 = 1,
+  excludeFullTimeForHoliday: boolean[] = [],
+): HolidayHoursImportResult {
   const data = parseCsv(sourceCsv.replace(/^\uFEFF/, ""));
   if (!data.length) throw new Error("The selected CSV is empty.");
 
@@ -165,18 +173,34 @@ export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 
 
   const allEmployees = [...totals.values()];
   const excludedEmployeeCount = allEmployees.filter((employee) => isExcludedPayClass(employee.payClass)).length;
-  const rows = allEmployees
-    .filter((employee) => !isExcludedPayClass(employee.payClass))
+  const includedEmployees = allEmployees.filter((employee) => !isExcludedPayClass(employee.payClass));
+  const excludedFullTimeClass = (employee: typeof allEmployees[number]) =>
+    hasFixedEightHourHoliday(employee.payClass) && excludeFullTimeForHoliday.length >= holidayCount
+      && excludeFullTimeForHoliday.slice(0, holidayCount).some(Boolean);
+  const fullTimeExcludedEmployeeCount = includedEmployees.filter(excludedFullTimeClass).length;
+  const holidayTotalsHundredths = Array.from({ length: holidayCount }, () => 0);
+  const holidayEmployeeCounts = Array.from({ length: holidayCount }, () => 0);
+  const holidayAtEightEmployeeCounts = Array.from({ length: holidayCount }, () => 0);
+  const rows = includedEmployees
     .sort((left, right) => left.companyCode.localeCompare(right.companyCode)
       || left.fileNumber.localeCompare(right.fileNumber, undefined, { numeric: true }))
     .map((employee) => {
       // Mechanics FT and Office FT receive a full 8 hours. Other included classes
       // use PTO-inclusive timecard hours with the existing formula and 8-hour cap.
       // Integer arithmetic gives payroll-style half-up rounding at two decimals.
-      const singleHolidayHundredths = hasFixedEightHourHoliday(employee.payClass)
+      const baseHolidayHundredths = hasFixedEightHourHoliday(employee.payClass)
         ? 800
         : Math.min(800, Math.floor((employee.hoursHundredths + 5) / 10));
-      const holidayHundredths = singleHolidayHundredths * holidayCount;
+      const perHolidayHundredths = Array.from({ length: holidayCount }, (_, index) =>
+        hasFixedEightHourHoliday(employee.payClass) && excludeFullTimeForHoliday[index]
+          ? 0
+          : baseHolidayHundredths);
+      perHolidayHundredths.forEach((hours, index) => {
+        if (hours > 0) holidayEmployeeCounts[index] += 1;
+        if (hours === 800) holidayAtEightEmployeeCounts[index] += 1;
+        holidayTotalsHundredths[index] += hours;
+      });
+      const holidayHundredths = perHolidayHundredths.reduce((sum, hours) => sum + hours, 0);
       return {
         companyCode: employee.companyCode,
         fileNumber: employee.fileNumber,
@@ -186,7 +210,8 @@ export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 
         holidayHours: holidayHundredths / 100,
         sourceRows: employee.sourceRows,
       };
-    });
+    })
+    .filter((employee) => employee.holidayHours > 0);
 
   return {
     rows,
@@ -195,6 +220,10 @@ export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 
     totalHolidayHours: rows.reduce((total, employee) => total + employee.holidayHours, 0),
     cappedEmployeeCount: rows.filter((employee) => employee.holidayHours === 8 * holidayCount).length,
     excludedEmployeeCount,
+    holidayTotals: holidayTotalsHundredths.map((hours) => hours / 100),
+    holidayEmployeeCounts,
+    holidayAtEightEmployeeCounts,
+    fullTimeExcludedEmployeeCount,
   };
 }
 

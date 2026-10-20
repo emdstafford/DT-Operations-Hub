@@ -10,7 +10,7 @@ import {
 } from "@/lib/holidayHoursImport";
 import { supabase } from "@/lib/supabase";
 
-type HolidayDraft = { name: string; date: string };
+type HolidayDraft = { name: string; date: string; excludeFullTimeClasses: boolean };
 
 function number(value: number, digits = 2) {
   return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -27,8 +27,10 @@ export default function HolidayHoursImport() {
   const [error, setError] = useState("");
   const [historyMessage, setHistoryMessage] = useState("");
   const [historyError, setHistoryError] = useState("");
-  const [holidays, setHolidays] = useState<HolidayDraft[]>([{ name: "", date: "" }]);
-  const result = useMemo<HolidayHoursImportResult | null>(() => sourceCsv ? createHolidayHoursImport(sourceCsv, holidayCount) : null, [sourceCsv, holidayCount]);
+  const [holidays, setHolidays] = useState<HolidayDraft[]>([{ name: "", date: "", excludeFullTimeClasses: false }]);
+  const result = useMemo<HolidayHoursImportResult | null>(() => sourceCsv
+    ? createHolidayHoursImport(sourceCsv, holidayCount, holidays.map((holiday) => holiday.excludeFullTimeClasses))
+    : null, [sourceCsv, holidayCount, holidays]);
   const matchingRows = useMemo(() => {
     if (!result) return [];
     const query = employeeSearch.trim().toLocaleLowerCase();
@@ -60,7 +62,7 @@ export default function HolidayHoursImport() {
         throw new Error("Select the source report saved as a CSV file.");
       }
       const csv = await file.text();
-      const processed = createHolidayHoursImport(csv, holidayCount);
+      const processed = createHolidayHoursImport(csv, holidayCount, holidays.map((holiday) => holiday.excludeFullTimeClasses));
       const holidayKeys = holidays.map((holiday) => `${holiday.date}\u0000${holiday.name.trim().toLowerCase()}`);
       if (new Set(holidayKeys).size !== holidayKeys.length) {
         throw new Error("Each holiday in this import must have a different name or date.");
@@ -115,16 +117,16 @@ export default function HolidayHoursImport() {
         }
       }
       const perHolidayHours = processed.totalHolidayHours / holidayCount;
-      const { error: saveError } = await supabase.from("holiday_import_history").insert(holidays.map((holiday) => ({
+      const { error: saveError } = await supabase.from("holiday_import_history").insert(holidays.map((holiday, index) => ({
         holiday_name: holiday.name.trim(),
         holiday_date: holiday.date,
         source_file: file.name,
         source_fingerprint: sourceFingerprint,
         source_rows: processed.sourceRowCount,
-        unique_employees: processed.rows.length,
+        unique_employees: processed.holidayEmployeeCounts[index],
         combined_source_hours: processed.totalSourceHours,
-        capped_at_eight: processed.cappedEmployeeCount,
-        total_holiday_hours: perHolidayHours,
+        capped_at_eight: processed.holidayAtEightEmployeeCounts[index],
+        total_holiday_hours: processed.holidayTotals[index] ?? perHolidayHours,
         processed_by: userData.user.id,
         processed_by_email: userData.user.email?.toLowerCase(),
       })));
@@ -154,7 +156,7 @@ export default function HolidayHoursImport() {
 
   function changeHolidayCount(count: 1 | 2) {
     setHolidayCount(count);
-    setHolidays(Array.from({ length: count }, () => ({ name: "", date: "" })));
+    setHolidays(Array.from({ length: count }, () => ({ name: "", date: "", excludeFullTimeClasses: false })));
     setSourceCsv("");
     setFileName("");
     setEmployeeSearch("");
@@ -164,7 +166,7 @@ export default function HolidayHoursImport() {
     if (inputRef.current) inputRef.current.value = "";
   }
 
-  function updateHoliday(index: number, field: keyof HolidayDraft, value: string) {
+  function updateHoliday(index: number, field: keyof HolidayDraft, value: string | boolean) {
     setHolidays((current) => current.map((holiday, holidayIndex) => holidayIndex === index
       ? { ...holiday, [field]: value }
       : holiday));
@@ -209,8 +211,9 @@ export default function HolidayHoursImport() {
           </div>
         </fieldset>
         <div className="holiday-preupload-fields">{holidays.map((holiday, index) => <div key={index}>
-          <label>{holidayCount === 1 ? "Holiday name" : `Holiday ${index + 1} name`}<input type="text" value={holiday.name} placeholder={index === 0 ? "Christmas" : "New Year’s Day"} onChange={(event) => updateHoliday(index, "name", event.target.value)} /></label>
-          <label>Date<input type="date" value={holiday.date} onChange={(event) => updateHoliday(index, "date", event.target.value)} /></label>
+          <label>{holidayCount === 1 ? "Holiday name" : `Holiday ${index + 1} name`}<input type="text" disabled={Boolean(sourceCsv)} value={holiday.name} placeholder={index === 0 ? "Christmas" : "New Year’s Day"} onChange={(event) => updateHoliday(index, "name", event.target.value)} /></label>
+          <label>Date<input type="date" disabled={Boolean(sourceCsv)} value={holiday.date} onChange={(event) => updateHoliday(index, "date", event.target.value)} /></label>
+          <label className="holiday-class-exclusion"><input type="checkbox" disabled={Boolean(sourceCsv)} checked={holiday.excludeFullTimeClasses} onChange={(event) => updateHoliday(index, "excludeFullTimeClasses", event.target.checked)} /><span>Exclude Office Staff FT and Mechanics FT if they already receive 8 hours separately</span></label>
         </div>)}</div>
         <label className={`upload-button payroll-file-button ${holidays.some((holiday) => !holiday.name.trim() || !holiday.date) ? "disabled" : ""}`}>
           {fileName ? "Choose a different file" : "Choose source CSV"}
@@ -230,7 +233,7 @@ export default function HolidayHoursImport() {
         <li><strong>Select Employee Hours for Holiday Import File.</strong></li>
         <li><strong>Set Employee Information Effective Date As of.</strong> Choose the specific date needed for this holiday-hours calculation.</li>
         <li><strong>Select Run and download the report as a CSV.</strong> Keep the Employee Name, Company Code, File Number, Hours, and Pay Class columns. First Name and Last Name columns are also accepted.</li>
-        <li><strong>Select whether this import covers one or two holidays, then enter each holiday name and date.</strong> The file chooser becomes available after these details are complete. Two holidays doubles each employee’s calculated amount.</li>
+        <li><strong>Select whether this import covers one or two holidays, then enter each holiday name and date.</strong> For each holiday, you may check the option to exclude Office Staff FT and Mechanics FT if they already receive 8 hours separately. The file chooser becomes available after holiday names and dates are complete.</li>
         <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, including PTO, applies the employee’s Pay Class rule, checks for duplicates, and automatically saves the summary to Holiday Hours History.</li>
         <li><strong>Review the results.</strong> Check the employees in the import, excluded salary employees, source hours across all classes, employees capped at 8.00, and several individual employees.</li>
         <li><strong>Download the import CSV.</strong> The file is named epihne23.csv and contains Co Code, Batch ID, File #, Hours 3 Code, and Hours 3 Amount.</li>
@@ -239,7 +242,7 @@ export default function HolidayHoursImport() {
       </ol>
       <div className="calculation-note">
         <strong>Calculation used</strong>
-        <span>Mechanics FT and Office FT receive 8.00 hours per holiday. Drivers salary clocking and other included pay classes use PTO-inclusive timecard hours ÷ 2 ÷ 40 × 8, rounded to two decimals and capped at 8.00. Salary and Salary Manager are excluded from the import. A two-holiday import doubles eligible amounts.</span>
+        <span>Mechanics FT and Office Staff FT receive 8.00 hours per holiday unless excluded by the per-holiday checkbox. Drivers salary clocking and other included pay classes use PTO-inclusive timecard hours ÷ 2 ÷ 40 × 8, rounded to two decimals and capped at 8.00. Salary and Salary Manager are excluded from the import.</span>
       </div>
       <p className="privacy-note"><strong>Private processing:</strong> The source file, employee rows, and calculated CSV remain in this browser. Only summary totals, holiday names, dates, and audit information are saved automatically.</p>
     </details>
