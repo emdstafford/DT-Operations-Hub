@@ -26,6 +26,15 @@ function isExcludedPayClass(payClass: string) {
   return normalized === "salary" || normalized === "salarymanager" || normalized === "managersalary";
 }
 
+function hasFixedEightHourHoliday(payClass: string) {
+  const normalized = normalizePayClass(payClass);
+  return normalized === "mechanicft" || normalized === "mechanicsft" || normalized === "officeft";
+}
+
+function normalizeHeader(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function parseCsv(text: string) {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -88,15 +97,16 @@ export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 
   const data = parseCsv(sourceCsv.replace(/^\uFEFF/, ""));
   if (!data.length) throw new Error("The selected CSV is empty.");
 
-  const headers = data[0].map((header) => header.trim());
-  const headerIndex = new Map(headers.map((header, index) => [header.toLowerCase(), index]));
-  const companyIndex = headerIndex.get("company code");
-  const fileIndex = headerIndex.get("file number");
+  const headers = data[0].map(normalizeHeader);
+  const headerIndex = new Map(headers.map((header, index) => [header, index]));
+  const companyIndex = headerIndex.get("companycode");
+  const fileIndex = headerIndex.get("filenumber");
   const hoursIndex = headerIndex.get("hours");
-  const payClassIndex = headerIndex.get("pay class");
-  const employeeNameIndex = headerIndex.get("employee name") ?? headerIndex.get("name");
-  const firstNameIndex = headerIndex.get("employee first name") ?? headerIndex.get("first name");
-  const lastNameIndex = headerIndex.get("employee last name") ?? headerIndex.get("last name");
+  const payClassIndex = headerIndex.get("payclass");
+  const employeeNameIndex = ["employeename", "employeefullname", "employeedisplayname", "fullname", "name"]
+    .map((header) => headerIndex.get(header)).find((index) => index !== undefined);
+  const firstNameIndex = headerIndex.get("employeefirstname") ?? headerIndex.get("firstname");
+  const lastNameIndex = headerIndex.get("employeelastname") ?? headerIndex.get("lastname");
   const hasNameFields = employeeNameIndex !== undefined || (firstNameIndex !== undefined && lastNameIndex !== undefined);
 
   if (companyIndex === undefined || fileIndex === undefined || hoursIndex === undefined || payClassIndex === undefined || !hasNameFields) {
@@ -160,9 +170,12 @@ export function createHolidayHoursImport(sourceCsv: string, holidayCount: 1 | 2 
     .sort((left, right) => left.companyCode.localeCompare(right.companyCode)
       || left.fileNumber.localeCompare(right.fileNumber, undefined, { numeric: true }))
     .map((employee) => {
-      // All included classes use PTO-inclusive timecard hours for the existing holiday formula.
+      // Mechanics FT and Office FT receive a full 8 hours. Other included classes
+      // use PTO-inclusive timecard hours with the existing formula and 8-hour cap.
       // Integer arithmetic gives payroll-style half-up rounding at two decimals.
-      const singleHolidayHundredths = Math.min(800, Math.floor((employee.hoursHundredths + 5) / 10));
+      const singleHolidayHundredths = hasFixedEightHourHoliday(employee.payClass)
+        ? 800
+        : Math.min(800, Math.floor((employee.hoursHundredths + 5) / 10));
       const holidayHundredths = singleHolidayHundredths * holidayCount;
       return {
         companyCode: employee.companyCode,

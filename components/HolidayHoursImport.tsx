@@ -23,12 +23,20 @@ export default function HolidayHoursImport() {
   const [sourceCsv, setSourceCsv] = useState("");
   const [holidayCount, setHolidayCount] = useState<1 | 2>(1);
   const [fileName, setFileName] = useState("");
+  const [employeeSearch, setEmployeeSearch] = useState("");
   const [error, setError] = useState("");
   const [historyMessage, setHistoryMessage] = useState("");
   const [historyError, setHistoryError] = useState("");
   const [holidays, setHolidays] = useState<HolidayDraft[]>([{ name: "", date: "" }]);
   const result = useMemo<HolidayHoursImportResult | null>(() => sourceCsv ? createHolidayHoursImport(sourceCsv, holidayCount) : null, [sourceCsv, holidayCount]);
-  const previewRows = useMemo(() => result?.rows.slice(0, 50) ?? [], [result]);
+  const matchingRows = useMemo(() => {
+    if (!result) return [];
+    const query = employeeSearch.trim().toLocaleLowerCase();
+    return query
+      ? result.rows.filter((row) => row.employeeName.toLocaleLowerCase().includes(query) || row.fileNumber.toLocaleLowerCase().includes(query))
+      : result.rows;
+  }, [result, employeeSearch]);
+  const previewRows = useMemo(() => matchingRows.slice(0, 50), [matchingRows]);
   useEffect(() => {
     const file = handoff.take("holiday");
     if (file) setPendingFile(file);
@@ -148,6 +156,7 @@ export default function HolidayHoursImport() {
     setHolidays(Array.from({ length: count }, () => ({ name: "", date: "" })));
     setSourceCsv("");
     setFileName("");
+    setEmployeeSearch("");
     setError("");
     setHistoryMessage("");
     setHistoryError("");
@@ -176,6 +185,7 @@ export default function HolidayHoursImport() {
   function reset() {
     setSourceCsv("");
     setFileName("");
+    setEmployeeSearch("");
     setError("");
     setHistoryMessage("");
     setHistoryError("");
@@ -228,7 +238,7 @@ export default function HolidayHoursImport() {
       </ol>
       <div className="calculation-note">
         <strong>Calculation used</strong>
-        <span>All included pay classes: PTO-inclusive timecard hours ÷ 2 ÷ 40 × 8 per holiday, rounded to two decimals and capped at 8.00. Salary and Salary Manager: excluded from the import. A two-holiday import doubles eligible amounts.</span>
+        <span>Mechanics FT and Office FT receive 8.00 hours per holiday. Drivers salary clocking and other included pay classes use PTO-inclusive timecard hours ÷ 2 ÷ 40 × 8, rounded to two decimals and capped at 8.00. Salary and Salary Manager are excluded from the import. A two-holiday import doubles eligible amounts.</span>
       </div>
       <p className="privacy-note"><strong>Private processing:</strong> The source file, employee rows, and calculated CSV remain in this browser. Only summary totals, holiday names, dates, and audit information are saved automatically.</p>
     </details>
@@ -242,24 +252,25 @@ export default function HolidayHoursImport() {
         <article><span>Employees in import</span><strong>{result.rows.length.toLocaleString()}</strong></article>
         <article><span>Salary employees excluded</span><strong>{result.excludedEmployeeCount.toLocaleString()}</strong></article>
         <article><span>Source hours (all classes)</span><strong>{number(result.totalSourceHours)}</strong></article>
-        <article><span>Employees capped at {holidayCount === 2 ? "16.00" : "8.00"}</span><strong>{result.cappedEmployeeCount.toLocaleString()}</strong></article>
+        <article><span>Employees at {holidayCount === 2 ? "16.00" : "8.00"} hours</span><strong>{result.cappedEmployeeCount.toLocaleString()}</strong></article>
         <article><span>Total holiday hours</span><strong>{number(result.totalHolidayHours)}</strong></article>
       </section>
 
       <section className="panel payroll-results">
         <div className="panel-heading payroll-result-heading">
-          <div><p className="eyebrow">Step 2</p><h2>Review calculated hours</h2><span>{fileName} · {holidayCount} {holidayCount === 1 ? "holiday" : "holidays"}</span></div>
+          <div><p className="eyebrow">Step 2</p><h2>Review calculated hours</h2><span>{fileName} · {holidayCount} {holidayCount === 1 ? "holiday" : "holidays"}</span><span>Employee names appear in this review. The ADP import CSV keeps its required columns.</span></div>
           <div className="payroll-result-actions"><button type="button" className="secondary-button" onClick={reset}>Start over</button><button type="button" className="upload-button" onClick={downloadImport}>Download import CSV</button></div>
         </div>
+        <label className="holiday-employee-search">Find employee by name or file number<input type="search" value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} placeholder="Name or file number" /></label>
         <div className="table-scroll">
           <table className="data-table payroll-preview-table">
             <thead><tr><th>Co Code</th><th>Batch ID</th><th>Employee Name</th><th>File #</th><th>Pay Class</th><th>Hours 3 Code</th><th>Combined source hours</th><th>Source rows</th><th>Hours 3 Amount</th></tr></thead>
             <tbody>{previewRows.map((row) => <tr key={`${row.companyCode}-${row.fileNumber}`}>
               <td>HNE</td><td>Holiday</td><td>{row.employeeName}</td><td>{row.fileNumber}</td><td>{row.payClass}</td><td>HOL</td><td>{number(row.totalHours)}</td><td>{row.sourceRows}</td><td><strong>{number(row.holidayHours)}</strong></td>
-            </tr>)}</tbody>
+            </tr>)}{previewRows.length === 0 && <tr><td colSpan={9}>No employees match that name or file number.</td></tr>}</tbody>
           </table>
         </div>
-        {result.rows.length > previewRows.length && <p className="payroll-preview-note">Showing the first {previewRows.length} employees. The downloaded CSV includes all {result.rows.length.toLocaleString()} employees.</p>}
+        {matchingRows.length > previewRows.length && <p className="payroll-preview-note">Showing {previewRows.length} of {matchingRows.length.toLocaleString()} matching employees. The downloaded CSV includes all {result.rows.length.toLocaleString()} employees.</p>}
       </section>
     </>}
   </div>;
