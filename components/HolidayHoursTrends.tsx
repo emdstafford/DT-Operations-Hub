@@ -298,7 +298,7 @@ export default function HolidayHoursTrends() {
             employee.employeeName.toLocaleLowerCase().includes(employeeQuery) ||
             employee.fileNumber.toLocaleLowerCase().includes(employeeQuery)) &&
           (!contractQuery ||
-            contractsForEmployee(row, employee).some((contract) => contract.toLocaleLowerCase().includes(contractQuery)))
+            contractsForEmployee(row, employee).some((contract) => contract.toLocaleLowerCase().includes(contractQuery))))
         .map((employee) => [
           row.holiday_name, row.holiday_date, employee.companyCode, "Holiday",
           employee.employeeName, employee.fileNumber, employee.payClass, contractsForEmployee(row, employee).join("; "), "HOL",
