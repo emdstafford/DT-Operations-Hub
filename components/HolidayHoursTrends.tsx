@@ -61,19 +61,31 @@ export default function HolidayHoursTrends() {
     let active = true;
     void (async () => {
       setLoading(true);
-      const { data, error: historyError } = await supabase
+      const historyFields = "id, holiday_name, holiday_date, source_file, source_rows, unique_employees, combined_source_hours, capped_at_eight, total_holiday_hours, processed_by_email, created_at, updated_at, archived_at, archived_by_email";
+      const detailedResult = await supabase
         .from("holiday_import_history")
-        .select("id, holiday_name, holiday_date, source_file, source_rows, unique_employees, combined_source_hours, capped_at_eight, total_holiday_hours, processed_by_email, created_at, updated_at, archived_at, archived_by_email, employee_details")
+        .select(`${historyFields}, employee_details`)
         .order("holiday_date", { ascending: false })
         .order("created_at", { ascending: false });
+      let data = detailedResult.data as unknown as HistoryRow[] | null;
+      let historyError = detailedResult.error;
+      let migrationMissing = false;
+      if (historyError?.code === "42703") {
+        const legacyResult = await supabase
+          .from("holiday_import_history")
+          .select(historyFields)
+          .order("holiday_date", { ascending: false })
+          .order("created_at", { ascending: false });
+        data = (legacyResult.data ?? []).map((row) => ({ ...row, employee_details: [] })) as unknown as HistoryRow[];
+        historyError = legacyResult.error;
+        migrationMissing = !legacyResult.error;
+      }
       if (!active) return;
       if (historyError) {
-        setError(historyError.code === "42703"
-          ? "Run supabase/holiday_employee_details.sql once to enable saved employee reports. Existing holiday history will remain available."
-          : historyError.message);
+        setError(historyError.message);
         setHistory([]);
       } else {
-        setError("");
+        setError(migrationMissing ? "Run supabase/holiday_employee_details.sql once to enable saved employee reports. Holiday totals remain available." : "");
         setHistory((data ?? []).map((row) => ({
           ...row,
           combined_source_hours: Number(row.combined_source_hours),
@@ -84,7 +96,7 @@ export default function HolidayHoursTrends() {
             holidayHours: Number(employee.holidayHours),
             sourceRows: Number(employee.sourceRows),
           })) : [],
-        })) as HistoryRow[]);
+        })));
       }
       setLoading(false);
     })();
