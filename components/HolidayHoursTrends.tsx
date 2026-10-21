@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type HolidayEmployeeRow = {
@@ -12,6 +12,9 @@ type HolidayEmployeeRow = {
   holidayHours: number;
   sourceRows: number;
 };
+
+type TimecardEmployeeContract = { employeeId: string; contract: string; name: string; hundredths: number };
+type SavedTimecard = { payroll_name: string; period_start: string; period_end: string; saved_at: string; summary: TimecardEmployeeContract[] };
 
 type HistoryRow = {
   id: string;
@@ -56,6 +59,9 @@ export default function HolidayHoursTrends() {
   const [reload, setReload] = useState(0);
   const [openDetailsId, setOpenDetailsId] = useState<string | null>(null);
   const [employeeSearch, setEmployeeSearch] = useState("");
+  const [contractSearch, setContractSearch] = useState("");
+  const [timecards, setTimecards] = useState<SavedTimecard[]>([]);
+  const [contractLookupError, setContractLookupError] = useState(false);
   const [canDeleteArchived, setCanDeleteArchived] = useState(false);
 
   useEffect(() => {
@@ -82,6 +88,15 @@ export default function HolidayHoursTrends() {
         migrationMissing = !legacyResult.error;
       }
       if (!active) return;
+      const timecardResult = await supabase.from("timecard_summary_history")
+        .select("payroll_name,period_start,period_end,saved_at,summary")
+        .is("archived_at", null)
+        .order("period_end", { ascending: false })
+        .order("saved_at", { ascending: false })
+        .limit(250);
+      if (!active) return;
+      setContractLookupError(Boolean(timecardResult.error));
+      setTimecards((timecardResult.data ?? []) as unknown as SavedTimecard[]);
       if (historyError) {
         setError(historyError.message);
         setHistory([]);
@@ -118,6 +133,20 @@ export default function HolidayHoursTrends() {
   const activeHistory = useMemo(() => history.filter((row) => !row.archived_at), [history]);
   const archivedHistory = useMemo(() => history.filter((row) => Boolean(row.archived_at)), [history]);
   const years = useMemo(() => [...new Set(activeHistory.map((row) => row.holiday_date.slice(0, 4)))].sort().reverse(), [activeHistory]);
+  const contractsForEmployee = useCallback((row: HistoryRow, employee: HolidayEmployeeRow) => {
+    const fileNumber = employee.fileNumber.trim().toLocaleLowerCase();
+    const applicable = timecards
+      .filter((report) => report.period_start <= row.holiday_date && report.period_end >= row.holiday_date)
+      .filter((report) => report.summary.some((entry) => entry.employeeId.trim().toLocaleLowerCase() === fileNumber))
+      .sort((left, right) => right.saved_at.localeCompare(left.saved_at));
+    const report = applicable[0];
+    if (!report) return [];
+    return [...new Set(report.summary
+      .filter((entry) => entry.employeeId.trim().toLocaleLowerCase() === fileNumber)
+      .map((entry) => entry.contract.trim())
+      .filter(Boolean))].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+  }, [timecards]);
+
   const filtered = useMemo(() => activeHistory.filter((row) => {
     if (search && !row.holiday_name.toLowerCase().includes(search.toLowerCase().trim())) return false;
     if (year && row.holiday_date.slice(0, 4) !== year) return false;
@@ -128,8 +157,12 @@ export default function HolidayHoursTrends() {
       employee.employeeName.toLocaleLowerCase().includes(employeeQuery) ||
       employee.fileNumber.toLocaleLowerCase().includes(employeeQuery)
     )) return false;
+    const contractQuery = contractSearch.trim().toLocaleLowerCase();
+    if (contractQuery && !row.employee_details.some((employee) =>
+      contractsForEmployee(row, employee).some((contract) => contract.toLocaleLowerCase().includes(contractQuery))
+    )) return false;
     return true;
-  }), [activeHistory, search, year, startDate, endDate, employeeSearch]);
+  }), [activeHistory, search, year, startDate, endDate, employeeSearch, contractSearch, contractsForEmployee]);
 
   const yearly = useMemo(() => {
     const groups = new Map<string, HistoryRow[]>();
@@ -256,15 +289,19 @@ export default function HolidayHoursTrends() {
 
   function exportEmployeeCsv() {
     const employeeQuery = employeeSearch.trim().toLocaleLowerCase();
+    const contractQuery = contractSearch.trim().toLocaleLowerCase();
     const output: (string | number)[][] = [
-      ["Holiday Name", "Holiday Date", "Co Code", "Batch ID", "Employee Name", "File #", "Pay Class", "Hours 3 Code", "Combined Source Hours", "Source Rows", "Hours 3 Amount"],
+      ["Holiday Name", "Holiday Date", "Co Code", "Batch ID", "Employee Name", "File #", "Pay Class", "Contract(s)", "Hours 3 Code", "Combined Source Hours", "Source Rows", "Hours 3 Amount"],
       ...filtered.flatMap((row) => row.employee_details
-        .filter((employee) => !employeeQuery ||
-          employee.employeeName.toLocaleLowerCase().includes(employeeQuery) ||
-          employee.fileNumber.toLocaleLowerCase().includes(employeeQuery))
+        .filter((employee) =>
+          (!employeeQuery ||
+            employee.employeeName.toLocaleLowerCase().includes(employeeQuery) ||
+            employee.fileNumber.toLocaleLowerCase().includes(employeeQuery)) &&
+          (!contractQuery ||
+            contractsForEmployee(row, employee).some((contract) => contract.toLocaleLowerCase().includes(contractQuery))))
         .map((employee) => [
           row.holiday_name, row.holiday_date, employee.companyCode, "Holiday",
-          employee.employeeName, employee.fileNumber, employee.payClass, "HOL",
+          employee.employeeName, employee.fileNumber, employee.payClass, contractsForEmployee(row, employee).join("; "), "HOL",
           employee.totalHours.toFixed(2), employee.sourceRows, employee.holidayHours.toFixed(2),
         ])),
     ];
@@ -286,10 +323,11 @@ export default function HolidayHoursTrends() {
     <section className="panel payroll-trend-filters">
       <label>Holiday search<input value={search} placeholder="Christmas" onChange={(event) => setSearch(event.target.value)} /></label>
       <label>Employee search<input value={employeeSearch} placeholder="Name or file number" onChange={(event) => setEmployeeSearch(event.target.value)} /></label>
+      <label>Contract search<input value={contractSearch} placeholder="Contract number" onChange={(event) => setContractSearch(event.target.value)} /></label>
       <label>Year<select value={year} onChange={(event) => setYear(event.target.value)}><option value="">All years</option>{years.map((option) => <option key={option}>{option}</option>)}</select></label>
       <label>From<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
       <label>Through<input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
-      <button type="button" className="secondary-button" onClick={() => { setSearch(""); setEmployeeSearch(""); setYear(""); setStartDate(""); setEndDate(""); }}>Clear</button>
+      <button type="button" className="secondary-button" onClick={() => { setSearch(""); setEmployeeSearch(""); setContractSearch(""); setYear(""); setStartDate(""); setEndDate(""); }}>Clear</button>
       <button type="button" className="upload-button" disabled={!filtered.length} onClick={exportCsv}>Export holiday summary CSV</button>
       <button type="button" className="upload-button" disabled={!filtered.some((row) => row.employee_details.length)} onClick={exportEmployeeCsv}>Export employee details CSV</button>
     </section>
@@ -309,15 +347,17 @@ export default function HolidayHoursTrends() {
         <div><h3>Holiday comparison</h3><div className="table-scroll"><table className="data-table"><thead><tr><th>Holiday</th><th>Years</th><th>Avg. employees</th><th>Avg. source hours</th><th>Avg. holiday hours</th><th>Latest</th></tr></thead><tbody>{comparisons.map((row) => <tr key={row.name.toLowerCase()}><td><strong>{row.name}</strong></td><td>{row.occurrences}</td><td>{decimal(row.averageEmployees)}</td><td>{decimal(row.averageSourceHours)}</td><td>{decimal(row.averageHolidayHours)}</td><td>{row.latest}</td></tr>)}</tbody></table></div></div>
       </div>}
       <h3 className="holiday-history-title">Saved imports</h3>
-      <p className="privacy-note">Employee details are available only to employees approved for payroll tools. Older imports may not include employee details because they were saved before this feature.</p>
+      <p className="privacy-note">{contractLookupError ? "Contract matching is unavailable because saved payroll history could not be read. " : ""}Employee details are available only to employees approved for payroll tools. Contract matches use the saved timecard report covering the holiday date and the employee file number. Older imports may not include employee details because they were saved before this feature.</p>
       <div className="table-scroll">
         <table className="data-table holiday-history-table">
           <thead><tr><th>Holiday name</th><th>Date</th><th>Source rows</th><th>Employees</th><th>Source hours</th><th>Capped</th><th>Holiday hours</th><th>Processed by</th><th></th></tr></thead>
           <tbody>
             {filtered.map((row) => {
               const query = employeeSearch.trim().toLocaleLowerCase();
+              const contractQuery = contractSearch.trim().toLocaleLowerCase();
               const matchingEmployees = row.employee_details.filter((employee) =>
-                !query || employee.employeeName.toLocaleLowerCase().includes(query) || employee.fileNumber.toLocaleLowerCase().includes(query)
+                (!query || employee.employeeName.toLocaleLowerCase().includes(query) || employee.fileNumber.toLocaleLowerCase().includes(query)) &&
+                (!contractQuery || contractsForEmployee(row, employee).some((contract) => contract.toLocaleLowerCase().includes(contractQuery)))
               );
               return (
                 <Fragment key={row.id}>
@@ -350,14 +390,14 @@ export default function HolidayHoursTrends() {
                               <label>Search employees by name or file number<input type="search" value={employeeSearch} placeholder="Name or file number" onChange={(event) => setEmployeeSearch(event.target.value)} /></label>
                               <div className="table-scroll">
                                 <table className="data-table payroll-preview-table">
-                                  <thead><tr><th>Co Code</th><th>Batch ID</th><th>Employee Name</th><th>File #</th><th>Pay Class</th><th>Hours 3 Code</th><th>Combined source hours</th><th>Source rows</th><th>Hours 3 Amount</th></tr></thead>
+                                  <thead><tr><th>Co Code</th><th>Batch ID</th><th>Employee Name</th><th>File #</th><th>Pay Class</th><th>Contract(s)</th><th>Hours 3 Code</th><th>Combined source hours</th><th>Source rows</th><th>Hours 3 Amount</th></tr></thead>
                                   <tbody>
                                     {matchingEmployees.map((employee) => (
                                       <tr key={employee.companyCode + "-" + employee.fileNumber}>
-                                        <td>{employee.companyCode}</td><td>Holiday</td><td>{employee.employeeName}</td><td>{employee.fileNumber}</td><td>{employee.payClass}</td><td>HOL</td><td>{decimal(employee.totalHours)}</td><td>{employee.sourceRows}</td><td><strong>{decimal(employee.holidayHours)}</strong></td>
+                                        <td>{employee.companyCode}</td><td>Holiday</td><td>{employee.employeeName}</td><td>{employee.fileNumber}</td><td>{employee.payClass}</td><td>{contractsForEmployee(row, employee).join(", ") || "—"}</td><td>HOL</td><td>{decimal(employee.totalHours)}</td><td>{employee.sourceRows}</td><td><strong>{decimal(employee.holidayHours)}</strong></td>
                                       </tr>
                                     ))}
-                                    {!matchingEmployees.length && <tr><td colSpan={9}>No employees match that name or file number.</td></tr>}
+                                    {!matchingEmployees.length && <tr><td colSpan={10}>No employees match these filters.</td></tr>}
                                   </tbody>
                                 </table>
                               </div>
