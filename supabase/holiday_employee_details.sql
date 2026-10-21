@@ -39,7 +39,9 @@ using (public.is_holiday_history_admin() and archived_at is not null);
 
 grant delete on public.holiday_import_history to authenticated;
 
--- After confirming the exact sign-in email, enable the flag for that one account:
--- update public.payroll_tool_users
--- set can_delete_holiday_history = true
--- where email = lower('<HER_DTEXPRESS_LOGIN_EMAIL>') and active;
+-- Grant permanent archive deletion only to Em's Hub account.
+update public.payroll_tool_users
+set can_delete_holiday_history = (email = 'estafford@dtexpress.net')
+where email in (
+  'estafford@dtexpress.net'
+);
