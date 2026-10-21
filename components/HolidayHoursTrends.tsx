@@ -289,12 +289,16 @@ export default function HolidayHoursTrends() {
 
   function exportEmployeeCsv() {
     const employeeQuery = employeeSearch.trim().toLocaleLowerCase();
+    const contractQuery = contractSearch.trim().toLocaleLowerCase();
     const output: (string | number)[][] = [
       ["Holiday Name", "Holiday Date", "Co Code", "Batch ID", "Employee Name", "File #", "Pay Class", "Contract(s)", "Hours 3 Code", "Combined Source Hours", "Source Rows", "Hours 3 Amount"],
       ...filtered.flatMap((row) => row.employee_details
-        .filter((employee) => !employeeQuery ||
-          employee.employeeName.toLocaleLowerCase().includes(employeeQuery) ||
-          employee.fileNumber.toLocaleLowerCase().includes(employeeQuery))
+        .filter((employee) =>
+          (!employeeQuery ||
+            employee.employeeName.toLocaleLowerCase().includes(employeeQuery) ||
+            employee.fileNumber.toLocaleLowerCase().includes(employeeQuery)) &&
+          (!contractQuery ||
+            contractsForEmployee(row, employee).some((contract) => contract.toLocaleLowerCase().includes(contractQuery)))
         .map((employee) => [
           row.holiday_name, row.holiday_date, employee.companyCode, "Holiday",
           employee.employeeName, employee.fileNumber, employee.payClass, contractsForEmployee(row, employee).join("; "), "HOL",
