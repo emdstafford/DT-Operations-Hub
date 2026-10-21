@@ -3,7 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-type HolidayEmployeeRow = {\n  companyCode: string;\n  fileNumber: string;\n  employeeName: string;\n  payClass: string;\n  totalHours: number;\n  holidayHours: number;\n  sourceRows: number;\n};\n\ntype HistoryRow = {
+type HolidayEmployeeRow = {
+  companyCode: string;
+  fileNumber: string;
+  employeeName: string;
+  payClass: string;
+  totalHours: number;
+  holidayHours: number;
+  sourceRows: number;
+};
+
+type HistoryRow = {
   id: string;
   holiday_name: string;
   holiday_date: string;
@@ -18,6 +28,7 @@ type HolidayEmployeeRow = {\n  companyCode: string;\n  fileNumber: string;\n  em
   updated_at: string;
   archived_at: string | null;
   archived_by_email: string | null;
+  employee_details: HolidayEmployeeRow[];
 };
 
 function decimal(value: number) {
@@ -42,7 +53,9 @@ export default function HolidayHoursTrends() {
   const [year, setYear] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [reload, setReload] = useState(0);\n  const [openDetailsId, setOpenDetailsId] = useState<string | null>(null);\n  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [reload, setReload] = useState(0);
+  const [openDetailsId, setOpenDetailsId] = useState<string | null>(null);
+  const [employeeSearch, setEmployeeSearch] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -50,7 +63,7 @@ export default function HolidayHoursTrends() {
       setLoading(true);
       const { data, error: historyError } = await supabase
         .from("holiday_import_history")
-        .select("id, holiday_name, holiday_date, source_file, source_rows, unique_employees, combined_source_hours, capped_at_eight, total_holiday_hours, processed_by_email, created_at, updated_at, archived_at, archived_by_email")
+        .select("id, holiday_name, holiday_date, source_file, source_rows, unique_employees, combined_source_hours, capped_at_eight, total_holiday_hours, processed_by_email, created_at, updated_at, archived_at, archived_by_email, employee_details")
         .order("holiday_date", { ascending: false })
         .order("created_at", { ascending: false });
       if (!active) return;
@@ -65,6 +78,12 @@ export default function HolidayHoursTrends() {
           ...row,
           combined_source_hours: Number(row.combined_source_hours),
           total_holiday_hours: Number(row.total_holiday_hours),
+          employee_details: Array.isArray(row.employee_details) ? row.employee_details.map((employee) => ({
+            ...employee,
+            totalHours: Number(employee.totalHours),
+            holidayHours: Number(employee.holidayHours),
+            sourceRows: Number(employee.sourceRows),
+          })) : [],
         })) as HistoryRow[]);
       }
       setLoading(false);
@@ -217,7 +236,8 @@ export default function HolidayHoursTrends() {
         <div><h3>Yearly summary</h3><div className="table-scroll"><table className="data-table"><thead><tr><th>Year</th><th>Holidays</th><th>Avg. employees</th><th>Capped at 8</th><th>Total hours</th></tr></thead><tbody>{yearly.map((row) => <tr key={row.year}><td><strong>{row.year}</strong></td><td>{row.holidays}</td><td>{decimal(row.averageEmployees)}</td><td>{row.capped}</td><td>{decimal(row.totalHours)}</td></tr>)}</tbody></table></div></div>
         <div><h3>Holiday comparison</h3><div className="table-scroll"><table className="data-table"><thead><tr><th>Holiday</th><th>Years</th><th>Avg. employees</th><th>Avg. source hours</th><th>Avg. holiday hours</th><th>Latest</th></tr></thead><tbody>{comparisons.map((row) => <tr key={row.name.toLowerCase()}><td><strong>{row.name}</strong></td><td>{row.occurrences}</td><td>{decimal(row.averageEmployees)}</td><td>{decimal(row.averageSourceHours)}</td><td>{decimal(row.averageHolidayHours)}</td><td>{row.latest}</td></tr>)}</tbody></table></div></div>
       </div>}
-      <h3 className="holiday-history-title">Saved imports</h3>\n      <p className="privacy-note">Employee details are available only to employees approved for payroll tools. Older imports may not include employee details because they were saved before this feature.</p>
+      <h3 className="holiday-history-title">Saved imports</h3>
+      <p className="privacy-note">Employee details are available only to employees approved for payroll tools. Older imports may not include employee details because they were saved before this feature.</p>
       <div className="table-scroll"><table className="data-table holiday-history-table"><thead><tr><th>Holiday name</th><th>Date</th><th>Source rows</th><th>Employees</th><th>Source hours</th><th>Capped</th><th>Holiday hours</th><th>Processed by</th><th></th></tr></thead><tbody>{filtered.map((row) => <tr key={row.id}>
         <td><input aria-label="Holiday name" value={row.holiday_name} onChange={(event) => updateRow(row.id, "holiday_name", event.target.value)} /></td>
         <td><input aria-label="Holiday date" type="date" value={row.holiday_date.slice(0, 10)} onChange={(event) => updateRow(row.id, "holiday_date", event.target.value)} /></td>
