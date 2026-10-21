@@ -8,7 +8,7 @@ export default function HolidayTrendsPage() {
       <div>
         <p className="eyebrow">Restricted payroll tools</p>
         <h1>Holiday Hours History</h1>
-        <p>Search and compare saved holiday-hours calculations.</p>
+        <p>Search saved holiday imports by holiday, year, and date range, then review and search employee-level hours.</p>
       </div>
       <div className="payroll-page-actions"><Link className="secondary-button" href="/payroll/holiday-hours">Holiday Hours Import</Link><Link className="secondary-button" href="/payroll">All Payroll Tools</Link></div>
     </header>

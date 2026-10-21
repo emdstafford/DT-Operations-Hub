@@ -1,7 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+
+type HolidayEmployeeRow = {
+  companyCode: string;
+  fileNumber: string;
+  employeeName: string;
+  payClass: string;
+  totalHours: number;
+  holidayHours: number;
+  sourceRows: number;
+};
 
 type HistoryRow = {
   id: string;
@@ -18,6 +28,7 @@ type HistoryRow = {
   updated_at: string;
   archived_at: string | null;
   archived_by_email: string | null;
+  employee_details: HolidayEmployeeRow[];
 };
 
 function decimal(value: number) {
@@ -43,29 +54,61 @@ export default function HolidayHoursTrends() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reload, setReload] = useState(0);
+  const [openDetailsId, setOpenDetailsId] = useState<string | null>(null);
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [canDeleteArchived, setCanDeleteArchived] = useState(false);
 
   useEffect(() => {
     let active = true;
     void (async () => {
       setLoading(true);
-      const { data, error: historyError } = await supabase
+      const historyFields = "id, holiday_name, holiday_date, source_file, source_rows, unique_employees, combined_source_hours, capped_at_eight, total_holiday_hours, processed_by_email, created_at, updated_at, archived_at, archived_by_email";
+      const detailedResult = await supabase
         .from("holiday_import_history")
-        .select("id, holiday_name, holiday_date, source_file, source_rows, unique_employees, combined_source_hours, capped_at_eight, total_holiday_hours, processed_by_email, created_at, updated_at, archived_at, archived_by_email")
+        .select(`${historyFields}, employee_details`)
         .order("holiday_date", { ascending: false })
         .order("created_at", { ascending: false });
+      let data = detailedResult.data as unknown as HistoryRow[] | null;
+      let historyError = detailedResult.error;
+      let migrationMissing = false;
+      if (historyError?.code === "42703") {
+        const legacyResult = await supabase
+          .from("holiday_import_history")
+          .select(historyFields)
+          .order("holiday_date", { ascending: false })
+          .order("created_at", { ascending: false });
+        data = (legacyResult.data ?? []).map((row) => ({ ...row, employee_details: [] })) as unknown as HistoryRow[];
+        historyError = legacyResult.error;
+        migrationMissing = !legacyResult.error;
+      }
       if (!active) return;
       if (historyError) {
-        setError(historyError.code === "42703"
-          ? "Run the updated holiday-history SQL once to enable Holiday Hours History."
-          : historyError.message);
+        setError(historyError.message);
         setHistory([]);
       } else {
-        setError("");
+        setError(migrationMissing ? "Run supabase/holiday_employee_details.sql once to enable saved employee reports. Holiday totals remain available." : "");
         setHistory((data ?? []).map((row) => ({
           ...row,
           combined_source_hours: Number(row.combined_source_hours),
           total_holiday_hours: Number(row.total_holiday_hours),
-        })) as HistoryRow[]);
+          employee_details: Array.isArray(row.employee_details) ? row.employee_details.map((employee) => ({
+            ...employee,
+            totalHours: Number(employee.totalHours),
+            holidayHours: Number(employee.holidayHours),
+            sourceRows: Number(employee.sourceRows),
+          })) : [],
+        })));
+      }
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData.user?.email) {
+        const { data: access } = await supabase.from("payroll_tool_users")
+          .select("can_delete_holiday_history")
+          .eq("email", userData.user.email.toLowerCase())
+          .eq("active", true)
+          .maybeSingle();
+        if (active) setCanDeleteArchived(Boolean(access?.can_delete_holiday_history));
+      } else {
+        setCanDeleteArchived(false);
       }
       setLoading(false);
     })();
@@ -174,6 +217,22 @@ export default function HolidayHoursTrends() {
     }
   }
 
+  async function deleteArchivedRow(row: HistoryRow) {
+    if (!canDeleteArchived || !row.archived_at) return;
+    if (!window.confirm(`Permanently delete ${row.holiday_name} (${row.holiday_date}) from the archive? This cannot be undone.`)) return;
+    setError("");
+    setMessage("");
+    const { error: deleteError } = await supabase.from("holiday_import_history")
+      .delete()
+      .eq("id", row.id)
+      .eq("archived_at", row.archived_at);
+    if (deleteError) setError(deleteError.message);
+    else {
+      setMessage(`${row.holiday_name} permanently deleted from the archive.`);
+      setReload((value) => value + 1);
+    }
+  }
+
   function exportCsv() {
     const output = [
       ["Holiday Name", "Holiday Date", "Source Rows", "Unique Employees", "Combined Source Hours", "Capped at 8", "Total Holiday Hours", "Processed By", "Saved At"],
@@ -218,13 +277,74 @@ export default function HolidayHoursTrends() {
         <div><h3>Holiday comparison</h3><div className="table-scroll"><table className="data-table"><thead><tr><th>Holiday</th><th>Years</th><th>Avg. employees</th><th>Avg. source hours</th><th>Avg. holiday hours</th><th>Latest</th></tr></thead><tbody>{comparisons.map((row) => <tr key={row.name.toLowerCase()}><td><strong>{row.name}</strong></td><td>{row.occurrences}</td><td>{decimal(row.averageEmployees)}</td><td>{decimal(row.averageSourceHours)}</td><td>{decimal(row.averageHolidayHours)}</td><td>{row.latest}</td></tr>)}</tbody></table></div></div>
       </div>}
       <h3 className="holiday-history-title">Saved imports</h3>
-      <div className="table-scroll"><table className="data-table holiday-history-table"><thead><tr><th>Holiday name</th><th>Date</th><th>Source rows</th><th>Employees</th><th>Source hours</th><th>Capped</th><th>Holiday hours</th><th>Processed by</th><th></th></tr></thead><tbody>{filtered.map((row) => <tr key={row.id}>
-        <td><input aria-label="Holiday name" value={row.holiday_name} onChange={(event) => updateRow(row.id, "holiday_name", event.target.value)} /></td>
-        <td><input aria-label="Holiday date" type="date" value={row.holiday_date.slice(0, 10)} onChange={(event) => updateRow(row.id, "holiday_date", event.target.value)} /></td>
-        <td>{row.source_rows.toLocaleString()}</td><td>{row.unique_employees.toLocaleString()}</td><td>{decimal(row.combined_source_hours)}</td><td>{row.capped_at_eight.toLocaleString()}</td><td>{decimal(row.total_holiday_hours)}</td><td><span>{row.processed_by_email}</span><small>{new Date(row.created_at).toLocaleString()}</small></td>
-        <td><div className="holiday-history-actions"><button type="button" className="secondary-button" onClick={() => void saveRow(row)}>Save</button><button type="button" className="archive-button" onClick={() => void archiveRow(row)}>Archive</button></div></td>
-      </tr>)}</tbody></table></div>
-      {archivedHistory.length > 0 && <details className="holiday-archive"><summary>Archived records ({archivedHistory.length})</summary><div className="table-scroll"><table className="data-table"><thead><tr><th>Holiday</th><th>Date</th><th>Employees</th><th>Holiday hours</th><th>Archived by</th><th></th></tr></thead><tbody>{archivedHistory.map((row) => <tr key={row.id}><td>{row.holiday_name}</td><td>{row.holiday_date}</td><td>{row.unique_employees.toLocaleString()}</td><td>{decimal(row.total_holiday_hours)}</td><td>{row.archived_by_email || "Payroll user"}</td><td><button type="button" className="secondary-button" onClick={() => void restoreRow(row)}>Restore</button></td></tr>)}</tbody></table></div></details>}
+      <p className="privacy-note">Employee details are available only to employees approved for payroll tools. Older imports may not include employee details because they were saved before this feature.</p>
+      <div className="table-scroll">
+        <table className="data-table holiday-history-table">
+          <thead><tr><th>Holiday name</th><th>Date</th><th>Source rows</th><th>Employees</th><th>Source hours</th><th>Capped</th><th>Holiday hours</th><th>Processed by</th><th></th></tr></thead>
+          <tbody>
+            {filtered.map((row) => {
+              const query = employeeSearch.trim().toLocaleLowerCase();
+              const matchingEmployees = row.employee_details.filter((employee) =>
+                !query || employee.employeeName.toLocaleLowerCase().includes(query) || employee.fileNumber.toLocaleLowerCase().includes(query)
+              );
+              return (
+                <Fragment key={row.id}>
+                  <tr>
+                    <td><input aria-label="Holiday name" value={row.holiday_name} onChange={(event) => updateRow(row.id, "holiday_name", event.target.value)} /></td>
+                    <td><input aria-label="Holiday date" type="date" value={row.holiday_date.slice(0, 10)} onChange={(event) => updateRow(row.id, "holiday_date", event.target.value)} /></td>
+                    <td>{row.source_rows.toLocaleString()}</td>
+                    <td>{row.unique_employees.toLocaleString()}</td>
+                    <td>{decimal(row.combined_source_hours)}</td>
+                    <td>{row.capped_at_eight.toLocaleString()}</td>
+                    <td>{decimal(row.total_holiday_hours)}</td>
+                    <td><span>{row.processed_by_email}</span><small>{new Date(row.created_at).toLocaleString()}</small></td>
+                    <td>
+                      <div className="holiday-history-actions">
+                        <button type="button" className="secondary-button" onClick={() => void saveRow(row)}>Save</button>
+                        <button type="button" className="archive-button" onClick={() => void archiveRow(row)}>Archive</button>
+                      </div>
+                      <button type="button" className="hub-secondary-link" aria-expanded={openDetailsId === row.id} onClick={() => { setOpenDetailsId(openDetailsId === row.id ? null : row.id); setEmployeeSearch(""); }}>
+                        {openDetailsId === row.id ? "Hide employees" : "View employees"}
+                      </button>
+                    </td>
+                  </tr>
+                  {openDetailsId === row.id && (
+                    <tr>
+                      <td colSpan={9}>
+                        <div className="holiday-employee-details">
+                          <h4>{row.holiday_name} employee details</h4>
+                          {row.employee_details.length ? (
+                            <>
+                              <label>Search employees by name or file number<input type="search" value={employeeSearch} placeholder="Name or file number" onChange={(event) => setEmployeeSearch(event.target.value)} /></label>
+                              <div className="table-scroll">
+                                <table className="data-table">
+                                  <thead><tr><th>Employee</th><th>File #</th><th>Pay class</th><th>Source hours</th><th>Source rows</th><th>Holiday hours</th></tr></thead>
+                                  <tbody>
+                                    {matchingEmployees.map((employee) => (
+                                      <tr key={employee.companyCode + "-" + employee.fileNumber}>
+                                        <td>{employee.employeeName}</td><td>{employee.fileNumber}</td><td>{employee.payClass}</td><td>{decimal(employee.totalHours)}</td><td>{employee.sourceRows}</td><td><strong>{decimal(employee.holidayHours)}</strong></td>
+                                      </tr>
+                                    ))}
+                                    {!matchingEmployees.length && <tr><td colSpan={6}>No employees match that name or file number.</td></tr>}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <p>{matchingEmployees.length.toLocaleString()} employees shown of {row.employee_details.length.toLocaleString()}.</p>
+                            </>
+                          ) : (
+                            <p>Employee details were not saved with this older import. Re-upload its original CSV and save the holiday again to add the employee report.</p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {archivedHistory.length > 0 && <details className="holiday-archive"><summary>Archived records ({archivedHistory.length})</summary><div className="table-scroll"><table className="data-table"><thead><tr><th>Holiday</th><th>Date</th><th>Employees</th><th>Holiday hours</th><th>Archived by</th><th></th></tr></thead><tbody>{archivedHistory.map((row) => <tr key={row.id}><td>{row.holiday_name}</td><td>{row.holiday_date}</td><td>{row.unique_employees.toLocaleString()}</td><td>{decimal(row.total_holiday_hours)}</td><td>{row.archived_by_email || "Payroll user"}</td><td><div className="holiday-history-actions"><button type="button" className="secondary-button" onClick={() => void restoreRow(row)}>Restore</button>{canDeleteArchived && <button type="button" className="archive-button" onClick={() => void deleteArchivedRow(row)}>Delete permanently</button>}</div></td></tr>)}</tbody></table></div></details>}
     </section>
   </div>;
 }

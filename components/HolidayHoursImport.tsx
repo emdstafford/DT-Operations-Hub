@@ -127,6 +127,15 @@ export default function HolidayHoursImport() {
         combined_source_hours: processed.totalSourceHours,
         capped_at_eight: processed.holidayAtEightEmployeeCounts[index],
         total_holiday_hours: processed.holidayTotals[index] ?? perHolidayHours,
+        employee_details: processed.rows.map((row) => ({
+          companyCode: row.companyCode,
+          fileNumber: row.fileNumber,
+          employeeName: row.employeeName,
+          payClass: row.payClass,
+          totalHours: row.totalHours,
+          holidayHours: Number((row.holidayHours / holidayCount).toFixed(2)),
+          sourceRows: row.sourceRows,
+        })),
         processed_by: userData.user.id,
         processed_by_email: userData.user.email?.toLowerCase(),
       })));
@@ -142,7 +151,9 @@ export default function HolidayHoursImport() {
             ? "The new holiday summary could not be saved, and the previous matching record could not be restored. Contact an administrator."
             : "The new holiday summary could not be saved. The previous matching record was restored.");
         } else {
-          setHistoryError("The payroll file was calculated, but its summary could not be saved to shared history.");
+          setHistoryError(saveError.code === "42703"
+            ? "Run supabase/holiday_employee_details.sql once to enable employee reports, then retry this import."
+            : "The payroll file was calculated, but its summary could not be saved to shared history.");
         }
       } else {
         setHistoryMessage(`${holidays.length === 1 ? holidays[0].name : "Both holidays"} automatically saved to Holiday Hours History.${previousRecords.length ? " The previous matching record was archived." : ""}`);
@@ -233,7 +244,7 @@ export default function HolidayHoursImport() {
         <li><strong>Set Employee Information Effective Date As of.</strong> Choose the specific date needed for this holiday-hours calculation.</li>
         <li><strong>Select Run and download the report as a CSV.</strong> Keep the Employee Name, Company Code, File Number, Hours, and Pay Class columns. First Name and Last Name columns are also accepted.</li>
         <li><strong>Select whether this import covers one or two holidays, then enter each holiday name and date.</strong> The file chooser becomes available after holiday names and dates are complete.</li>
-        <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, including PTO, applies the employee’s Pay Class rule, checks for duplicates, and automatically saves the summary to Holiday Hours History.</li>
+        <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, including PTO, applies the employee’s Pay Class rule, checks for duplicates, and automatically saves the summary and searchable employee calculations to Holiday Hours History.</li>
         <li><strong>Review the results.</strong> Check the employees in the import, excluded salary employees, source hours across all classes, employees capped at 8.00, and several individual employees.</li>
         <li><strong>Download the import CSV.</strong> The file is named epihne23.csv and contains Co Code, Batch ID, File #, Hours 3 Code, and Hours 3 Amount.</li>
         <li><strong>In ADP, go to Payroll Dashboard.</strong> Select Manage Payroll, then go to Worksheets.</li>
@@ -243,7 +254,7 @@ export default function HolidayHoursImport() {
         <strong>Calculation used</strong>
         <span>Mechanics FT, Office FT, and Office Staff FT receive 8.00 hours per holiday. Drivers salary clocking and other included pay classes use PTO-inclusive timecard hours ÷ 2 ÷ 40 × 8, rounded to two decimals and capped at 8.00. Salary and Salary Manager are excluded from the import.</span>
       </div>
-      <p className="privacy-note"><strong>Private processing:</strong> The source file, employee rows, and calculated CSV remain in this browser. Only summary totals, holiday names, dates, and audit information are saved automatically.</p>
+      <p className="privacy-note"><strong>Private processing:</strong> The source file and generated import CSV remain in this browser. Holiday totals and included employee calculation details are saved in payroll-restricted history.</p>
     </details>
 
     {error && <section className="panel payroll-error"><strong>File not processed</strong><span>{error}</span></section>}
