@@ -151,7 +151,9 @@ export default function HolidayHoursImport() {
             ? "The new holiday summary could not be saved, and the previous matching record could not be restored. Contact an administrator."
             : "The new holiday summary could not be saved. The previous matching record was restored.");
         } else {
-          setHistoryError("The payroll file was calculated, but its summary could not be saved to shared history.");
+          setHistoryError(saveError.code === "42703"
+            ? "Run supabase/holiday_employee_details.sql once to enable employee reports, then retry this import."
+            : "The payroll file was calculated, but its summary could not be saved to shared history.");
         }
       } else {
         setHistoryMessage(`${holidays.length === 1 ? holidays[0].name : "Both holidays"} automatically saved to Holiday Hours History.${previousRecords.length ? " The previous matching record was archived." : ""}`);
