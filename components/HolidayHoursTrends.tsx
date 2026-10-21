@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type HolidayEmployeeRow = {
@@ -133,7 +133,7 @@ export default function HolidayHoursTrends() {
   const activeHistory = useMemo(() => history.filter((row) => !row.archived_at), [history]);
   const archivedHistory = useMemo(() => history.filter((row) => Boolean(row.archived_at)), [history]);
   const years = useMemo(() => [...new Set(activeHistory.map((row) => row.holiday_date.slice(0, 4)))].sort().reverse(), [activeHistory]);
-  function contractsForEmployee(row: HistoryRow, employee: HolidayEmployeeRow) {
+  const contractsForEmployee = useCallback((row: HistoryRow, employee: HolidayEmployeeRow) => {
     const fileNumber = employee.fileNumber.trim().toLocaleLowerCase();
     const applicable = timecards
       .filter((report) => report.period_start <= row.holiday_date && report.period_end >= row.holiday_date)
@@ -145,7 +145,7 @@ export default function HolidayHoursTrends() {
       .filter((entry) => entry.employeeId.trim().toLocaleLowerCase() === fileNumber)
       .map((entry) => entry.contract.trim())
       .filter(Boolean))].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
-  }
+  }, [timecards]);
 
   const filtered = useMemo(() => activeHistory.filter((row) => {
     if (search && !row.holiday_name.toLowerCase().includes(search.toLowerCase().trim())) return false;
@@ -162,7 +162,7 @@ export default function HolidayHoursTrends() {
       contractsForEmployee(row, employee).some((contract) => contract.toLocaleLowerCase().includes(contractQuery))
     )) return false;
     return true;
-  }), [activeHistory, search, year, startDate, endDate, employeeSearch, contractSearch, timecards]);
+  }), [activeHistory, search, year, startDate, endDate, employeeSearch, contractSearch, contractsForEmployee]);
 
   const yearly = useMemo(() => {
     const groups = new Map<string, HistoryRow[]>();
@@ -343,7 +343,7 @@ export default function HolidayHoursTrends() {
         <div><h3>Holiday comparison</h3><div className="table-scroll"><table className="data-table"><thead><tr><th>Holiday</th><th>Years</th><th>Avg. employees</th><th>Avg. source hours</th><th>Avg. holiday hours</th><th>Latest</th></tr></thead><tbody>{comparisons.map((row) => <tr key={row.name.toLowerCase()}><td><strong>{row.name}</strong></td><td>{row.occurrences}</td><td>{decimal(row.averageEmployees)}</td><td>{decimal(row.averageSourceHours)}</td><td>{decimal(row.averageHolidayHours)}</td><td>{row.latest}</td></tr>)}</tbody></table></div></div>
       </div>}
       <h3 className="holiday-history-title">Saved imports</h3>
-      <p className="privacy-note">Employee details are available only to employees approved for payroll tools. Contract matches use the saved timecard report covering the holiday date and the employee file number. Older imports may not include employee details because they were saved before this feature.</p>
+      <p className="privacy-note">{contractLookupError ? "Contract matching is unavailable because saved payroll history could not be read. " : ""}Employee details are available only to employees approved for payroll tools. Contract matches use the saved timecard report covering the holiday date and the employee file number. Older imports may not include employee details because they were saved before this feature.</p>
       <div className="table-scroll">
         <table className="data-table holiday-history-table">
           <thead><tr><th>Holiday name</th><th>Date</th><th>Source rows</th><th>Employees</th><th>Source hours</th><th>Capped</th><th>Holiday hours</th><th>Processed by</th><th></th></tr></thead>
