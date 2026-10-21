@@ -123,8 +123,13 @@ export default function HolidayHoursTrends() {
     if (year && row.holiday_date.slice(0, 4) !== year) return false;
     if (startDate && row.holiday_date < startDate) return false;
     if (endDate && row.holiday_date > endDate) return false;
+    const employeeQuery = employeeSearch.trim().toLocaleLowerCase();
+    if (employeeQuery && !row.employee_details.some((employee) =>
+      employee.employeeName.toLocaleLowerCase().includes(employeeQuery) ||
+      employee.fileNumber.toLocaleLowerCase().includes(employeeQuery)
+    )) return false;
     return true;
-  }), [activeHistory, search, year, startDate, endDate]);
+  }), [activeHistory, search, year, startDate, endDate, employeeSearch]);
 
   const yearly = useMemo(() => {
     const groups = new Map<string, HistoryRow[]>();
@@ -249,17 +254,44 @@ export default function HolidayHoursTrends() {
     URL.revokeObjectURL(url);
   }
 
+  function exportEmployeeCsv() {
+    const employeeQuery = employeeSearch.trim().toLocaleLowerCase();
+    const output: (string | number)[][] = [
+      ["Holiday Name", "Holiday Date", "Co Code", "Batch ID", "Employee Name", "File #", "Pay Class", "Hours 3 Code", "Combined Source Hours", "Source Rows", "Hours 3 Amount"],
+      ...filtered.flatMap((row) => row.employee_details
+        .filter((employee) => !employeeQuery ||
+          employee.employeeName.toLocaleLowerCase().includes(employeeQuery) ||
+          employee.fileNumber.toLocaleLowerCase().includes(employeeQuery))
+        .map((employee) => [
+          row.holiday_name, row.holiday_date, employee.companyCode, "Holiday",
+          employee.employeeName, employee.fileNumber, employee.payClass, "HOL",
+          employee.totalHours.toFixed(2), employee.sourceRows, employee.holidayHours.toFixed(2),
+        ])),
+    ];
+    const csv = output.map((row) => row.map(csvValue).join(",")).join("\r\n") + "\r\n";
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "holiday_employee_details.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
   if (loading) return <section className="panel holiday-history-empty">Loading holiday hours history…</section>;
 
   return <div className="payroll-trends-stack">
     {(error || message) && <section className={`panel ${error ? "payroll-error" : "holiday-history-success"}`}><strong>{error ? "Holiday Hours History" : "History updated"}</strong><span>{error || message}</span></section>}
     <section className="panel payroll-trend-filters">
       <label>Holiday search<input value={search} placeholder="Christmas" onChange={(event) => setSearch(event.target.value)} /></label>
+      <label>Employee search<input value={employeeSearch} placeholder="Name or file number" onChange={(event) => setEmployeeSearch(event.target.value)} /></label>
       <label>Year<select value={year} onChange={(event) => setYear(event.target.value)}><option value="">All years</option>{years.map((option) => <option key={option}>{option}</option>)}</select></label>
       <label>From<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
       <label>Through<input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
-      <button type="button" className="secondary-button" onClick={() => { setSearch(""); setYear(""); setStartDate(""); setEndDate(""); }}>Clear</button>
-      <button type="button" className="upload-button" disabled={!filtered.length} onClick={exportCsv}>Export filtered CSV</button>
+      <button type="button" className="secondary-button" onClick={() => { setSearch(""); setEmployeeSearch(""); setYear(""); setStartDate(""); setEndDate(""); }}>Clear</button>
+      <button type="button" className="upload-button" disabled={!filtered.length} onClick={exportCsv}>Export holiday summary CSV</button>
+      <button type="button" className="upload-button" disabled={!filtered.some((row) => row.employee_details.length)} onClick={exportEmployeeCsv}>Export employee details CSV</button>
     </section>
 
     <section className="payroll-summary-grid" aria-label="Filtered holiday totals">
