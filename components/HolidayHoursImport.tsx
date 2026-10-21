@@ -127,6 +127,15 @@ export default function HolidayHoursImport() {
         combined_source_hours: processed.totalSourceHours,
         capped_at_eight: processed.holidayAtEightEmployeeCounts[index],
         total_holiday_hours: processed.holidayTotals[index] ?? perHolidayHours,
+        employee_details: processed.rows.map((row) => ({
+          companyCode: row.companyCode,
+          fileNumber: row.fileNumber,
+          employeeName: row.employeeName,
+          payClass: row.payClass,
+          totalHours: row.totalHours,
+          holidayHours: Number((row.holidayHours / holidayCount).toFixed(2)),
+          sourceRows: row.sourceRows,
+        })),
         processed_by: userData.user.id,
         processed_by_email: userData.user.email?.toLowerCase(),
       })));
