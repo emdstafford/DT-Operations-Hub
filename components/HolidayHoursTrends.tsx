@@ -317,15 +317,15 @@ export default function HolidayHoursTrends() {
                             <>
                               <label>Search employees by name or file number<input type="search" value={employeeSearch} placeholder="Name or file number" onChange={(event) => setEmployeeSearch(event.target.value)} /></label>
                               <div className="table-scroll">
-                                <table className="data-table">
-                                  <thead><tr><th>Employee</th><th>File #</th><th>Pay class</th><th>Source hours</th><th>Source rows</th><th>Holiday hours</th></tr></thead>
+                                <table className="data-table payroll-preview-table">
+                                  <thead><tr><th>Co Code</th><th>Batch ID</th><th>Employee Name</th><th>File #</th><th>Pay Class</th><th>Hours 3 Code</th><th>Combined source hours</th><th>Source rows</th><th>Hours 3 Amount</th></tr></thead>
                                   <tbody>
                                     {matchingEmployees.map((employee) => (
                                       <tr key={employee.companyCode + "-" + employee.fileNumber}>
-                                        <td>{employee.employeeName}</td><td>{employee.fileNumber}</td><td>{employee.payClass}</td><td>{decimal(employee.totalHours)}</td><td>{employee.sourceRows}</td><td><strong>{decimal(employee.holidayHours)}</strong></td>
+                                        <td>{employee.companyCode}</td><td>Holiday</td><td>{employee.employeeName}</td><td>{employee.fileNumber}</td><td>{employee.payClass}</td><td>HOL</td><td>{decimal(employee.totalHours)}</td><td>{employee.sourceRows}</td><td><strong>{decimal(employee.holidayHours)}</strong></td>
                                       </tr>
                                     ))}
-                                    {!matchingEmployees.length && <tr><td colSpan={6}>No employees match that name or file number.</td></tr>}
+                                    {!matchingEmployees.length && <tr><td colSpan={9}>No employees match that name or file number.</td></tr>}
                                   </tbody>
                                 </table>
                               </div>
