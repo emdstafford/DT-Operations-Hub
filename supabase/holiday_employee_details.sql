@@ -41,7 +41,4 @@ grant delete on public.holiday_import_history to authenticated;
 
 -- Grant permanent archive deletion only to Em's Hub account.
 update public.payroll_tool_users
-set can_delete_holiday_history = (email = 'estafford@dtexpress.net')
-where email in (
-  'estafford@dtexpress.net'
-);
+set can_delete_holiday_history = (email = 'estafford@dtexpress.net');
