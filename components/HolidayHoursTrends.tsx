@@ -69,7 +69,7 @@ export default function HolidayHoursTrends() {
       if (!active) return;
       if (historyError) {
         setError(historyError.code === "42703"
-          ? "Run the updated holiday-history SQL once to enable Holiday Hours History."
+          ? "Run supabase/holiday_employee_details.sql once to enable saved employee reports. Existing holiday history will remain available."
           : historyError.message);
         setHistory([]);
       } else {
