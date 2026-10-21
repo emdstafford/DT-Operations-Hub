@@ -56,6 +56,7 @@ export default function HolidayHoursTrends() {
   const [reload, setReload] = useState(0);
   const [openDetailsId, setOpenDetailsId] = useState<string | null>(null);
   const [employeeSearch, setEmployeeSearch] = useState("");
+  const [canDeleteArchived, setCanDeleteArchived] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -97,6 +98,17 @@ export default function HolidayHoursTrends() {
             sourceRows: Number(employee.sourceRows),
           })) : [],
         })));
+      }
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData.user?.email) {
+        const { data: access } = await supabase.from("payroll_tool_users")
+          .select("can_delete_holiday_history")
+          .eq("email", userData.user.email.toLowerCase())
+          .eq("active", true)
+          .maybeSingle();
+        if (active) setCanDeleteArchived(Boolean(access?.can_delete_holiday_history));
+      } else {
+        setCanDeleteArchived(false);
       }
       setLoading(false);
     })();
@@ -201,6 +213,22 @@ export default function HolidayHoursTrends() {
     if (restoreError) setError(restoreError.message);
     else {
       setMessage(`${row.holiday_name} restored.`);
+      setReload((value) => value + 1);
+    }
+  }
+
+  async function deleteArchivedRow(row: HistoryRow) {
+    if (!canDeleteArchived || !row.archived_at) return;
+    if (!window.confirm(`Permanently delete ${row.holiday_name} (${row.holiday_date}) from the archive? This cannot be undone.`)) return;
+    setError("");
+    setMessage("");
+    const { error: deleteError } = await supabase.from("holiday_import_history")
+      .delete()
+      .eq("id", row.id)
+      .eq("archived_at", row.archived_at);
+    if (deleteError) setError(deleteError.message);
+    else {
+      setMessage(`${row.holiday_name} permanently deleted from the archive.`);
       setReload((value) => value + 1);
     }
   }
@@ -316,7 +344,7 @@ export default function HolidayHoursTrends() {
           </tbody>
         </table>
       </div>
-      {archivedHistory.length > 0 && <details className="holiday-archive"><summary>Archived records ({archivedHistory.length})</summary><div className="table-scroll"><table className="data-table"><thead><tr><th>Holiday</th><th>Date</th><th>Employees</th><th>Holiday hours</th><th>Archived by</th><th></th></tr></thead><tbody>{archivedHistory.map((row) => <tr key={row.id}><td>{row.holiday_name}</td><td>{row.holiday_date}</td><td>{row.unique_employees.toLocaleString()}</td><td>{decimal(row.total_holiday_hours)}</td><td>{row.archived_by_email || "Payroll user"}</td><td><button type="button" className="secondary-button" onClick={() => void restoreRow(row)}>Restore</button></td></tr>)}</tbody></table></div></details>}
+      {archivedHistory.length > 0 && <details className="holiday-archive"><summary>Archived records ({archivedHistory.length})</summary><div className="table-scroll"><table className="data-table"><thead><tr><th>Holiday</th><th>Date</th><th>Employees</th><th>Holiday hours</th><th>Archived by</th><th></th></tr></thead><tbody>{archivedHistory.map((row) => <tr key={row.id}><td>{row.holiday_name}</td><td>{row.holiday_date}</td><td>{row.unique_employees.toLocaleString()}</td><td>{decimal(row.total_holiday_hours)}</td><td>{row.archived_by_email || "Payroll user"}</td><td><div className="holiday-history-actions"><button type="button" className="secondary-button" onClick={() => void restoreRow(row)}>Restore</button>{canDeleteArchived && <button type="button" className="archive-button" onClick={() => void deleteArchivedRow(row)}>Delete permanently</button>}</div></td></tr>)}</tbody></table></div></details>}
     </section>
   </div>;
 }
