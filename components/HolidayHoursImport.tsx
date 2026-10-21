@@ -242,7 +242,7 @@ export default function HolidayHoursImport() {
         <li><strong>Set Employee Information Effective Date As of.</strong> Choose the specific date needed for this holiday-hours calculation.</li>
         <li><strong>Select Run and download the report as a CSV.</strong> Keep the Employee Name, Company Code, File Number, Hours, and Pay Class columns. First Name and Last Name columns are also accepted.</li>
         <li><strong>Select whether this import covers one or two holidays, then enter each holiday name and date.</strong> The file chooser becomes available after holiday names and dates are complete.</li>
-        <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, including PTO, applies the employee’s Pay Class rule, checks for duplicates, and automatically saves the summary to Holiday Hours History.</li>
+        <li><strong>Upload the downloaded CSV above.</strong> The Hub adds every Hours row for the same employee, including PTO, applies the employee’s Pay Class rule, checks for duplicates, and automatically saves the summary and searchable employee calculations to Holiday Hours History.</li>
         <li><strong>Review the results.</strong> Check the employees in the import, excluded salary employees, source hours across all classes, employees capped at 8.00, and several individual employees.</li>
         <li><strong>Download the import CSV.</strong> The file is named epihne23.csv and contains Co Code, Batch ID, File #, Hours 3 Code, and Hours 3 Amount.</li>
         <li><strong>In ADP, go to Payroll Dashboard.</strong> Select Manage Payroll, then go to Worksheets.</li>
