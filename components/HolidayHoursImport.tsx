@@ -252,7 +252,7 @@ export default function HolidayHoursImport() {
         <strong>Calculation used</strong>
         <span>Mechanics FT, Office FT, and Office Staff FT receive 8.00 hours per holiday. Drivers salary clocking and other included pay classes use PTO-inclusive timecard hours ÷ 2 ÷ 40 × 8, rounded to two decimals and capped at 8.00. Salary and Salary Manager are excluded from the import.</span>
       </div>
-      <p className="privacy-note"><strong>Private processing:</strong> The source file, employee rows, and calculated CSV remain in this browser. Only summary totals, holiday names, dates, and audit information are saved automatically.</p>
+      <p className="privacy-note"><strong>Private processing:</strong> The source file and generated import CSV remain in this browser. Holiday totals and included employee calculation details are saved in payroll-restricted history.</p>
     </details>
 
     {error && <section className="panel payroll-error"><strong>File not processed</strong><span>{error}</span></section>}
