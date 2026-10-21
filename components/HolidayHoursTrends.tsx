@@ -250,12 +250,72 @@ export default function HolidayHoursTrends() {
       </div>}
       <h3 className="holiday-history-title">Saved imports</h3>
       <p className="privacy-note">Employee details are available only to employees approved for payroll tools. Older imports may not include employee details because they were saved before this feature.</p>
-      <div className="table-scroll"><table className="data-table holiday-history-table"><thead><tr><th>Holiday name</th><th>Date</th><th>Source rows</th><th>Employees</th><th>Source hours</th><th>Capped</th><th>Holiday hours</th><th>Processed by</th><th></th></tr></thead><tbody>{filtered.map((row) => <Fragment key={row.id}><tr>
-        <td><input aria-label="Holiday name" value={row.holiday_name} onChange={(event) => updateRow(row.id, "holiday_name", event.target.value)} /></td>
-        <td><input aria-label="Holiday date" type="date" value={row.holiday_date.slice(0, 10)} onChange={(event) => updateRow(row.id, "holiday_date", event.target.value)} /></td>
-        <td>{row.source_rows.toLocaleString()}</td><td>{row.unique_employees.toLocaleString()}</td><td>{decimal(row.combined_source_hours)}</td><td>{row.capped_at_eight.toLocaleString()}</td><td>{decimal(row.total_holiday_hours)}</td><td><span>{row.processed_by_email}</span><small>{new Date(row.created_at).toLocaleString()}</small></td>
-        <td><div className="holiday-history-actions"><button type="button" className="secondary-button" onClick={() => void saveRow(row)}>Save</button><button type="button" className="archive-button" onClick={() => void archiveRow(row)}>Archive</button></div><button type="button" className="hub-secondary-link" aria-expanded={openDetailsId === row.id} onClick={() => { setOpenDetailsId(openDetailsId === row.id ? null : row.id); setEmployeeSearch(""); }}>{openDetailsId === row.id ? "Hide employees" : "View employees"}</button></td>
-      </tr>{openDetailsId === row.id && <tr key={row.id + "-employees"}><td colSpan={9}><div className="holiday-employee-details"><h4>{row.holiday_name} employee details</h4>{row.employee_details.length ? <><label>Search employees by name or file number<input type="search" value={employeeSearch} placeholder="Name or file number" onChange={(event) => setEmployeeSearch(event.target.value)} /></label><div className="table-scroll"><table className="data-table"><thead><tr><th>Employee</th><th>File #</th><th>Pay class</th><th>Source hours</th><th>Source rows</th><th>Holiday hours</th></tr></thead><tbody>{row.employee_details.filter((employee) => { const query = employeeSearch.trim().toLocaleLowerCase(); return !query || employee.employeeName.toLocaleLowerCase().includes(query) || employee.fileNumber.toLocaleLowerCase().includes(query); }).map((employee) => <tr key={employee.companyCode + "-" + employee.fileNumber}><td>{employee.employeeName}</td><td>{employee.fileNumber}</td><td>{employee.payClass}</td><td>{decimal(employee.totalHours)}</td><td>{employee.sourceRows}</td><td><strong>{decimal(employee.holidayHours)}</strong></td></tr>)}</tbody></table></div><p>{row.employee_details.filter((employee) => { const query = employeeSearch.trim().toLocaleLowerCase(); return !query || employee.employeeName.toLocaleLowerCase().includes(query) || employee.fileNumber.toLocaleLowerCase().includes(query); }).length.toLocaleString()} employees shown of {row.employee_details.length.toLocaleString()}.</p></> : <p>Employee details were not saved with this older import. Re-upload its original CSV and save the holiday again to add the employee report.</p>}</div></td></tr></Fragment>)}</tbody></table></div>
+      <div className="table-scroll">
+        <table className="data-table holiday-history-table">
+          <thead><tr><th>Holiday name</th><th>Date</th><th>Source rows</th><th>Employees</th><th>Source hours</th><th>Capped</th><th>Holiday hours</th><th>Processed by</th><th></th></tr></thead>
+          <tbody>
+            {filtered.map((row) => {
+              const query = employeeSearch.trim().toLocaleLowerCase();
+              const matchingEmployees = row.employee_details.filter((employee) =>
+                !query || employee.employeeName.toLocaleLowerCase().includes(query) || employee.fileNumber.toLocaleLowerCase().includes(query)
+              );
+              return (
+                <Fragment key={row.id}>
+                  <tr>
+                    <td><input aria-label="Holiday name" value={row.holiday_name} onChange={(event) => updateRow(row.id, "holiday_name", event.target.value)} /></td>
+                    <td><input aria-label="Holiday date" type="date" value={row.holiday_date.slice(0, 10)} onChange={(event) => updateRow(row.id, "holiday_date", event.target.value)} /></td>
+                    <td>{row.source_rows.toLocaleString()}</td>
+                    <td>{row.unique_employees.toLocaleString()}</td>
+                    <td>{decimal(row.combined_source_hours)}</td>
+                    <td>{row.capped_at_eight.toLocaleString()}</td>
+                    <td>{decimal(row.total_holiday_hours)}</td>
+                    <td><span>{row.processed_by_email}</span><small>{new Date(row.created_at).toLocaleString()}</small></td>
+                    <td>
+                      <div className="holiday-history-actions">
+                        <button type="button" className="secondary-button" onClick={() => void saveRow(row)}>Save</button>
+                        <button type="button" className="archive-button" onClick={() => void archiveRow(row)}>Archive</button>
+                      </div>
+                      <button type="button" className="hub-secondary-link" aria-expanded={openDetailsId === row.id} onClick={() => { setOpenDetailsId(openDetailsId === row.id ? null : row.id); setEmployeeSearch(""); }}>
+                        {openDetailsId === row.id ? "Hide employees" : "View employees"}
+                      </button>
+                    </td>
+                  </tr>
+                  {openDetailsId === row.id && (
+                    <tr>
+                      <td colSpan={9}>
+                        <div className="holiday-employee-details">
+                          <h4>{row.holiday_name} employee details</h4>
+                          {row.employee_details.length ? (
+                            <>
+                              <label>Search employees by name or file number<input type="search" value={employeeSearch} placeholder="Name or file number" onChange={(event) => setEmployeeSearch(event.target.value)} /></label>
+                              <div className="table-scroll">
+                                <table className="data-table">
+                                  <thead><tr><th>Employee</th><th>File #</th><th>Pay class</th><th>Source hours</th><th>Source rows</th><th>Holiday hours</th></tr></thead>
+                                  <tbody>
+                                    {matchingEmployees.map((employee) => (
+                                      <tr key={employee.companyCode + "-" + employee.fileNumber}>
+                                        <td>{employee.employeeName}</td><td>{employee.fileNumber}</td><td>{employee.payClass}</td><td>{decimal(employee.totalHours)}</td><td>{employee.sourceRows}</td><td><strong>{decimal(employee.holidayHours)}</strong></td>
+                                      </tr>
+                                    ))}
+                                    {!matchingEmployees.length && <tr><td colSpan={6}>No employees match that name or file number.</td></tr>}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <p>{matchingEmployees.length.toLocaleString()} employees shown of {row.employee_details.length.toLocaleString()}.</p>
+                            </>
+                          ) : (
+                            <p>Employee details were not saved with this older import. Re-upload its original CSV and save the holiday again to add the employee report.</p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       {archivedHistory.length > 0 && <details className="holiday-archive"><summary>Archived records ({archivedHistory.length})</summary><div className="table-scroll"><table className="data-table"><thead><tr><th>Holiday</th><th>Date</th><th>Employees</th><th>Holiday hours</th><th>Archived by</th><th></th></tr></thead><tbody>{archivedHistory.map((row) => <tr key={row.id}><td>{row.holiday_name}</td><td>{row.holiday_date}</td><td>{row.unique_employees.toLocaleString()}</td><td>{decimal(row.total_holiday_hours)}</td><td>{row.archived_by_email || "Payroll user"}</td><td><button type="button" className="secondary-button" onClick={() => void restoreRow(row)}>Restore</button></td></tr>)}</tbody></table></div></details>}
     </section>
   </div>;
