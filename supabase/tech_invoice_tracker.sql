@@ -49,14 +49,9 @@ on public.tech_invoices for update to authenticated
 using (public.is_approved(array['admin']))
 with check (public.is_approved(array['admin']));
 
-drop policy if exists "DT admins can delete tech invoices" on public.tech_invoices;
-create policy "DT admins can delete tech invoices"
-on public.tech_invoices for delete to authenticated
-using (public.is_approved(array['admin']));
-
 revoke all on public.tech_invoices from anon;
 revoke all on public.tech_invoices from authenticated;
-grant select, delete on public.tech_invoices to authenticated;
+grant select on public.tech_invoices to authenticated;
 grant insert (vendor, invoice_number, description, category, invoice_date, due_date, amount, status, paid_at, notes, updated_at)
   on public.tech_invoices to authenticated;
 grant update (vendor, invoice_number, description, category, invoice_date, due_date, amount, status, paid_at, notes, updated_at)
