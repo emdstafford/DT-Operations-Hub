@@ -125,6 +125,7 @@ export default function TechInvoiceTracker() {
   const [pdfProgress, setPdfProgress] = useState("");
   const [pdfDrafts, setPdfDrafts] = useState<InvoicePdfDraft[]>([]);
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const invoiceFormRef = useRef<HTMLFormElement>(null);
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
@@ -142,6 +143,7 @@ export default function TechInvoiceTracker() {
   }, []);
 
   useEffect(() => { void loadInvoices(); }, [loadInvoices]);
+  useEffect(() => { if (showForm) invoiceFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [showForm, editing]);
   const activeInvoices = useMemo(() => invoices.filter((invoice) => invoice.status !== "void"), [invoices]);
   const paidInvoices = useMemo(() => activeInvoices.filter((invoice) => invoice.status === "paid"), [activeInvoices]);
   const yearOptions = useMemo(() => {
@@ -357,6 +359,25 @@ export default function TechInvoiceTracker() {
       {notice && <div className="invoice-notice" role="status">{notice}</div>}
       {readingPdf && <div className="invoice-notice" role="status">{pdfProgress}</div>}
 
+      {showForm && <form ref={invoiceFormRef} className="invoice-form" onSubmit={saveInvoice}>
+        <div className="invoice-form-heading"><div><p className="eyebrow">{editing ? "Update record" : "New record"}</p><h2>{editing ? "Edit invoice" : "Add a tech invoice"}</h2></div><button type="button" className="text-button" onClick={() => setShowForm(false)}>Cancel</button></div>
+        <div className="invoice-form-grid">
+          <label>Vendor<input required maxLength={120} value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} placeholder="e.g. Internet provider" /></label>
+          <label>Invoice number <span className="optional">(optional)</span><input maxLength={80} value={draft.invoice_number} onChange={(e) => setDraft({ ...draft, invoice_number: e.target.value })} /></label>
+          <label>Account number <span className="optional">(optional)</span><input maxLength={80} value={draft.account_number} onChange={(e) => setDraft({ ...draft, account_number: e.target.value })} /></label>
+          <label>Description<input required maxLength={180} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Service, equipment, or subscription" /></label>
+          <label>Category<select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>{!invoiceCategories.includes(draft.category) && <option>{draft.category}</option>}{invoiceCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
+          <label>Invoice date<input type="date" value={draft.invoice_date} onChange={(e) => setDraft({ ...draft, invoice_date: e.target.value })} /></label>
+          <label>Due date<input required type="date" value={draft.due_date} onChange={(e) => setDraft({ ...draft, due_date: e.target.value })} /></label>
+          <label>Amount<input required type="number" min="0.01" step="0.01" value={draft.amount || ""} onChange={(e) => setDraft({ ...draft, amount: Number(e.target.value) })} placeholder="0.00" /></label>
+          <label>Payment status<select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as "open" | "paid", paid_at: e.target.value === "paid" ? draft.paid_at || today() : "" })}><option value="open">Unpaid</option><option value="paid">Paid</option></select></label>
+          {draft.status === "paid" && <label>Payment date<input required type="date" value={draft.paid_at} onChange={(e) => setDraft({ ...draft, paid_at: e.target.value })} /></label>}
+          <label className="invoice-notes-field">Notes <span className="optional">(optional)</span><textarea rows={2} maxLength={1000} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /></label>
+        </div>
+        {error && !sqlMessage && <div className="alert alert-error">{error}</div>}
+        <div className="invoice-form-footer"><span>Invoice details are limited to authorized accounts.</span><button className="primary-link" disabled={saving}>{saving ? "Saving…" : editing ? "Save changes" : "Save invoice"}</button></div>
+      </form>}
+
       {pdfDrafts.length > 0 && <section className="invoice-batch" aria-labelledby="invoice-batch-title">
         <div className="invoice-batch-heading"><div><p className="eyebrow">PDF batch import · {pdfDrafts.length} invoice{pdfDrafts.length === 1 ? "" : "s"}</p><h2 id="invoice-batch-title">Review invoices before saving</h2><p>Check every field. The PDFs stay in your browser and are not saved to the tracker.</p></div><div className="invoice-batch-actions"><button type="button" className="secondary-link" disabled={readingPdf} onClick={() => pdfInputRef.current?.click()}>＋ Add more PDFs</button><button type="button" className="text-button" onClick={() => setPdfDrafts([])}>Clear batch</button></div></div>
         <div className="invoice-batch-list">{pdfDrafts.map((item, index) => {
@@ -406,24 +427,7 @@ export default function TechInvoiceTracker() {
         <p className="invoice-breakdown-note">Paid totals use payment date; unpaid totals use due date. Voided invoices are excluded. Search and category filters apply to this breakdown.</p>
       </section>
 
-      {showForm && <form className="invoice-form" onSubmit={saveInvoice}>
-        <div className="invoice-form-heading"><div><p className="eyebrow">{editing ? "Update record" : "New record"}</p><h2>{editing ? "Edit invoice" : "Add a tech invoice"}</h2></div><button type="button" className="text-button" onClick={() => setShowForm(false)}>Cancel</button></div>
-        <div className="invoice-form-grid">
-          <label>Vendor<input required maxLength={120} value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} placeholder="e.g. Internet provider" /></label>
-          <label>Invoice number <span className="optional">(optional)</span><input maxLength={80} value={draft.invoice_number} onChange={(e) => setDraft({ ...draft, invoice_number: e.target.value })} /></label>
-          <label>Account number <span className="optional">(optional)</span><input maxLength={80} value={draft.account_number} onChange={(e) => setDraft({ ...draft, account_number: e.target.value })} /></label>
-          <label>Description<input required maxLength={180} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Service, equipment, or subscription" /></label>
-          <label>Category<select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>{!invoiceCategories.includes(draft.category) && <option>{draft.category}</option>}{invoiceCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
-          <label>Invoice date<input type="date" value={draft.invoice_date} onChange={(e) => setDraft({ ...draft, invoice_date: e.target.value })} /></label>
-          <label>Due date<input required type="date" value={draft.due_date} onChange={(e) => setDraft({ ...draft, due_date: e.target.value })} /></label>
-          <label>Amount<input required type="number" min="0.01" step="0.01" value={draft.amount || ""} onChange={(e) => setDraft({ ...draft, amount: Number(e.target.value) })} placeholder="0.00" /></label>
-          <label>Payment status<select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as "open" | "paid", paid_at: e.target.value === "paid" ? draft.paid_at || today() : "" })}><option value="open">Unpaid</option><option value="paid">Paid</option></select></label>
-          {draft.status === "paid" && <label>Payment date<input required type="date" value={draft.paid_at} onChange={(e) => setDraft({ ...draft, paid_at: e.target.value })} /></label>}
-          <label className="invoice-notes-field">Notes <span className="optional">(optional)</span><textarea rows={2} maxLength={1000} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /></label>
-        </div>
-        {error && !sqlMessage && <div className="alert alert-error">{error}</div>}
-        <div className="invoice-form-footer"><span>Invoice details are limited to authorized accounts.</span><button className="primary-link" disabled={saving}>{saving ? "Saving…" : editing ? "Save changes" : "Save invoice"}</button></div>
-      </form>}
+
 
       <div className="invoice-list-heading"><div><p className="eyebrow">Invoice register</p><h2>Invoices</h2></div>
         <div className="invoice-filters">
