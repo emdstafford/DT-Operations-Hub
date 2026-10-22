@@ -184,7 +184,7 @@ export default function TechInvoiceTracker() {
           <label className="invoice-notes-field">Notes <span className="optional">(optional)</span><textarea rows={2} maxLength={1000} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /></label>
         </div>
         {error && !sqlMessage && <div className="alert alert-error">{error}</div>}
-        <div className="invoice-form-footer"><span>Invoice details are visible to admins only.</span><button className="primary-link" disabled={saving}>{saving ? "Saving…" : editing ? "Save changes" : "Save invoice"}</button></div>
+        <div className="invoice-form-footer"><span>Invoice details are limited to authorized accounts.</span><button className="primary-link" disabled={saving}>{saving ? "Saving…" : editing ? "Save changes" : "Save invoice"}</button></div>
       </form>}
 
       <div className="invoice-list-heading"><div><p className="eyebrow">Invoice register</p><h2>Invoices</h2></div>
