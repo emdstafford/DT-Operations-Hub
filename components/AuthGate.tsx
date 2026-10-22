@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 
 const publicPaths = ["/login", "/auth/callback"];
 const reportManagementPaths = ["/upload", "/history", "/schedule-builder", "/historical-upload", "/admin"];
+const techInvoiceEmails = new Set(["estafford@dtexpress.net", "ccochran@dtexpress.net"]);
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -18,6 +19,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [operationsRole, setOperationsRole] = useState("");
   const [payrollAccess, setPayrollAccess] = useState(false);
   const [fuelAccess, setFuelAccess] = useState(false);
+  const [techInvoiceAccess, setTechInvoiceAccess] = useState(false);
   const isPublic = publicPaths.some((path) => pathname.startsWith(path));
 
   useEffect(() => {
@@ -29,12 +31,14 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         setOperationsRole("");
         setPayrollAccess(false);
         setFuelAccess(false);
+        setTechInvoiceAccess(false);
         setChecking(false);
         if (!isPublic) router.replace("/login");
         return;
       }
 
       const email = nextSession.user.email?.toLowerCase() ?? "";
+      const canUseTechInvoices = techInvoiceEmails.has(email);
       const [operationsResult, payrollResult, fuelResult] = await Promise.all([
         supabase.from("approved_users").select("email, role").eq("email", email).eq("active", true).maybeSingle(),
         supabase.from("payroll_tool_users").select("email").eq("email", email).eq("active", true).maybeSingle(),
@@ -51,6 +55,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       setOperationsRole(role);
       setPayrollAccess(canUsePayroll);
       setFuelAccess(canUseFuel);
+      setTechInvoiceAccess(canUseTechInvoices);
       setChecking(false);
 
       if (!canUseOperations && !canUsePayroll && !canUseFuel) {
@@ -61,7 +66,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       } else if (pathname === "/auth/callback" || pathname === "/account/password") {
         // Every approved employee can set a password, including payroll-only users.
         return;
-      } else if (isTechInvoicePath && role !== "admin") {
+      } else if (isTechInvoicePath && !canUseTechInvoices) {
         router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : "/payroll");
       } else if (pathname.startsWith("/payroll") && !canUsePayroll) {
         router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : "/login");
@@ -90,7 +95,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   if (isPublic) return <>{children}</>;
   if (!session || (operationsRole === "dashboard_fuel_viewer" && pathname !== "/" && !pathname.startsWith("/fuel"))) return null;
   return <AccessRole.Provider value={operationsRole}><div className="app-frame">
-    <NavBar operationsRole={operationsRole} payrollAccess={payrollAccess} fuelAccess={fuelAccess} />
+    <NavBar operationsRole={operationsRole} payrollAccess={payrollAccess} fuelAccess={fuelAccess} techInvoiceAccess={techInvoiceAccess} />
     <div className="app-content">{children}</div>
   </div></AccessRole.Provider>;
 }

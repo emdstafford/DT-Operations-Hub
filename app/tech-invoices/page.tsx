@@ -5,7 +5,7 @@ export default function TechInvoicesPage() {
     <main className="page-shell">
       <div className="page-intro">
         <div>
-          <p className="eyebrow">DT Intelligence Hub · Admin</p>
+          <p className="eyebrow">DT Intelligence Hub · Restricted access</p>
           <h1>Tech invoices</h1>
           <p>Track due dates, payments, and technology spending in one place.</p>
         </div>
