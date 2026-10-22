@@ -9,6 +9,7 @@ type Invoice = {
   id: string;
   vendor: string;
   invoice_number: string | null;
+  account_number: string | null;
   description: string;
   category: string;
   invoice_date: string | null;
@@ -22,6 +23,7 @@ type Invoice = {
 type InvoiceDraft = {
   vendor: string;
   invoice_number: string;
+  account_number: string;
   description: string;
   category: string;
   invoice_date: string;
@@ -39,7 +41,7 @@ type InvoicePdfDraft = {
 };
 
 const invoiceCategories = ["Software", "Equipment", "Internet", "Phones", "IT support", "Other"];
-const emptyDraft: InvoiceDraft = { vendor: "", invoice_number: "", description: "", category: "Software", invoice_date: "", due_date: "", amount: 0, status: "open", paid_at: "", notes: "" };
+const emptyDraft: InvoiceDraft = { vendor: "", invoice_number: "", account_number: "", description: "", category: "Software", invoice_date: "", due_date: "", amount: 0, status: "open", paid_at: "", notes: "" };
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const localDate = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 const today = () => localDate(new Date());
@@ -69,6 +71,7 @@ function extractInvoiceFields(text: string): Partial<InvoiceDraft> {
   const invoiceNumber = text.match(/(?:invoice\s*(?:number|no\.?|#)|invoice\s*#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9/-]{2,})/i)?.[1]
     || text.match(/\binvoice\s+([A-Z0-9][A-Z0-9/-]{2,})\s+(?=date\b)/i)?.[1]
     || "";
+  const accountNumber = text.match(/(?:account\s*(?:number|no\.?|#)|acct\.?\s*(?:number|no\.?|#))\s*[:#-]?\s*([A-Z0-9][A-Z0-9/-]{1,})/i)?.[1] || "";
   const amountLine = text.match(/(?:amount\s*due|balance\s*due|total\s*due|invoice\s*total|grand\s*total)[^\d$]{0,18}\$?\s*([\d,]+\.\d{2})/i)?.[1];
   const amount = amountLine ? Number(amountLine.replace(/,/g, "")) : 0;
   const vendor = text.match(/^\s*(?:vendor|supplier|from)\s*:?\s*(.+?)\s*$/im)?.[1]?.trim()
@@ -80,6 +83,7 @@ function extractInvoiceFields(text: string): Partial<InvoiceDraft> {
   return {
     vendor,
     invoice_number: invoiceNumber,
+    account_number: accountNumber,
     description,
     invoice_date: dateFor("invoice\\s*date") || parseInvoiceDate(text.match(new RegExp(`\\bINVOICE\\s+[A-Z0-9/-]+\\s+DATE\\s*[:#-]?\\s*(${datePattern})`, "i"))?.[1] || ""),
     due_date: dateFor("due\\s*date"),
@@ -124,7 +128,7 @@ export default function TechInvoiceTracker() {
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
-    const { data, error: loadError } = await supabase.from("tech_invoices").select("id, vendor, invoice_number, description, category, invoice_date, due_date, amount, status, paid_at, notes, created_at").order("due_date", { ascending: true });
+    const { data, error: loadError } = await supabase.from("tech_invoices").select("id, vendor, invoice_number, account_number, description, category, invoice_date, due_date, amount, status, paid_at, notes, created_at").order("due_date", { ascending: true });
     if (loadError) {
       setTableReady(false);
       setError(loadError.message);
@@ -171,7 +175,7 @@ export default function TechInvoiceTracker() {
     const query = search.trim().toLowerCase();
     const groups = new Map<string, { paid: number; open: number }>();
     for (const invoice of activeInvoices) {
-      const matchesSearch = !query || [invoice.vendor, invoice.invoice_number, invoice.description, invoice.category].some((value) => String(value || "").toLowerCase().includes(query));
+      const matchesSearch = !query || [invoice.vendor, invoice.invoice_number, invoice.account_number, invoice.description, invoice.category].some((value) => String(value || "").toLowerCase().includes(query));
       if (!matchesSearch || (categoryFilter !== "all" && invoice.category !== categoryFilter)) continue;
       const key = breakdownBy === "vendor" ? invoice.vendor : invoice.category || "Other";
       const group = groups.get(key) || { paid: 0, open: 0 };
@@ -188,7 +192,7 @@ export default function TechInvoiceTracker() {
   const filteredInvoices = useMemo(() => {
     const query = search.trim().toLowerCase();
     const matching = invoices.filter((invoice) => {
-      const matchesSearch = !query || [invoice.vendor, invoice.invoice_number, invoice.description, invoice.category].some((value) => String(value || "").toLowerCase().includes(query));
+      const matchesSearch = !query || [invoice.vendor, invoice.invoice_number, invoice.account_number, invoice.description, invoice.category].some((value) => String(value || "").toLowerCase().includes(query));
       const matchesStatus = statusFilter === "all" || invoice.status === statusFilter || (statusFilter === "overdue" && invoice.status === "open" && invoice.due_date < today());
       const matchesYear = yearFilter === "all" || invoice.due_date.startsWith(yearFilter) || Boolean(invoice.paid_at?.startsWith(yearFilter));
       const matchesCategory = categoryFilter === "all" || invoice.category === categoryFilter;
@@ -295,7 +299,7 @@ export default function TechInvoiceTracker() {
     setSaving(true);
     setError("");
     setNotice("");
-    const payload = pdfDrafts.map(({ draft }) => ({ ...draft, vendor: draft.vendor.trim(), invoice_number: draft.invoice_number.trim() || null, description: draft.description.trim(), category: draft.category.trim() || "Software", invoice_date: draft.invoice_date || null, due_date: draft.due_date, amount: Number(draft.amount), paid_at: draft.status === "paid" ? draft.paid_at || today() : null, notes: draft.notes.trim() || null, updated_at: new Date().toISOString() }));
+    const payload = pdfDrafts.map(({ draft }) => ({ ...draft, vendor: draft.vendor.trim(), invoice_number: draft.invoice_number.trim() || null, account_number: draft.account_number.trim() || null, description: draft.description.trim(), category: draft.category.trim() || "Software", invoice_date: draft.invoice_date || null, due_date: draft.due_date, amount: Number(draft.amount), paid_at: draft.status === "paid" ? draft.paid_at || today() : null, notes: draft.notes.trim() || null, updated_at: new Date().toISOString() }));
     const { error: saveError } = await supabase.from("tech_invoices").insert(payload);
     if (saveError) {
       setError(saveError.message);
@@ -310,7 +314,7 @@ export default function TechInvoiceTracker() {
   }
   function startEdit(invoice: Invoice) {
     setEditing(invoice.id);
-    setDraft({ vendor: invoice.vendor, invoice_number: invoice.invoice_number || "", description: invoice.description, category: invoice.category || "Other", invoice_date: invoice.invoice_date || "", due_date: invoice.due_date, amount: Number(invoice.amount), status: invoice.status === "paid" ? "paid" : "open", paid_at: invoice.paid_at || "", notes: invoice.notes || "" });
+    setDraft({ vendor: invoice.vendor, invoice_number: invoice.invoice_number || "", account_number: invoice.account_number || "", description: invoice.description, category: invoice.category || "Other", invoice_date: invoice.invoice_date || "", due_date: invoice.due_date, amount: Number(invoice.amount), status: invoice.status === "paid" ? "paid" : "open", paid_at: invoice.paid_at || "", notes: invoice.notes || "" });
     setError("");
     setShowForm(true);
   }
@@ -319,7 +323,7 @@ export default function TechInvoiceTracker() {
     setSaving(true);
     setError("");
     setNotice("");
-    const payload = { ...draft, vendor: draft.vendor.trim(), invoice_number: draft.invoice_number.trim() || null, description: draft.description.trim(), category: draft.category.trim() || "Software", invoice_date: draft.invoice_date || null, due_date: draft.due_date, amount: Number(draft.amount), paid_at: draft.status === "paid" ? draft.paid_at : null, notes: draft.notes.trim() || null, updated_at: new Date().toISOString() };
+    const payload = { ...draft, vendor: draft.vendor.trim(), invoice_number: draft.invoice_number.trim() || null, account_number: draft.account_number.trim() || null, description: draft.description.trim(), category: draft.category.trim() || "Software", invoice_date: draft.invoice_date || null, due_date: draft.due_date, amount: Number(draft.amount), paid_at: draft.status === "paid" ? draft.paid_at : null, notes: draft.notes.trim() || null, updated_at: new Date().toISOString() };
     const result = editing ? await supabase.from("tech_invoices").update(payload).eq("id", editing) : await supabase.from("tech_invoices").insert(payload);
     if (result.error) {
       setError(result.error.message);
@@ -364,6 +368,7 @@ export default function TechInvoiceTracker() {
           <div className="invoice-batch-grid">
             <label>Vendor<input required maxLength={120} value={item.draft.vendor} onChange={(e) => updatePdfDraft(item.id, { vendor: e.target.value })} placeholder="e.g. LoadTrek" /></label>
             <label>Invoice number <span className="optional">(optional)</span><input maxLength={80} value={item.draft.invoice_number} onChange={(e) => updatePdfDraft(item.id, { invoice_number: e.target.value })} /></label>
+            <label>Account number <span className="optional">(optional)</span><input maxLength={80} value={item.draft.account_number} onChange={(e) => updatePdfDraft(item.id, { account_number: e.target.value })} /></label>
             <label>Description<input required maxLength={180} value={item.draft.description} onChange={(e) => updatePdfDraft(item.id, { description: e.target.value })} placeholder="Service, equipment, or subscription" /></label>
             <label>Category<select value={item.draft.category} onChange={(e) => updatePdfDraft(item.id, { category: e.target.value })}>{invoiceCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
             <label>Invoice date<input type="date" value={item.draft.invoice_date} onChange={(e) => updatePdfDraft(item.id, { invoice_date: e.target.value })} /></label>
@@ -406,6 +411,7 @@ export default function TechInvoiceTracker() {
         <div className="invoice-form-grid">
           <label>Vendor<input required maxLength={120} value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} placeholder="e.g. Internet provider" /></label>
           <label>Invoice number <span className="optional">(optional)</span><input maxLength={80} value={draft.invoice_number} onChange={(e) => setDraft({ ...draft, invoice_number: e.target.value })} /></label>
+          <label>Account number <span className="optional">(optional)</span><input maxLength={80} value={draft.account_number} onChange={(e) => setDraft({ ...draft, account_number: e.target.value })} /></label>
           <label>Description<input required maxLength={180} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Service, equipment, or subscription" /></label>
           <label>Category<select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>{!invoiceCategories.includes(draft.category) && <option>{draft.category}</option>}{invoiceCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
           <label>Invoice date<input type="date" value={draft.invoice_date} onChange={(e) => setDraft({ ...draft, invoice_date: e.target.value })} /></label>
@@ -439,7 +445,7 @@ export default function TechInvoiceTracker() {
             <tbody>{filteredInvoices.map((invoice) => {
               const overdue = invoice.status === "open" && invoice.due_date < today();
               return <tr key={invoice.id}>
-                <td><strong>{invoice.vendor}</strong><span>{invoice.invoice_number || "No invoice number"}</span></td>
+                <td><strong>{invoice.vendor}</strong><span>{invoice.invoice_number || "No invoice number"}</span>{invoice.account_number && <span>Account {invoice.account_number}</span>}</td>
                 <td><strong>{invoice.description}</strong><span>{invoice.category}{invoice.notes ? " · " + invoice.notes : ""}</span></td>
                 <td>{dateLabel(invoice.due_date)}{invoice.paid_at && <span>Paid {dateLabel(invoice.paid_at)}</span>}</td>
                 <td className="invoice-amount">{money.format(Number(invoice.amount))}</td>
