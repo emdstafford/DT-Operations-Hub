@@ -8,6 +8,7 @@ create table if not exists public.tech_invoices (
   vendor text not null check (length(trim(vendor)) > 0),
   invoice_number text,
   account_number text,
+  billing_frequency text not null default 'one_time' check (billing_frequency in ('one_time', 'monthly', 'biweekly', 'yearly')),
   description text not null check (length(trim(description)) > 0),
   category text not null default 'Software',
   invoice_date date,
@@ -25,6 +26,20 @@ create table if not exists public.tech_invoices (
 
 alter table public.tech_invoices alter column category set default 'Software';
 alter table public.tech_invoices add column if not exists account_number text;
+alter table public.tech_invoices add column if not exists billing_frequency text not null default 'one_time';
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'tech_invoices_billing_frequency_check'
+      and conrelid = 'public.tech_invoices'::regclass
+  ) then
+    alter table public.tech_invoices
+      add constraint tech_invoices_billing_frequency_check
+      check (billing_frequency in ('one_time', 'monthly', 'biweekly', 'yearly'));
+  end if;
+end $$;
 
 create index if not exists tech_invoices_due_date_idx on public.tech_invoices (due_date);
 create index if not exists tech_invoices_status_idx on public.tech_invoices (status);
@@ -59,7 +74,7 @@ with check (lower(coalesce(auth.jwt() ->> 'email', '')) in ('estafford@dtexpress
 revoke all on public.tech_invoices from anon;
 revoke all on public.tech_invoices from authenticated;
 grant select on public.tech_invoices to authenticated;
-grant insert (vendor, invoice_number, account_number, description, category, invoice_date, due_date, amount, status, paid_at, notes, updated_at)
+grant insert (vendor, invoice_number, account_number, billing_frequency, description, category, invoice_date, due_date, amount, status, paid_at, notes, updated_at)
   on public.tech_invoices to authenticated;
-grant update (vendor, invoice_number, account_number, description, category, invoice_date, due_date, amount, status, paid_at, notes, updated_at)
+grant update (vendor, invoice_number, account_number, billing_frequency, description, category, invoice_date, due_date, amount, status, paid_at, notes, updated_at)
   on public.tech_invoices to authenticated;
