@@ -8,7 +8,7 @@ create table if not exists public.tech_invoices (
   vendor text not null check (length(trim(vendor)) > 0),
   invoice_number text,
   description text not null check (length(trim(description)) > 0),
-  category text not null default 'Other',
+  category text not null default 'Software',
   invoice_date date,
   due_date date not null,
   amount numeric(12,2) not null check (amount > 0),
@@ -21,6 +21,8 @@ create table if not exists public.tech_invoices (
   updated_at timestamptz not null default now(),
   check ((status = 'paid' and paid_at is not null) or (status <> 'paid' and paid_at is null))
 );
+
+alter table public.tech_invoices alter column category set default 'Software';
 
 create index if not exists tech_invoices_due_date_idx on public.tech_invoices (due_date);
 create index if not exists tech_invoices_status_idx on public.tech_invoices (status);
