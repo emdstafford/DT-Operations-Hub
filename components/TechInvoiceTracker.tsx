@@ -12,6 +12,7 @@ type Invoice = {
   invoice_number: string | null;
   account_number: string | null;
   billing_frequency: BillingFrequency;
+  reminder_days_before: number;
   description: string;
   category: string;
   invoice_date: string | null;
@@ -27,6 +28,7 @@ type InvoiceDraft = {
   invoice_number: string;
   account_number: string;
   billing_frequency: BillingFrequency;
+  reminder_days_before: number;
   description: string;
   category: string;
   invoice_date: string;
@@ -45,7 +47,7 @@ type InvoicePdfDraft = {
 
 const invoiceCategories = ["Software", "Equipment", "Internet", "Phones", "IT support", "Other"];
 const billingFrequencyLabels: Record<BillingFrequency, string> = { one_time: "One-time", monthly: "Monthly", biweekly: "Biweekly", yearly: "Yearly" };
-const emptyDraft: InvoiceDraft = { vendor: "", invoice_number: "", account_number: "", billing_frequency: "one_time", description: "", category: "Software", invoice_date: "", due_date: "", amount: 0, status: "open", paid_at: "", notes: "" };
+const emptyDraft: InvoiceDraft = { vendor: "", invoice_number: "", account_number: "", billing_frequency: "one_time", reminder_days_before: 30, description: "", category: "Software", invoice_date: "", due_date: "", amount: 0, status: "open", paid_at: "", notes: "" };
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const localDate = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 const today = () => localDate(new Date());
@@ -66,6 +68,12 @@ function nextBillingDate(value: string, frequency: BillingFrequency, anchorDay?:
     date.setUTCDate(Math.min(day, lastDay));
   }
   return date.toISOString().slice(0, 10);
+}
+function daysUntilLabel(value: string): string {
+  const due = new Date(value + "T00:00:00Z");
+  const start = new Date(today() + "T00:00:00Z");
+  const days = Math.round((due.getTime() - start.getTime()) / 86400000);
+  return days === 0 ? "Due today" : days === 1 ? "Due tomorrow" : `Due in ${days} days`;
 }
 function upcomingBillDates(invoice: Invoice, days: number): string[] {
   const start = today();
@@ -166,7 +174,7 @@ export default function TechInvoiceTracker() {
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
-    const { data, error: loadError } = await supabase.from("tech_invoices").select("id, vendor, invoice_number, account_number, billing_frequency, description, category, invoice_date, due_date, amount, status, paid_at, notes, created_at").order("due_date", { ascending: true });
+    const { data, error: loadError } = await supabase.from("tech_invoices").select("id, vendor, invoice_number, account_number, billing_frequency, reminder_days_before, description, category, invoice_date, due_date, amount, status, paid_at, notes, created_at").order("due_date", { ascending: true });
     if (loadError) {
       setTableReady(false);
       setError(loadError.message);
@@ -212,6 +220,19 @@ export default function TechInvoiceTracker() {
       openCount: open.length,
     };
   }, [activeInvoices, paidInvoices, yearFilter]);
+
+  const billingReminders = useMemo(() => activeInvoices.flatMap((invoice) => {
+    if (!invoice.reminder_days_before) return [];
+    return upcomingBillDates(invoice, invoice.reminder_days_before).map((dueDate) => ({
+      id: `${invoice.id}-${dueDate}`,
+      vendor: invoice.vendor,
+      description: invoice.description,
+      category: invoice.category,
+      billing_frequency: invoice.billing_frequency,
+      dueDate,
+      amount: Number(invoice.amount || 0),
+    }));
+  }).sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.vendor.localeCompare(b.vendor)), [activeInvoices]);
 
   const spendingBreakdown = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -356,7 +377,7 @@ export default function TechInvoiceTracker() {
   }
   function startEdit(invoice: Invoice) {
     setEditing(invoice.id);
-    setDraft({ vendor: invoice.vendor, invoice_number: invoice.invoice_number || "", account_number: invoice.account_number || "", billing_frequency: invoice.billing_frequency || "one_time", description: invoice.description, category: invoice.category || "Other", invoice_date: invoice.invoice_date || "", due_date: invoice.due_date, amount: Number(invoice.amount), status: invoice.status === "paid" ? "paid" : "open", paid_at: invoice.paid_at || "", notes: invoice.notes || "" });
+    setDraft({ vendor: invoice.vendor, invoice_number: invoice.invoice_number || "", account_number: invoice.account_number || "", billing_frequency: invoice.billing_frequency || "one_time", reminder_days_before: invoice.reminder_days_before ?? 30, description: invoice.description, category: invoice.category || "Other", invoice_date: invoice.invoice_date || "", due_date: invoice.due_date, amount: Number(invoice.amount), status: invoice.status === "paid" ? "paid" : "open", paid_at: invoice.paid_at || "", notes: invoice.notes || "" });
     setError("");
     setShowForm(true);
   }
@@ -407,6 +428,7 @@ export default function TechInvoiceTracker() {
           <label>Account number <span className="optional">(optional)</span><input maxLength={80} value={draft.account_number} onChange={(e) => setDraft({ ...draft, account_number: e.target.value })} /></label>
           <label>Description<input required maxLength={180} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Service, equipment, or subscription" /></label>
           <label>Billing frequency<select value={draft.billing_frequency} onChange={(e) => setDraft({ ...draft, billing_frequency: e.target.value as BillingFrequency })}><option value="one_time">One-time</option><option value="monthly">Monthly</option><option value="biweekly">Biweekly (every 2 weeks)</option><option value="yearly">Yearly</option></select></label>
+          <label>Remind me<select value={draft.reminder_days_before} onChange={(e) => setDraft({ ...draft, reminder_days_before: Number(e.target.value) })}><option value={0}>Off</option><option value={7}>7 days before</option><option value={14}>14 days before</option><option value={30}>30 days before</option><option value={60}>60 days before</option></select></label>
           <label>Category<select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>{!invoiceCategories.includes(draft.category) && <option>{draft.category}</option>}{invoiceCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
           <label>Invoice date<input type="date" value={draft.invoice_date} onChange={(e) => setDraft({ ...draft, invoice_date: e.target.value })} /></label>
           <label>Due date<input required type="date" value={draft.due_date} onChange={(e) => setDraft({ ...draft, due_date: e.target.value })} /></label>
@@ -433,6 +455,7 @@ export default function TechInvoiceTracker() {
             <label>Account number <span className="optional">(optional)</span><input maxLength={80} value={item.draft.account_number} onChange={(e) => updatePdfDraft(item.id, { account_number: e.target.value })} /></label>
             <label>Description<input required maxLength={180} value={item.draft.description} onChange={(e) => updatePdfDraft(item.id, { description: e.target.value })} placeholder="Service, equipment, or subscription" /></label>
             <label>Billing frequency<select value={item.draft.billing_frequency} onChange={(e) => updatePdfDraft(item.id, { billing_frequency: e.target.value as BillingFrequency })}><option value="one_time">One-time</option><option value="monthly">Monthly</option><option value="biweekly">Biweekly (every 2 weeks)</option><option value="yearly">Yearly</option></select></label>
+            <label>Remind me<select value={item.draft.reminder_days_before} onChange={(e) => updatePdfDraft(item.id, { reminder_days_before: Number(e.target.value) })}><option value={0}>Off</option><option value={7}>7 days before</option><option value={14}>14 days before</option><option value={30}>30 days before</option><option value={60}>60 days before</option></select></label>
             <label>Category<select value={item.draft.category} onChange={(e) => updatePdfDraft(item.id, { category: e.target.value })}>{invoiceCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
             <label>Invoice date<input type="date" value={item.draft.invoice_date} onChange={(e) => updatePdfDraft(item.id, { invoice_date: e.target.value })} /></label>
             <label>Due date<input required type="date" value={item.draft.due_date} onChange={(e) => updatePdfDraft(item.id, { due_date: e.target.value })} /></label>
@@ -444,6 +467,14 @@ export default function TechInvoiceTracker() {
         </article>})}</div>
         {error && !sqlMessage && <div className="alert alert-error" role="alert">{error}</div>}
         <div className="invoice-batch-footer"><span>{pdfDrafts.some(({ draft }) => missingInvoiceFields(draft).length > 0) ? `Review the highlighted invoices above. ${pdfDrafts.filter(({ draft }) => missingInvoiceFields(draft).length > 0).length} still need required details.` : "All invoice details are ready to save."}</span><button type="button" className="primary-link" disabled={saving || pdfDrafts.some(({ draft }) => missingInvoiceFields(draft).length > 0)} onClick={() => void savePdfBatch()}>{saving ? "Saving invoices…" : `Save ${pdfDrafts.length} invoice${pdfDrafts.length === 1 ? "" : "s"}`}</button></div>
+      </section>}
+
+      {billingReminders.length > 0 && <section className="invoice-reminders" aria-labelledby="invoice-reminders-title">
+        <div><p className="eyebrow">Coming up</p><h2 id="invoice-reminders-title">Billing reminders</h2><p>Upcoming bills are shown based on each invoice’s reminder setting.</p></div>
+        <ul className="invoice-reminder-list">{billingReminders.map((bill) => <li key={bill.id}>
+          <div><strong>{bill.vendor}</strong><span>{bill.description} · {billingFrequencyLabels[bill.billing_frequency]}</span></div>
+          <div><strong>{money.format(bill.amount)}</strong><span>{dateLabel(bill.dueDate)} · {daysUntilLabel(bill.dueDate)}</span></div>
+        </li>)}</ul>
       </section>}
 
       <div className="invoice-metrics" aria-label="Invoice summary">
@@ -519,7 +550,8 @@ const styles = [
   ".invoice-actions{display:flex;justify-content:space-between;align-items:center;gap:16px}.invoice-actions p{color:#627283;margin:0}",
   ".invoice-import-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.secondary-link{min-height:42px;padding:9px 13px;border:1px solid #b9c8d6;border-radius:7px;background:#fff;color:#244969;font:inherit;font-size:.84rem;font-weight:800;cursor:pointer}.secondary-link:hover{background:#eff4f8}.secondary-link:disabled{opacity:.6;cursor:wait}",
   ".invoice-metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}.invoice-metrics article{display:grid;gap:7px;padding:17px;border:1px solid #dce3ea;border-radius:11px;background:white;box-shadow:0 5px 18px #142d4608}.invoice-metrics article span{font-size:.74rem;font-weight:800;letter-spacing:.045em;text-transform:uppercase;color:#647487}.invoice-metrics article strong{font-size:1.45rem;color:#123a60;letter-spacing:-.03em}.invoice-metrics article small{font-size:.74rem;color:#728090;line-height:1.35}.invoice-metrics article.is-overdue{border-color:#e6c5c8;background:#fffafa}.invoice-metrics article.is-overdue strong{color:#9b343c}",
-  ".invoice-notice{padding:12px 15px;border-radius:8px;background:#e8f3ec;color:#225c39;font-weight:700}.invoice-form{padding:22px;border:1px solid #d7e0e8;border-radius:12px;background:white;box-shadow:0 8px 26px #142d460a}.invoice-form-heading,.invoice-form-footer{display:flex;align-items:center;justify-content:space-between;gap:14px}.invoice-form-heading{margin-bottom:18px}.invoice-form-heading h2,.invoice-list-heading h2{margin:3px 0;color:#0b3158;font-size:1.35rem}",
+  ".invoice-notice{padding:12px 15px;border-radius:8px;background:#e8f3ec;color:#225c39;font-weight:700}",
+  ".invoice-reminders{display:grid;gap:12px;padding:18px;border:1px solid #d6e2eb;border-radius:11px;background:#f8fbfd}.invoice-reminders h2{margin:3px 0;color:#0b3158;font-size:1.2rem}.invoice-reminders p:not(.eyebrow){margin:5px 0 0;color:#6e7d8b;font-size:.82rem}.invoice-reminder-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}.invoice-reminder-list li{display:flex;justify-content:space-between;gap:16px;padding:11px 12px;border:1px solid #dce3ea;border-radius:8px;background:#fff}.invoice-reminder-list li div{display:grid;gap:3px}.invoice-reminder-list li div:last-child{text-align:right}.invoice-reminder-list strong{color:#173b62;font-size:.86rem}.invoice-reminder-list span{color:#718090;font-size:.76rem;line-height:1.35}@media(max-width:600px){.invoice-reminder-list li{align-items:flex-start;flex-direction:column}.invoice-reminder-list li div:last-child{text-align:left}}.invoice-form{padding:22px;border:1px solid #d7e0e8;border-radius:12px;background:white;box-shadow:0 8px 26px #142d460a}.invoice-form-heading,.invoice-form-footer{display:flex;align-items:center;justify-content:space-between;gap:14px}.invoice-form-heading{margin-bottom:18px}.invoice-form-heading h2,.invoice-list-heading h2{margin:3px 0;color:#0b3158;font-size:1.35rem}",
   ".invoice-batch{display:grid;gap:14px;padding:20px;border:1px solid #c9d8e4;border-radius:12px;background:#f8fbfd}.invoice-batch-heading,.invoice-batch-actions,.invoice-batch-card-heading,.invoice-batch-footer{display:flex;align-items:center;justify-content:space-between;gap:14px}.invoice-batch-heading h2{margin:3px 0;color:#0b3158;font-size:1.3rem}.invoice-batch-heading p:not(.eyebrow){margin:5px 0 0;color:#6e7d8b;font-size:.84rem}.invoice-batch-actions{flex-wrap:wrap}.invoice-batch-list{display:grid;gap:12px}.invoice-batch-card{display:grid;gap:13px;padding:16px;border:1px solid #dce3ea;border-radius:10px;background:#fff}.invoice-batch-card.has-missing-fields{border-color:#e3bf7b;background:#fffefa}.invoice-batch-card-heading>div{display:grid;gap:3px;min-width:0}.invoice-batch-card-heading strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#243b52;font-size:.9rem}.invoice-batch-count{color:#758494;font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}.invoice-batch-issue{margin:0;padding:9px 11px;border-radius:7px;background:#fff5e8;color:#76521c;font-size:.8rem}.invoice-batch-missing{margin:0;padding:8px 10px;border-radius:7px;background:#fff0d7;color:#76521c;font-size:.78rem;font-weight:800}.invoice-batch-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.invoice-batch-grid label{display:grid;gap:5px;color:#34495e;font-size:.8rem;font-weight:700}.invoice-batch-grid input,.invoice-batch-grid select,.invoice-batch-grid textarea{width:100%;min-height:40px;border:1px solid #bdc9d4;border-radius:7px;background:#fff;padding:8px 10px;color:#172b3f;font:inherit}.invoice-batch-grid textarea{resize:vertical}.invoice-batch-notes{grid-column:span 2}.invoice-batch-footer{padding-top:12px;border-top:1px solid #dce3ea}.invoice-batch-footer span{color:#6e7d8b;font-size:.8rem}.invoice-batch-footer button:disabled{opacity:.55;cursor:wait}",
   ".invoice-breakdown{display:grid;gap:10px;padding:18px;border:1px solid #dce3ea;border-radius:11px;background:white}.invoice-breakdown-heading{display:flex;justify-content:space-between;align-items:end;gap:16px}.invoice-breakdown-heading h2{margin:3px 0;color:#0b3158;font-size:1.25rem}.invoice-breakdown-heading label{display:flex;align-items:center;gap:8px;color:#5d6d7c;font-size:.8rem;font-weight:700}.invoice-breakdown-heading select{min-height:38px;border:1px solid #bdc9d4;border-radius:7px;padding:7px 10px;background:white;color:#172b3f;font:inherit}.invoice-breakdown-note{margin:0;color:#728090;font-size:.76rem}",
   ".invoice-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.invoice-form-grid label{display:grid;gap:6px;color:#34495e;font-size:.82rem;font-weight:700}.invoice-form-grid input,.invoice-form-grid select,.invoice-form-grid textarea,.invoice-filters input,.invoice-filters select{width:100%;min-height:42px;border:1px solid #bdc9d4;border-radius:7px;background:#fff;padding:9px 11px;color:#172b3f;font:inherit}.invoice-form-grid textarea{resize:vertical}.invoice-notes-field{grid-column:span 2}.optional{color:#8290a0;font-weight:400}.invoice-form-footer{margin-top:18px;padding-top:14px;border-top:1px solid #e5e9ed}.invoice-form-footer span{font-size:.78rem;color:#718090}.invoice-form-footer button:disabled{opacity:.55;cursor:wait}",
