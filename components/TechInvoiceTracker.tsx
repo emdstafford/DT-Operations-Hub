@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type InvoiceStatus = "open" | "paid" | "void";
@@ -39,6 +39,41 @@ const localDate = (date: Date) => [date.getFullYear(), String(date.getMonth() + 
 const today = () => localDate(new Date());
 const dateInThirtyDays = () => { const date = new Date(); date.setDate(date.getDate() + 30); return localDate(date); };
 const currentYear = new Date().getFullYear();
+function parseInvoiceDate(value: string) {
+  const numericDate = value.match(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/);
+  if (numericDate) {
+    const month = Number(numericDate[1]);
+    const day = Number(numericDate[2]);
+    let year = Number(numericDate[3]);
+    if (year < 100) year += year < 70 ? 2000 : 1900;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return "";
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  const namedDate = value.match(/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4}\b/i);
+  if (!namedDate) return "";
+  const date = new Date(namedDate[0]);
+  return Number.isNaN(date.getTime()) ? "" : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+function extractInvoiceFields(text: string): Partial<InvoiceDraft> {
+  const datePattern = "(?:\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\s+\\d{1,2},?\\s+\\d{4})";
+  const dateFor = (label: string) => {
+    const match = text.match(new RegExp(`${label}\\s*[:#-]?\\s*(${datePattern})`, "i"));
+    return match ? parseInvoiceDate(match[1]) : "";
+  };
+  const invoiceNumber = text.match(/(?:invoice\s*(?:number|no\.?|#)|invoice\s*#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9/-]{2,})/i)?.[1] || "";
+  const amountLine = text.match(/(?:amount\s*due|balance\s*due|total\s*due|invoice\s*total|grand\s*total)[^\d$]{0,18}\$?\s*([\d,]+\.\d{2})/i)?.[1];
+  const amount = amountLine ? Number(amountLine.replace(/,/g, "")) : 0;
+  const vendor = text.match(/^\s*(?:vendor|supplier|from)\s*:?\s*(.+?)\s*$/im)?.[1]?.trim() || "";
+  const description = text.match(/^\s*description\s*:?\s*(.+?)\s*$/im)?.[1]?.trim() || "";
+  return {
+    vendor,
+    invoice_number: invoiceNumber,
+    description,
+    invoice_date: dateFor("invoice\\s*date"),
+    due_date: dateFor("due\\s*date"),
+    amount: Number.isFinite(amount) ? amount : 0,
+  };
+}
 function dateLabel(value?: string | null) {
   if (!value) return "—";
   return new Date(value + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -61,6 +96,8 @@ export default function TechInvoiceTracker() {
   const [breakdownBy, setBreakdownBy] = useState<"vendor" | "category">("vendor");
   const [sortColumn, setSortColumn] = useState<InvoiceSortColumn>("due_date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [readingPdf, setReadingPdf] = useState(false);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
@@ -173,6 +210,44 @@ export default function TechInvoiceTracker() {
     setError("");
     setShowForm(true);
   }
+  async function importInvoicePdf(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setError("Choose an invoice PDF file.");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setError("This PDF is over 15 MB. Choose a smaller file.");
+      return;
+    }
+    setReadingPdf(true);
+    setError("");
+    setNotice("");
+    try {
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
+      const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+      const pageTexts: string[] = [];
+      for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, 20); pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        const content = await page.getTextContent();
+        pageTexts.push(content.items.map((item) => "str" in item ? item.str : "").join(" "));
+      }
+      const text = pageTexts.join("\n");
+      if (!text.trim()) throw new Error("This PDF has no selectable text. You can still enter the invoice details manually.");
+      const extracted = extractInvoiceFields(text);
+      setEditing(null);
+      setDraft({ ...emptyDraft, ...extracted, category: "Software", invoice_date: extracted.invoice_date || today() });
+      setShowForm(true);
+      setNotice("Invoice details were read from the PDF where available. Review the fields and fill in anything missing before saving.");
+    } catch (pdfError) {
+      setError(pdfError instanceof Error ? pdfError.message : "Unable to read this PDF. Enter the invoice details manually.");
+    } finally {
+      setReadingPdf(false);
+    }
+  }
   function startEdit(invoice: Invoice) {
     setEditing(invoice.id);
     setDraft({ vendor: invoice.vendor, invoice_number: invoice.invoice_number || "", description: invoice.description, category: invoice.category || "Other", invoice_date: invoice.invoice_date || "", due_date: invoice.due_date, amount: Number(invoice.amount), status: invoice.status === "paid" ? "paid" : "open", paid_at: invoice.paid_at || "", notes: invoice.notes || "" });
@@ -213,7 +288,7 @@ export default function TechInvoiceTracker() {
 
   return (
     <section className="invoice-tracker">
-      <div className="invoice-actions"><p>Enter invoices as they arrive, then mark them paid when they clear.</p><button type="button" className="primary-link" onClick={startNew}>＋ Add invoice</button></div>
+      <div className="invoice-actions"><p>Enter invoices as they arrive, then mark them paid when they clear.</p><div className="invoice-import-actions"><input ref={pdfInputRef} className="sr-only" type="file" accept="application/pdf,.pdf" onChange={importInvoicePdf} /><button type="button" className="secondary-link" disabled={readingPdf} onClick={() => pdfInputRef.current?.click()}>{readingPdf ? "Reading PDF…" : "Upload invoice PDF"}</button><button type="button" className="primary-link" onClick={startNew}>＋ Add invoice</button></div></div>
       {error && <div className="alert alert-error" role="alert">{sqlMessage || error}</div>}
       {notice && <div className="invoice-notice" role="status">{notice}</div>}
 
@@ -303,6 +378,7 @@ export default function TechInvoiceTracker() {
 const styles = [
   ".invoice-tracker{display:grid;gap:18px}",
   ".invoice-actions{display:flex;justify-content:space-between;align-items:center;gap:16px}.invoice-actions p{color:#627283;margin:0}",
+  ".invoice-import-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.secondary-link{min-height:42px;padding:9px 13px;border:1px solid #b9c8d6;border-radius:7px;background:#fff;color:#244969;font:inherit;font-size:.84rem;font-weight:800;cursor:pointer}.secondary-link:hover{background:#eff4f8}.secondary-link:disabled{opacity:.6;cursor:wait}",
   ".invoice-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.invoice-metrics article{display:grid;gap:7px;padding:17px;border:1px solid #dce3ea;border-radius:11px;background:white;box-shadow:0 5px 18px #142d4608}.invoice-metrics article span{font-size:.74rem;font-weight:800;letter-spacing:.045em;text-transform:uppercase;color:#647487}.invoice-metrics article strong{font-size:1.45rem;color:#123a60;letter-spacing:-.03em}.invoice-metrics article small{font-size:.74rem;color:#728090;line-height:1.35}.invoice-metrics article.is-overdue{border-color:#e6c5c8;background:#fffafa}.invoice-metrics article.is-overdue strong{color:#9b343c}",
   ".invoice-notice{padding:12px 15px;border-radius:8px;background:#e8f3ec;color:#225c39;font-weight:700}.invoice-form{padding:22px;border:1px solid #d7e0e8;border-radius:12px;background:white;box-shadow:0 8px 26px #142d460a}.invoice-form-heading,.invoice-form-footer{display:flex;align-items:center;justify-content:space-between;gap:14px}.invoice-form-heading{margin-bottom:18px}.invoice-form-heading h2,.invoice-list-heading h2{margin:3px 0;color:#0b3158;font-size:1.35rem}",
   ".invoice-breakdown{display:grid;gap:10px;padding:18px;border:1px solid #dce3ea;border-radius:11px;background:white}.invoice-breakdown-heading{display:flex;justify-content:space-between;align-items:end;gap:16px}.invoice-breakdown-heading h2{margin:3px 0;color:#0b3158;font-size:1.25rem}.invoice-breakdown-heading label{display:flex;align-items:center;gap:8px;color:#5d6d7c;font-size:.8rem;font-weight:700}.invoice-breakdown-heading select{min-height:38px;border:1px solid #bdc9d4;border-radius:7px;padding:7px 10px;background:white;color:#172b3f;font:inherit}.invoice-breakdown-note{margin:0;color:#728090;font-size:.76rem}",
@@ -312,5 +388,5 @@ const styles = [
   ".invoice-sort-button{display:inline-flex;align-items:center;gap:6px;border:0;padding:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer}.invoice-sort-button span{color:#244969;font-size:.68rem}.invoice-sort-button:hover,.invoice-sort-button:focus-visible{color:#0b3158;text-decoration:underline;text-underline-offset:3px;outline:none}",
   ".invoice-status{display:inline-flex!important;width:max-content;border-radius:999px;padding:5px 9px;background:#fff1dc;color:#825916!important;font-weight:800}.invoice-status.paid{background:#e4f2e9;color:#286343!important}.invoice-status.overdue{background:#fae5e6;color:#9b343c!important}.invoice-status.void{background:#e9edf1;color:#687787!important}.invoice-row-actions{display:flex;gap:6px;flex-wrap:wrap}.invoice-row-actions button{border:1px solid #d3dce4;border-radius:6px;padding:6px 8px;background:#fff;color:#244969;font-size:.74rem;font-weight:700;cursor:pointer;white-space:nowrap}.invoice-row-actions button:hover{background:#eff4f8}.invoice-row-actions .void-action{color:#8b3d42}",
   ".invoice-empty{display:grid;gap:6px;justify-items:center;padding:36px 16px;color:#647487}.invoice-empty strong{color:#34495e}.invoice-empty span{font-size:.84rem}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}",
-  "@media(max-width:1050px){.invoice-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.invoice-list-heading{align-items:stretch;flex-direction:column}.invoice-filters{flex-wrap:wrap}.invoice-filters input{flex:1;min-width:180px}}@media(max-width:650px){.invoice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.invoice-form-grid{grid-template-columns:1fr}.invoice-notes-field{grid-column:auto}.invoice-actions{align-items:stretch;flex-direction:column}.invoice-actions .primary-link{align-self:flex-start}.invoice-filters input{flex-basis:100%}.invoice-filters select{flex:1}.invoice-form-footer{align-items:flex-start;flex-direction:column}.invoice-breakdown-heading{align-items:flex-start;flex-direction:column}}",
+  "@media(max-width:1050px){.invoice-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.invoice-list-heading{align-items:stretch;flex-direction:column}.invoice-filters{flex-wrap:wrap}.invoice-filters input{flex:1;min-width:180px}}@media(max-width:650px){.invoice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.invoice-form-grid{grid-template-columns:1fr}.invoice-notes-field{grid-column:auto}.invoice-actions{align-items:stretch;flex-direction:column}.invoice-actions .primary-link{align-self:flex-start}.invoice-import-actions{align-self:flex-start}.invoice-filters input{flex-basis:100%}.invoice-filters select{flex:1}.invoice-form-footer{align-items:flex-start;flex-direction:column}.invoice-breakdown-heading{align-items:flex-start;flex-direction:column}}",
 ].join("");
