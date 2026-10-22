@@ -31,7 +31,9 @@ type InvoiceDraft = {
   notes: string;
 };
 
-const emptyDraft: InvoiceDraft = { vendor: "", invoice_number: "", description: "", category: "Other", invoice_date: "", due_date: "", amount: 0, status: "open", paid_at: "", notes: "" };
+const invoiceCategories = ["Software", "Equipment", "Internet", "Phones", "IT support", "Other"];
+const legacyInvoiceCategories = ["Internet & phone"];
+const emptyDraft: InvoiceDraft = { vendor: "", invoice_number: "", description: "", category: "Software", invoice_date: "", due_date: "", amount: 0, status: "open", paid_at: "", notes: "" };
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const localDate = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 const today = () => localDate(new Date());
@@ -55,6 +57,8 @@ export default function TechInvoiceTracker() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("open");
   const [yearFilter, setYearFilter] = useState(String(currentYear));
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [breakdownBy, setBreakdownBy] = useState<"vendor" | "category">("vendor");
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
@@ -101,15 +105,34 @@ export default function TechInvoiceTracker() {
     };
   }, [activeInvoices, paidInvoices, yearFilter]);
 
+  const spendingBreakdown = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const groups = new Map<string, { paid: number; open: number }>();
+    for (const invoice of activeInvoices) {
+      const matchesSearch = !query || [invoice.vendor, invoice.invoice_number, invoice.description, invoice.category].some((value) => String(value || "").toLowerCase().includes(query));
+      if (!matchesSearch || (categoryFilter !== "all" && invoice.category !== categoryFilter)) continue;
+      const key = breakdownBy === "vendor" ? invoice.vendor : invoice.category || "Other";
+      const group = groups.get(key) || { paid: 0, open: 0 };
+      if (invoice.status === "paid" && (yearFilter === "all" || invoice.paid_at?.startsWith(yearFilter))) group.paid += Number(invoice.amount || 0);
+      if (invoice.status === "open" && (yearFilter === "all" || invoice.due_date.startsWith(yearFilter))) group.open += Number(invoice.amount || 0);
+      groups.set(key, group);
+    }
+    return [...groups.entries()]
+      .map(([name, amounts]) => ({ name, ...amounts, total: amounts.paid + amounts.open }))
+      .filter((group) => group.total > 0)
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  }, [activeInvoices, breakdownBy, categoryFilter, search, yearFilter]);
+
   const filteredInvoices = useMemo(() => {
     const query = search.trim().toLowerCase();
     return invoices.filter((invoice) => {
       const matchesSearch = !query || [invoice.vendor, invoice.invoice_number, invoice.description, invoice.category].some((value) => String(value || "").toLowerCase().includes(query));
       const matchesStatus = statusFilter === "all" || invoice.status === statusFilter || (statusFilter === "overdue" && invoice.status === "open" && invoice.due_date < today());
       const matchesYear = yearFilter === "all" || invoice.due_date.startsWith(yearFilter) || Boolean(invoice.paid_at?.startsWith(yearFilter));
-      return matchesSearch && matchesStatus && matchesYear;
+      const matchesCategory = categoryFilter === "all" || invoice.category === categoryFilter;
+      return matchesSearch && matchesStatus && matchesYear && matchesCategory;
     }).sort((a, b) => a.due_date.localeCompare(b.due_date));
-  }, [invoices, search, statusFilter, yearFilter]);
+  }, [invoices, search, statusFilter, yearFilter, categoryFilter]);
 
   function startNew() {
     setEditing(null);
@@ -128,7 +151,7 @@ export default function TechInvoiceTracker() {
     setSaving(true);
     setError("");
     setNotice("");
-    const payload = { ...draft, vendor: draft.vendor.trim(), invoice_number: draft.invoice_number.trim() || null, description: draft.description.trim(), category: draft.category.trim() || "Other", invoice_date: draft.invoice_date || null, due_date: draft.due_date, amount: Number(draft.amount), paid_at: draft.status === "paid" ? draft.paid_at : null, notes: draft.notes.trim() || null, updated_at: new Date().toISOString() };
+    const payload = { ...draft, vendor: draft.vendor.trim(), invoice_number: draft.invoice_number.trim() || null, description: draft.description.trim(), category: draft.category.trim() || "Software", invoice_date: draft.invoice_date || null, due_date: draft.due_date, amount: Number(draft.amount), paid_at: draft.status === "paid" ? draft.paid_at : null, notes: draft.notes.trim() || null, updated_at: new Date().toISOString() };
     const result = editing ? await supabase.from("tech_invoices").update(payload).eq("id", editing) : await supabase.from("tech_invoices").insert(payload);
     if (result.error) {
       setError(result.error.message);
@@ -169,13 +192,28 @@ export default function TechInvoiceTracker() {
         <article><span>Due in the next 30 days</span><strong>{money.format(summary.nextAmount)}</strong><small>{summary.nextCount} upcoming invoices</small></article>
       </div>
 
+      <section className="invoice-breakdown" aria-labelledby="invoice-breakdown-title">
+        <div className="invoice-breakdown-heading">
+          <div><p className="eyebrow">Spending breakdown · {yearFilter === "all" ? "All years" : yearFilter}</p><h2 id="invoice-breakdown-title">Costs by {breakdownBy === "vendor" ? "vendor" : "category"}</h2></div>
+          <label>Group by<select value={breakdownBy} onChange={(e) => setBreakdownBy(e.target.value as "vendor" | "category")}><option value="vendor">Vendor</option><option value="category">Category</option></select></label>
+        </div>
+        <div className="invoice-table-wrap">
+          {spendingBreakdown.length === 0 ? <p className="invoice-empty">No costs match the current search, category, and year.</p> : (
+            <table className="invoice-table"><thead><tr><th>{breakdownBy === "vendor" ? "Vendor" : "Category"}</th><th>Paid</th><th>Unpaid</th><th>Total billed</th></tr></thead>
+              <tbody>{spendingBreakdown.map((group) => <tr key={group.name}><td><strong>{group.name}</strong></td><td className="invoice-amount">{money.format(group.paid)}</td><td>{money.format(group.open)}</td><td className="invoice-amount">{money.format(group.total)}</td></tr>)}</tbody>
+            </table>
+          )}
+        </div>
+        <p className="invoice-breakdown-note">Paid totals use payment date; unpaid totals use due date. Voided invoices are excluded. Search and category filters apply to this breakdown.</p>
+      </section>
+
       {showForm && <form className="invoice-form" onSubmit={saveInvoice}>
         <div className="invoice-form-heading"><div><p className="eyebrow">{editing ? "Update record" : "New record"}</p><h2>{editing ? "Edit invoice" : "Add a tech invoice"}</h2></div><button type="button" className="text-button" onClick={() => setShowForm(false)}>Cancel</button></div>
         <div className="invoice-form-grid">
           <label>Vendor<input required maxLength={120} value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} placeholder="e.g. Internet provider" /></label>
           <label>Invoice number <span className="optional">(optional)</span><input maxLength={80} value={draft.invoice_number} onChange={(e) => setDraft({ ...draft, invoice_number: e.target.value })} /></label>
           <label>Description<input required maxLength={180} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Service, equipment, or subscription" /></label>
-          <label>Category<select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}><option>Software</option><option>Internet &amp; phone</option><option>Equipment</option><option>IT support</option><option>Other</option></select></label>
+          <label>Category<select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>{!invoiceCategories.includes(draft.category) && !legacyInvoiceCategories.includes(draft.category) && <option>{draft.category}</option>}{invoiceCategories.map((category) => <option key={category}>{category}</option>)}{legacyInvoiceCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
           <label>Invoice date<input type="date" value={draft.invoice_date} onChange={(e) => setDraft({ ...draft, invoice_date: e.target.value })} /></label>
           <label>Due date<input required type="date" value={draft.due_date} onChange={(e) => setDraft({ ...draft, due_date: e.target.value })} /></label>
           <label>Amount<input required type="number" min="0.01" step="0.01" value={draft.amount || ""} onChange={(e) => setDraft({ ...draft, amount: Number(e.target.value) })} placeholder="0.00" /></label>
@@ -192,6 +230,7 @@ export default function TechInvoiceTracker() {
           <label className="sr-only" htmlFor="invoice-search">Search invoices</label><input id="invoice-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search vendor or invoice" />
           <label className="sr-only" htmlFor="invoice-status">Invoice status</label><select id="invoice-status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="open">Open</option><option value="overdue">Overdue</option><option value="paid">Paid</option><option value="void">Void</option><option value="all">All statuses</option></select>
           <label className="sr-only" htmlFor="invoice-year">Invoice year</label><select id="invoice-year" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}><option value="all">All years</option>{yearOptions.map((year) => <option value={year} key={year}>{year}</option>)}</select>
+          <label className="sr-only" htmlFor="invoice-category">Invoice category</label><select id="invoice-category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}><option value="all">All categories</option>{invoiceCategories.map((category) => <option value={category} key={category}>{category}</option>)}{legacyInvoiceCategories.map((category) => <option value={category} key={category}>{category} (existing)</option>)}</select>
         </div>
       </div>
       <div className="invoice-table-wrap">
@@ -227,10 +266,11 @@ const styles = [
   ".invoice-actions{display:flex;justify-content:space-between;align-items:center;gap:16px}.invoice-actions p{color:#627283;margin:0}",
   ".invoice-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.invoice-metrics article{display:grid;gap:7px;padding:17px;border:1px solid #dce3ea;border-radius:11px;background:white;box-shadow:0 5px 18px #142d4608}.invoice-metrics article span{font-size:.74rem;font-weight:800;letter-spacing:.045em;text-transform:uppercase;color:#647487}.invoice-metrics article strong{font-size:1.45rem;color:#123a60;letter-spacing:-.03em}.invoice-metrics article small{font-size:.74rem;color:#728090;line-height:1.35}.invoice-metrics article.is-overdue{border-color:#e6c5c8;background:#fffafa}.invoice-metrics article.is-overdue strong{color:#9b343c}",
   ".invoice-notice{padding:12px 15px;border-radius:8px;background:#e8f3ec;color:#225c39;font-weight:700}.invoice-form{padding:22px;border:1px solid #d7e0e8;border-radius:12px;background:white;box-shadow:0 8px 26px #142d460a}.invoice-form-heading,.invoice-form-footer{display:flex;align-items:center;justify-content:space-between;gap:14px}.invoice-form-heading{margin-bottom:18px}.invoice-form-heading h2,.invoice-list-heading h2{margin:3px 0;color:#0b3158;font-size:1.35rem}",
+  ".invoice-breakdown{display:grid;gap:10px;padding:18px;border:1px solid #dce3ea;border-radius:11px;background:white}.invoice-breakdown-heading{display:flex;justify-content:space-between;align-items:end;gap:16px}.invoice-breakdown-heading h2{margin:3px 0;color:#0b3158;font-size:1.25rem}.invoice-breakdown-heading label{display:flex;align-items:center;gap:8px;color:#5d6d7c;font-size:.8rem;font-weight:700}.invoice-breakdown-heading select{min-height:38px;border:1px solid #bdc9d4;border-radius:7px;padding:7px 10px;background:white;color:#172b3f;font:inherit}.invoice-breakdown-note{margin:0;color:#728090;font-size:.76rem}",
   ".invoice-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.invoice-form-grid label{display:grid;gap:6px;color:#34495e;font-size:.82rem;font-weight:700}.invoice-form-grid input,.invoice-form-grid select,.invoice-form-grid textarea,.invoice-filters input,.invoice-filters select{width:100%;min-height:42px;border:1px solid #bdc9d4;border-radius:7px;background:#fff;padding:9px 11px;color:#172b3f;font:inherit}.invoice-form-grid textarea{resize:vertical}.invoice-notes-field{grid-column:span 2}.optional{color:#8290a0;font-weight:400}.invoice-form-footer{margin-top:18px;padding-top:14px;border-top:1px solid #e5e9ed}.invoice-form-footer span{font-size:.78rem;color:#718090}.invoice-form-footer button:disabled{opacity:.55;cursor:wait}",
   ".invoice-list-heading{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-top:12px}.invoice-filters{display:flex;gap:8px;align-items:center}.invoice-filters input{min-width:220px}.invoice-filters select{width:auto;min-width:125px}",
   ".invoice-table-wrap{overflow-x:auto;border:1px solid #dce3ea;border-radius:10px;background:white}.invoice-table{width:100%;border-collapse:collapse;text-align:left}.invoice-table th{padding:12px 14px;background:#f1f5f8;color:#5d6d7c;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}.invoice-table td{padding:13px 14px;border-top:1px solid #e7ebef;vertical-align:middle;font-size:.86rem}.invoice-table td strong,.invoice-table td span{display:block}.invoice-table td span{margin-top:4px;color:#748292;font-size:.75rem;max-width:330px;white-space:normal;line-height:1.4}.invoice-table .invoice-amount{font-weight:800;color:#173b62;white-space:nowrap}",
   ".invoice-status{display:inline-flex!important;width:max-content;border-radius:999px;padding:5px 9px;background:#fff1dc;color:#825916!important;font-weight:800}.invoice-status.paid{background:#e4f2e9;color:#286343!important}.invoice-status.overdue{background:#fae5e6;color:#9b343c!important}.invoice-status.void{background:#e9edf1;color:#687787!important}.invoice-row-actions{display:flex;gap:6px;flex-wrap:wrap}.invoice-row-actions button{border:1px solid #d3dce4;border-radius:6px;padding:6px 8px;background:#fff;color:#244969;font-size:.74rem;font-weight:700;cursor:pointer;white-space:nowrap}.invoice-row-actions button:hover{background:#eff4f8}.invoice-row-actions .void-action{color:#8b3d42}",
   ".invoice-empty{display:grid;gap:6px;justify-items:center;padding:36px 16px;color:#647487}.invoice-empty strong{color:#34495e}.invoice-empty span{font-size:.84rem}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}",
-  "@media(max-width:1050px){.invoice-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.invoice-list-heading{align-items:stretch;flex-direction:column}.invoice-filters{flex-wrap:wrap}.invoice-filters input{flex:1;min-width:180px}}@media(max-width:650px){.invoice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.invoice-form-grid{grid-template-columns:1fr}.invoice-notes-field{grid-column:auto}.invoice-actions{align-items:stretch;flex-direction:column}.invoice-actions .primary-link{align-self:flex-start}.invoice-filters input{flex-basis:100%}.invoice-filters select{flex:1}.invoice-form-footer{align-items:flex-start;flex-direction:column}}",
+  "@media(max-width:1050px){.invoice-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.invoice-list-heading{align-items:stretch;flex-direction:column}.invoice-filters{flex-wrap:wrap}.invoice-filters input{flex:1;min-width:180px}}@media(max-width:650px){.invoice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.invoice-form-grid{grid-template-columns:1fr}.invoice-notes-field{grid-column:auto}.invoice-actions{align-items:stretch;flex-direction:column}.invoice-actions .primary-link{align-self:flex-start}.invoice-filters input{flex-basis:100%}.invoice-filters select{flex:1}.invoice-form-footer{align-items:flex-start;flex-direction:column}.invoice-breakdown-heading{align-items:flex-start;flex-direction:column}}",
 ].join("");
