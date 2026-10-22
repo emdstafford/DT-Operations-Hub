@@ -10,6 +10,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess }: { 
   const pathname = usePathname();
   const operationsAccess = Boolean(operationsRole);
   const canManageReports = operationsRole === "admin" || operationsRole === "uploader";
+  const isAdmin = operationsRole === "admin";
   const [employee, setEmployee] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => setMenuOpen(false), [pathname]);
@@ -38,6 +39,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess }: { 
         {(operationsAccess || fuelAccess || payrollAccess) && <Link className={pathname.startsWith("/reports") ? "active" : ""} href="/reports">Reports</Link>}
         {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel</Link>}
         {payrollAccess && <Link className={pathname.startsWith("/payroll") ? "active" : ""} href="/payroll">Payroll</Link>}
+        {isAdmin && <Link className={pathname.startsWith("/tech-invoices") ? "active" : ""} href="/tech-invoices">Tech invoices</Link>}
         {operationsAccess && canManageReports && <Link className={pathname.startsWith("/schedule-builder") ? "active" : ""} href="/schedule-builder">Schedule</Link>}
         {operationsAccess && canManageReports && <Link className={pathname.startsWith("/history") ? "active" : ""} href="/history">History</Link>}
       </nav>
@@ -49,3 +51,4 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess }: { 
     </header>
   );
 }
+

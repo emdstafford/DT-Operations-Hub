@@ -47,6 +47,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       const role = String(operationsResult.data?.role || "");
       const canManageReports = role === "admin" || role === "uploader";
       const isReportManagementPath = reportManagementPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+      const isTechInvoicePath = pathname === "/tech-invoices" || pathname.startsWith("/tech-invoices/");
       setOperationsRole(role);
       setPayrollAccess(canUsePayroll);
       setFuelAccess(canUseFuel);
@@ -60,6 +61,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       } else if (pathname === "/auth/callback" || pathname === "/account/password") {
         // Every approved employee can set a password, including payroll-only users.
         return;
+      } else if (isTechInvoicePath && role !== "admin") {
+        router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : "/payroll");
       } else if (pathname.startsWith("/payroll") && !canUsePayroll) {
         router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : "/login");
       } else if (pathname.startsWith("/fuel") && !canUseFuel) {
@@ -91,3 +94,4 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     <div className="app-content">{children}</div>
   </div></AccessRole.Provider>;
 }
+
