@@ -33,7 +33,6 @@ type InvoiceDraft = {
 };
 
 const invoiceCategories = ["Software", "Equipment", "Internet", "Phones", "IT support", "Other"];
-const legacyInvoiceCategories = ["Internet & phone"];
 const emptyDraft: InvoiceDraft = { vendor: "", invoice_number: "", description: "", category: "Software", invoice_date: "", due_date: "", amount: 0, status: "open", paid_at: "", notes: "" };
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const localDate = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
@@ -247,7 +246,7 @@ export default function TechInvoiceTracker() {
           <label>Vendor<input required maxLength={120} value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} placeholder="e.g. Internet provider" /></label>
           <label>Invoice number <span className="optional">(optional)</span><input maxLength={80} value={draft.invoice_number} onChange={(e) => setDraft({ ...draft, invoice_number: e.target.value })} /></label>
           <label>Description<input required maxLength={180} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Service, equipment, or subscription" /></label>
-          <label>Category<select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>{!invoiceCategories.includes(draft.category) && !legacyInvoiceCategories.includes(draft.category) && <option>{draft.category}</option>}{invoiceCategories.map((category) => <option key={category}>{category}</option>)}{legacyInvoiceCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
+          <label>Category<select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>{!invoiceCategories.includes(draft.category) && <option>{draft.category}</option>}{invoiceCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
           <label>Invoice date<input type="date" value={draft.invoice_date} onChange={(e) => setDraft({ ...draft, invoice_date: e.target.value })} /></label>
           <label>Due date<input required type="date" value={draft.due_date} onChange={(e) => setDraft({ ...draft, due_date: e.target.value })} /></label>
           <label>Amount<input required type="number" min="0.01" step="0.01" value={draft.amount || ""} onChange={(e) => setDraft({ ...draft, amount: Number(e.target.value) })} placeholder="0.00" /></label>
@@ -264,7 +263,7 @@ export default function TechInvoiceTracker() {
           <label className="sr-only" htmlFor="invoice-search">Search invoices</label><input id="invoice-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search vendor or invoice" />
           <label className="sr-only" htmlFor="invoice-status">Invoice status</label><select id="invoice-status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="open">Open</option><option value="overdue">Overdue</option><option value="paid">Paid</option><option value="void">Void</option><option value="all">All statuses</option></select>
           <label className="sr-only" htmlFor="invoice-year">Invoice year</label><select id="invoice-year" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}><option value="all">All years</option>{yearOptions.map((year) => <option value={year} key={year}>{year}</option>)}</select>
-          <label className="sr-only" htmlFor="invoice-category">Invoice category</label><select id="invoice-category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}><option value="all">All categories</option>{invoiceCategories.map((category) => <option value={category} key={category}>{category}</option>)}{legacyInvoiceCategories.map((category) => <option value={category} key={category}>{category} (existing)</option>)}</select>
+          <label className="sr-only" htmlFor="invoice-category">Invoice category</label><select id="invoice-category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}><option value="all">All categories</option>{invoiceCategories.map((category) => <option value={category} key={category}>{category}</option>)}</select>
         </div>
       </div>
       <div className="invoice-table-wrap">
