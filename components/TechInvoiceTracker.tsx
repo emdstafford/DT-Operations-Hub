@@ -31,6 +31,12 @@ type InvoiceDraft = {
   paid_at: string;
   notes: string;
 };
+type InvoicePdfDraft = {
+  id: string;
+  fileName: string;
+  draft: InvoiceDraft;
+  issue: string;
+};
 
 const invoiceCategories = ["Software", "Equipment", "Internet", "Phones", "IT support", "Other"];
 const emptyDraft: InvoiceDraft = { vendor: "", invoice_number: "", description: "", category: "Software", invoice_date: "", due_date: "", amount: 0, status: "open", paid_at: "", notes: "" };
@@ -60,16 +66,22 @@ function extractInvoiceFields(text: string): Partial<InvoiceDraft> {
     const match = text.match(new RegExp(`${label}\\s*[:#-]?\\s*(${datePattern})`, "i"));
     return match ? parseInvoiceDate(match[1]) : "";
   };
-  const invoiceNumber = text.match(/(?:invoice\s*(?:number|no\.?|#)|invoice\s*#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9/-]{2,})/i)?.[1] || "";
+  const invoiceNumber = text.match(/(?:invoice\s*(?:number|no\.?|#)|invoice\s*#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9/-]{2,})/i)?.[1]
+    || text.match(/\binvoice\s+([A-Z0-9][A-Z0-9/-]{2,})\s+(?=date\b)/i)?.[1]
+    || "";
   const amountLine = text.match(/(?:amount\s*due|balance\s*due|total\s*due|invoice\s*total|grand\s*total)[^\d$]{0,18}\$?\s*([\d,]+\.\d{2})/i)?.[1];
   const amount = amountLine ? Number(amountLine.replace(/,/g, "")) : 0;
-  const vendor = text.match(/^\s*(?:vendor|supplier|from)\s*:?\s*(.+?)\s*$/im)?.[1]?.trim() || "";
-  const description = text.match(/^\s*description\s*:?\s*(.+?)\s*$/im)?.[1]?.trim() || "";
+  const vendor = text.match(/^\s*(?:vendor|supplier|from)\s*:?\s*(.+?)\s*$/im)?.[1]?.trim()
+    || text.match(/^\s*(?:Page\s+\d+\s+of\s+\d+\s+)?(.+?)\s+(?=INVOICE\b|BILL\s+TO\b)/im)?.[1]?.replace(/^Page\s+\d+\s+of\s+\d+\s+/i, "").replace(/\s+\d{1,6}\s+[A-Z][\s\S]*$/, "").trim()
+    || "";
+  const description = text.match(/^\s*description\s*:?\s*(.+?)\s*$/im)?.[1]?.trim()
+    || text.match(/\bACTIVITY\s+DESCRIPTION\s+QTY\s+RATE\s+AMOUNT\s+(.+?)\s+\d+\s+[\d,]+\.\d{2}(?:[A-Z])?\b/i)?.[1]?.trim().replace(/\s+/g, " ")
+    || "";
   return {
     vendor,
     invoice_number: invoiceNumber,
     description,
-    invoice_date: dateFor("invoice\\s*date"),
+    invoice_date: dateFor("invoice\\s*date") || parseInvoiceDate(text.match(new RegExp(`\\bINVOICE\\s+[A-Z0-9/-]+\\s+DATE\\s*[:#-]?\\s*(${datePattern})`, "i"))?.[1] || ""),
     due_date: dateFor("due\\s*date"),
     amount: Number.isFinite(amount) ? amount : 0,
   };
@@ -97,6 +109,8 @@ export default function TechInvoiceTracker() {
   const [sortColumn, setSortColumn] = useState<InvoiceSortColumn>("due_date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [readingPdf, setReadingPdf] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState("");
+  const [pdfDrafts, setPdfDrafts] = useState<InvoicePdfDraft[]>([]);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const loadInvoices = useCallback(async () => {
@@ -210,43 +224,80 @@ export default function TechInvoiceTracker() {
     setError("");
     setShowForm(true);
   }
-  async function importInvoicePdf(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  async function importInvoicePdfs(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
     event.target.value = "";
-    if (!file) return;
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setError("Choose an invoice PDF file.");
-      return;
-    }
-    if (file.size > 15 * 1024 * 1024) {
-      setError("This PDF is over 15 MB. Choose a smaller file.");
-      return;
-    }
+    if (!files.length) return;
     setReadingPdf(true);
     setError("");
     setNotice("");
+    setPdfProgress(`Preparing ${files.length} PDF${files.length === 1 ? "" : "s"}…`);
     try {
       const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
       pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
-      const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
-      const pageTexts: string[] = [];
-      for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, 20); pageNumber += 1) {
-        const page = await pdf.getPage(pageNumber);
-        const content = await page.getTextContent();
-        pageTexts.push(content.items.map((item) => "str" in item ? item.str : "").join(" "));
+      const imported: InvoicePdfDraft[] = [];
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        setPdfProgress(`Reading ${index + 1} of ${files.length}: ${file.name}`);
+        const item: InvoicePdfDraft = { id: crypto.randomUUID(), fileName: file.name, draft: { ...emptyDraft, invoice_date: today() }, issue: "" };
+        if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+          item.issue = "This file is not a PDF. You can remove it or enter the invoice details manually.";
+          imported.push(item);
+          continue;
+        }
+        if (file.size > 15 * 1024 * 1024) {
+          item.issue = "This PDF is over 15 MB. You can remove it or enter the invoice details manually.";
+          imported.push(item);
+          continue;
+        }
+        try {
+          const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+          const pageTexts: string[] = [];
+          for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, 20); pageNumber += 1) {
+            const page = await pdf.getPage(pageNumber);
+            const content = await page.getTextContent();
+            pageTexts.push(content.items.map((entry) => "str" in entry ? entry.str : "").join(" "));
+          }
+          const text = pageTexts.join("\n");
+          if (!text.trim()) throw new Error("No selectable text found. Enter the invoice details below or remove this file.");
+          const extracted = extractInvoiceFields(text);
+          item.draft = { ...emptyDraft, ...extracted, category: "Software", invoice_date: extracted.invoice_date || today() };
+        } catch (pdfError) {
+          item.issue = pdfError instanceof Error ? pdfError.message : "Unable to read this PDF. Enter the invoice details manually.";
+        }
+        imported.push(item);
       }
-      const text = pageTexts.join("\n");
-      if (!text.trim()) throw new Error("This PDF has no selectable text. You can still enter the invoice details manually.");
-      const extracted = extractInvoiceFields(text);
+      setPdfDrafts((current) => [...current, ...imported]);
+      setNotice(`${imported.length} PDF${imported.length === 1 ? "" : "s"} added for review. Check the extracted details before saving.`);
+      setShowForm(false);
       setEditing(null);
-      setDraft({ ...emptyDraft, ...extracted, category: "Software", invoice_date: extracted.invoice_date || today() });
-      setShowForm(true);
-      setNotice("Invoice details were read from the PDF where available. Review the fields and fill in anything missing before saving.");
     } catch (pdfError) {
-      setError(pdfError instanceof Error ? pdfError.message : "Unable to read this PDF. Enter the invoice details manually.");
+      setError(pdfError instanceof Error ? pdfError.message : "Unable to read the selected PDFs.");
     } finally {
       setReadingPdf(false);
+      setPdfProgress("");
     }
+  }
+  function updatePdfDraft(id: string, changes: Partial<InvoiceDraft>) {
+    setPdfDrafts((current) => current.map((item) => item.id === id ? { ...item, draft: { ...item.draft, ...changes } } : item));
+  }
+  async function savePdfBatch() {
+    if (!pdfDrafts.length || pdfDrafts.some(({ draft }) => !draft.vendor.trim() || !draft.description.trim() || !draft.due_date || Number(draft.amount) <= 0)) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    const payload = pdfDrafts.map(({ draft }) => ({ ...draft, vendor: draft.vendor.trim(), invoice_number: draft.invoice_number.trim() || null, description: draft.description.trim(), category: draft.category.trim() || "Software", invoice_date: draft.invoice_date || null, due_date: draft.due_date, amount: Number(draft.amount), paid_at: draft.status === "paid" ? draft.paid_at || today() : null, notes: draft.notes.trim() || null, updated_at: new Date().toISOString() }));
+    const { error: saveError } = await supabase.from("tech_invoices").insert(payload);
+    if (saveError) {
+      setError(saveError.message);
+      setSaving(false);
+      return;
+    }
+    const savedCount = pdfDrafts.length;
+    setPdfDrafts([]);
+    setNotice(`${savedCount} invoice${savedCount === 1 ? "" : "s"} added.`);
+    await loadInvoices();
+    setSaving(false);
   }
   function startEdit(invoice: Invoice) {
     setEditing(invoice.id);
@@ -288,9 +339,32 @@ export default function TechInvoiceTracker() {
 
   return (
     <section className="invoice-tracker">
-      <div className="invoice-actions"><p>Enter invoices as they arrive, then mark them paid when they clear.</p><div className="invoice-import-actions"><input ref={pdfInputRef} className="sr-only" type="file" accept="application/pdf,.pdf" onChange={importInvoicePdf} /><button type="button" className="secondary-link" disabled={readingPdf} onClick={() => pdfInputRef.current?.click()}>{readingPdf ? "Reading PDF…" : "Upload invoice PDF"}</button><button type="button" className="primary-link" onClick={startNew}>＋ Add invoice</button></div></div>
+      <div className="invoice-actions"><p>Enter invoices as they arrive, then mark them paid when they clear.</p><div className="invoice-import-actions"><input ref={pdfInputRef} className="sr-only" type="file" accept="application/pdf,.pdf" multiple onChange={importInvoicePdfs} /><button type="button" className="secondary-link" disabled={readingPdf} onClick={() => pdfInputRef.current?.click()}>{readingPdf ? "Reading PDFs…" : "Upload invoice PDFs"}</button><button type="button" className="primary-link" onClick={startNew}>＋ Add invoice</button></div></div>
       {error && <div className="alert alert-error" role="alert">{sqlMessage || error}</div>}
       {notice && <div className="invoice-notice" role="status">{notice}</div>}
+      {readingPdf && <div className="invoice-notice" role="status">{pdfProgress}</div>}
+
+      {pdfDrafts.length > 0 && <section className="invoice-batch" aria-labelledby="invoice-batch-title">
+        <div className="invoice-batch-heading"><div><p className="eyebrow">PDF batch import · {pdfDrafts.length} invoice{pdfDrafts.length === 1 ? "" : "s"}</p><h2 id="invoice-batch-title">Review invoices before saving</h2><p>Check every field. The PDFs stay in your browser and are not saved to the tracker.</p></div><div className="invoice-batch-actions"><button type="button" className="secondary-link" disabled={readingPdf} onClick={() => pdfInputRef.current?.click()}>＋ Add more PDFs</button><button type="button" className="text-button" onClick={() => setPdfDrafts([])}>Clear batch</button></div></div>
+        <div className="invoice-batch-list">{pdfDrafts.map((item, index) => <article className="invoice-batch-card" key={item.id}>
+          <div className="invoice-batch-card-heading"><div><span className="invoice-batch-count">Invoice {index + 1} of {pdfDrafts.length}</span><strong title={item.fileName}>{item.fileName}</strong></div><button type="button" className="text-button" onClick={() => setPdfDrafts((current) => current.filter((entry) => entry.id !== item.id))}>Remove</button></div>
+          {item.issue && <p className="invoice-batch-issue" role="status">{item.issue}</p>}
+          <div className="invoice-batch-grid">
+            <label>Vendor<input required maxLength={120} value={item.draft.vendor} onChange={(e) => updatePdfDraft(item.id, { vendor: e.target.value })} placeholder="e.g. LoadTrek" /></label>
+            <label>Invoice number <span className="optional">(optional)</span><input maxLength={80} value={item.draft.invoice_number} onChange={(e) => updatePdfDraft(item.id, { invoice_number: e.target.value })} /></label>
+            <label>Description<input required maxLength={180} value={item.draft.description} onChange={(e) => updatePdfDraft(item.id, { description: e.target.value })} placeholder="Service, equipment, or subscription" /></label>
+            <label>Category<select value={item.draft.category} onChange={(e) => updatePdfDraft(item.id, { category: e.target.value })}>{invoiceCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
+            <label>Invoice date<input type="date" value={item.draft.invoice_date} onChange={(e) => updatePdfDraft(item.id, { invoice_date: e.target.value })} /></label>
+            <label>Due date<input required type="date" value={item.draft.due_date} onChange={(e) => updatePdfDraft(item.id, { due_date: e.target.value })} /></label>
+            <label>Amount<input required type="number" min="0.01" step="0.01" value={item.draft.amount || ""} onChange={(e) => updatePdfDraft(item.id, { amount: Number(e.target.value) })} placeholder="0.00" /></label>
+            <label>Payment status<select value={item.draft.status} onChange={(e) => updatePdfDraft(item.id, { status: e.target.value as "open" | "paid", paid_at: e.target.value === "paid" ? item.draft.paid_at || today() : "" })}><option value="open">Unpaid</option><option value="paid">Paid</option></select></label>
+            {item.draft.status === "paid" && <label>Payment date<input required type="date" value={item.draft.paid_at} onChange={(e) => updatePdfDraft(item.id, { paid_at: e.target.value })} /></label>}
+            <label className="invoice-batch-notes">Notes <span className="optional">(optional)</span><textarea rows={2} maxLength={1000} value={item.draft.notes} onChange={(e) => updatePdfDraft(item.id, { notes: e.target.value })} /></label>
+          </div>
+        </article>)}</div>
+        {error && !sqlMessage && <div className="alert alert-error" role="alert">{error}</div>}
+        <div className="invoice-batch-footer"><span>{pdfDrafts.every(({ draft }) => draft.vendor.trim() && draft.description.trim() && draft.due_date && Number(draft.amount) > 0) ? "All invoice details are ready to save." : "Complete vendor, description, due date, and amount for each invoice."}</span><button type="button" className="primary-link" disabled={saving || pdfDrafts.some(({ draft }) => !draft.vendor.trim() || !draft.description.trim() || !draft.due_date || Number(draft.amount) <= 0)} onClick={() => void savePdfBatch()}>{saving ? "Saving invoices…" : `Save ${pdfDrafts.length} invoice${pdfDrafts.length === 1 ? "" : "s"}`}</button></div>
+      </section>}
 
       <div className="invoice-metrics" aria-label="Invoice summary">
         <article><span>Paid in {yearFilter === "all" ? "all years" : yearFilter}</span><strong>{money.format(summary.spent)}</strong><small>Counted by payment date</small></article>
@@ -381,6 +455,7 @@ const styles = [
   ".invoice-import-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.secondary-link{min-height:42px;padding:9px 13px;border:1px solid #b9c8d6;border-radius:7px;background:#fff;color:#244969;font:inherit;font-size:.84rem;font-weight:800;cursor:pointer}.secondary-link:hover{background:#eff4f8}.secondary-link:disabled{opacity:.6;cursor:wait}",
   ".invoice-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.invoice-metrics article{display:grid;gap:7px;padding:17px;border:1px solid #dce3ea;border-radius:11px;background:white;box-shadow:0 5px 18px #142d4608}.invoice-metrics article span{font-size:.74rem;font-weight:800;letter-spacing:.045em;text-transform:uppercase;color:#647487}.invoice-metrics article strong{font-size:1.45rem;color:#123a60;letter-spacing:-.03em}.invoice-metrics article small{font-size:.74rem;color:#728090;line-height:1.35}.invoice-metrics article.is-overdue{border-color:#e6c5c8;background:#fffafa}.invoice-metrics article.is-overdue strong{color:#9b343c}",
   ".invoice-notice{padding:12px 15px;border-radius:8px;background:#e8f3ec;color:#225c39;font-weight:700}.invoice-form{padding:22px;border:1px solid #d7e0e8;border-radius:12px;background:white;box-shadow:0 8px 26px #142d460a}.invoice-form-heading,.invoice-form-footer{display:flex;align-items:center;justify-content:space-between;gap:14px}.invoice-form-heading{margin-bottom:18px}.invoice-form-heading h2,.invoice-list-heading h2{margin:3px 0;color:#0b3158;font-size:1.35rem}",
+  ".invoice-batch{display:grid;gap:14px;padding:20px;border:1px solid #c9d8e4;border-radius:12px;background:#f8fbfd}.invoice-batch-heading,.invoice-batch-actions,.invoice-batch-card-heading,.invoice-batch-footer{display:flex;align-items:center;justify-content:space-between;gap:14px}.invoice-batch-heading h2{margin:3px 0;color:#0b3158;font-size:1.3rem}.invoice-batch-heading p:not(.eyebrow){margin:5px 0 0;color:#6e7d8b;font-size:.84rem}.invoice-batch-actions{flex-wrap:wrap}.invoice-batch-list{display:grid;gap:12px}.invoice-batch-card{display:grid;gap:13px;padding:16px;border:1px solid #dce3ea;border-radius:10px;background:#fff}.invoice-batch-card-heading>div{display:grid;gap:3px;min-width:0}.invoice-batch-card-heading strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#243b52;font-size:.9rem}.invoice-batch-count{color:#758494;font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}.invoice-batch-issue{margin:0;padding:9px 11px;border-radius:7px;background:#fff5e8;color:#76521c;font-size:.8rem}.invoice-batch-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.invoice-batch-grid label{display:grid;gap:5px;color:#34495e;font-size:.8rem;font-weight:700}.invoice-batch-grid input,.invoice-batch-grid select,.invoice-batch-grid textarea{width:100%;min-height:40px;border:1px solid #bdc9d4;border-radius:7px;background:#fff;padding:8px 10px;color:#172b3f;font:inherit}.invoice-batch-grid textarea{resize:vertical}.invoice-batch-notes{grid-column:span 2}.invoice-batch-footer{padding-top:12px;border-top:1px solid #dce3ea}.invoice-batch-footer span{color:#6e7d8b;font-size:.8rem}.invoice-batch-footer button:disabled{opacity:.55;cursor:wait}",
   ".invoice-breakdown{display:grid;gap:10px;padding:18px;border:1px solid #dce3ea;border-radius:11px;background:white}.invoice-breakdown-heading{display:flex;justify-content:space-between;align-items:end;gap:16px}.invoice-breakdown-heading h2{margin:3px 0;color:#0b3158;font-size:1.25rem}.invoice-breakdown-heading label{display:flex;align-items:center;gap:8px;color:#5d6d7c;font-size:.8rem;font-weight:700}.invoice-breakdown-heading select{min-height:38px;border:1px solid #bdc9d4;border-radius:7px;padding:7px 10px;background:white;color:#172b3f;font:inherit}.invoice-breakdown-note{margin:0;color:#728090;font-size:.76rem}",
   ".invoice-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.invoice-form-grid label{display:grid;gap:6px;color:#34495e;font-size:.82rem;font-weight:700}.invoice-form-grid input,.invoice-form-grid select,.invoice-form-grid textarea,.invoice-filters input,.invoice-filters select{width:100%;min-height:42px;border:1px solid #bdc9d4;border-radius:7px;background:#fff;padding:9px 11px;color:#172b3f;font:inherit}.invoice-form-grid textarea{resize:vertical}.invoice-notes-field{grid-column:span 2}.optional{color:#8290a0;font-weight:400}.invoice-form-footer{margin-top:18px;padding-top:14px;border-top:1px solid #e5e9ed}.invoice-form-footer span{font-size:.78rem;color:#718090}.invoice-form-footer button:disabled{opacity:.55;cursor:wait}",
   ".invoice-list-heading{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-top:12px}.invoice-filters{display:flex;gap:8px;align-items:center}.invoice-filters input{min-width:220px}.invoice-filters select{width:auto;min-width:125px}",
@@ -388,5 +463,5 @@ const styles = [
   ".invoice-sort-button{display:inline-flex;align-items:center;gap:6px;border:0;padding:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer}.invoice-sort-button span{color:#244969;font-size:.68rem}.invoice-sort-button:hover,.invoice-sort-button:focus-visible{color:#0b3158;text-decoration:underline;text-underline-offset:3px;outline:none}",
   ".invoice-status{display:inline-flex!important;width:max-content;border-radius:999px;padding:5px 9px;background:#fff1dc;color:#825916!important;font-weight:800}.invoice-status.paid{background:#e4f2e9;color:#286343!important}.invoice-status.overdue{background:#fae5e6;color:#9b343c!important}.invoice-status.void{background:#e9edf1;color:#687787!important}.invoice-row-actions{display:flex;gap:6px;flex-wrap:wrap}.invoice-row-actions button{border:1px solid #d3dce4;border-radius:6px;padding:6px 8px;background:#fff;color:#244969;font-size:.74rem;font-weight:700;cursor:pointer;white-space:nowrap}.invoice-row-actions button:hover{background:#eff4f8}.invoice-row-actions .void-action{color:#8b3d42}",
   ".invoice-empty{display:grid;gap:6px;justify-items:center;padding:36px 16px;color:#647487}.invoice-empty strong{color:#34495e}.invoice-empty span{font-size:.84rem}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}",
-  "@media(max-width:1050px){.invoice-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.invoice-list-heading{align-items:stretch;flex-direction:column}.invoice-filters{flex-wrap:wrap}.invoice-filters input{flex:1;min-width:180px}}@media(max-width:650px){.invoice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.invoice-form-grid{grid-template-columns:1fr}.invoice-notes-field{grid-column:auto}.invoice-actions{align-items:stretch;flex-direction:column}.invoice-actions .primary-link{align-self:flex-start}.invoice-import-actions{align-self:flex-start}.invoice-filters input{flex-basis:100%}.invoice-filters select{flex:1}.invoice-form-footer{align-items:flex-start;flex-direction:column}.invoice-breakdown-heading{align-items:flex-start;flex-direction:column}}",
+  "@media(max-width:1050px){.invoice-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.invoice-list-heading{align-items:stretch;flex-direction:column}.invoice-filters{flex-wrap:wrap}.invoice-filters input{flex:1;min-width:180px}.invoice-batch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.invoice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.invoice-form-grid{grid-template-columns:1fr}.invoice-notes-field{grid-column:auto}.invoice-actions{align-items:stretch;flex-direction:column}.invoice-actions .primary-link{align-self:flex-start}.invoice-import-actions{align-self:flex-start}.invoice-filters input{flex-basis:100%}.invoice-filters select{flex:1}.invoice-form-footer{align-items:flex-start;flex-direction:column}.invoice-breakdown-heading{align-items:flex-start;flex-direction:column}.invoice-batch-heading,.invoice-batch-card-heading,.invoice-batch-footer{align-items:flex-start;flex-direction:column}.invoice-batch-grid{grid-template-columns:1fr}.invoice-batch-notes{grid-column:auto}.invoice-batch-actions{width:100%;justify-content:flex-start}}",
 ].join("");
