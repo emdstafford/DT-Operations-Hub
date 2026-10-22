@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type InvoiceStatus = "open" | "paid" | "void";
+type InvoiceSortColumn = "vendor" | "due_date" | "amount" | "status";
 type Invoice = {
   id: string;
   vendor: string;
@@ -59,6 +60,8 @@ export default function TechInvoiceTracker() {
   const [yearFilter, setYearFilter] = useState(String(currentYear));
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [breakdownBy, setBreakdownBy] = useState<"vendor" | "category">("vendor");
+  const [sortColumn, setSortColumn] = useState<InvoiceSortColumn>("due_date");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
@@ -125,14 +128,45 @@ export default function TechInvoiceTracker() {
 
   const filteredInvoices = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return invoices.filter((invoice) => {
+    const matching = invoices.filter((invoice) => {
       const matchesSearch = !query || [invoice.vendor, invoice.invoice_number, invoice.description, invoice.category].some((value) => String(value || "").toLowerCase().includes(query));
       const matchesStatus = statusFilter === "all" || invoice.status === statusFilter || (statusFilter === "overdue" && invoice.status === "open" && invoice.due_date < today());
       const matchesYear = yearFilter === "all" || invoice.due_date.startsWith(yearFilter) || Boolean(invoice.paid_at?.startsWith(yearFilter));
       const matchesCategory = categoryFilter === "all" || invoice.category === categoryFilter;
       return matchesSearch && matchesStatus && matchesYear && matchesCategory;
-    }).sort((a, b) => a.due_date.localeCompare(b.due_date));
-  }, [invoices, search, statusFilter, yearFilter, categoryFilter]);
+    });
+    const direction = sortDirection === "asc" ? 1 : -1;
+    return matching.sort((a, b) => {
+      let comparison = 0;
+      if (sortColumn === "vendor") {
+        comparison = a.vendor.localeCompare(b.vendor, undefined, { sensitivity: "base" });
+        if (!comparison) comparison = (a.invoice_number || "").localeCompare(b.invoice_number || "", undefined, { numeric: true, sensitivity: "base" });
+      } else if (sortColumn === "due_date") {
+        comparison = a.due_date.localeCompare(b.due_date);
+      } else if (sortColumn === "amount") {
+        comparison = Number(a.amount) - Number(b.amount);
+      } else {
+        const statusLabel = (invoice: Invoice) => invoice.status === "open" && invoice.due_date < today() ? "Overdue" : invoice.status === "open" ? "Open" : invoice.status === "paid" ? "Paid" : "Void";
+        comparison = statusLabel(a).localeCompare(statusLabel(b), undefined, { sensitivity: "base" });
+      }
+      return comparison * direction || a.due_date.localeCompare(b.due_date);
+    });
+  }, [invoices, search, statusFilter, yearFilter, categoryFilter, sortColumn, sortDirection]);
+
+  function toggleSort(column: InvoiceSortColumn) {
+    if (sortColumn === column) setSortDirection((direction) => direction === "asc" ? "desc" : "asc");
+    else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  }
+
+  function sortIndicator(column: InvoiceSortColumn) {
+    if (sortColumn !== column) return "↕";
+    if (column === "vendor" || column === "status") return sortDirection === "asc" ? "↑ A–Z" : "↓ Z–A";
+    if (column === "amount") return sortDirection === "asc" ? "↑ Low–High" : "↓ High–Low";
+    return sortDirection === "asc" ? "↑ Earliest" : "↓ Latest";
+  }
 
   function startNew() {
     setEditing(null);
@@ -235,7 +269,13 @@ export default function TechInvoiceTracker() {
       </div>
       <div className="invoice-table-wrap">
         {loading ? <p className="invoice-empty">Loading invoices…</p> : filteredInvoices.length === 0 ? <div className="invoice-empty"><strong>No invoices match these filters.</strong><span>Add an invoice to start tracking due dates and spend.</span></div> : (
-          <table className="invoice-table"><thead><tr><th>Vendor / invoice</th><th>Description</th><th>Due date</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+          <table className="invoice-table"><thead><tr>
+            <th aria-sort={sortColumn === "vendor" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button type="button" className="invoice-sort-button" aria-label={`Sort by vendor and invoice ${sortColumn === "vendor" ? (sortDirection === "asc" ? "Z to A" : "A to Z") : "A to Z"}`} onClick={() => toggleSort("vendor")}>Vendor / invoice <span aria-hidden="true">{sortIndicator("vendor")}</span></button></th>
+            <th>Description</th>
+            <th aria-sort={sortColumn === "due_date" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button type="button" className="invoice-sort-button" aria-label={`Sort by due date ${sortColumn === "due_date" ? (sortDirection === "asc" ? "latest first" : "earliest first") : "earliest first"}`} onClick={() => toggleSort("due_date")}>Due date <span aria-hidden="true">{sortIndicator("due_date")}</span></button></th>
+            <th aria-sort={sortColumn === "amount" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button type="button" className="invoice-sort-button" aria-label={`Sort by amount ${sortColumn === "amount" ? (sortDirection === "asc" ? "highest first" : "lowest first") : "lowest first"}`} onClick={() => toggleSort("amount")}>Amount <span aria-hidden="true">{sortIndicator("amount")}</span></button></th>
+            <th aria-sort={sortColumn === "status" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button type="button" className="invoice-sort-button" aria-label={`Sort by status ${sortColumn === "status" ? (sortDirection === "asc" ? "Z to A" : "A to Z") : "A to Z"}`} onClick={() => toggleSort("status")}>Status <span aria-hidden="true">{sortIndicator("status")}</span></button></th>
+            <th>Actions</th></tr></thead>
             <tbody>{filteredInvoices.map((invoice) => {
               const overdue = invoice.status === "open" && invoice.due_date < today();
               return <tr key={invoice.id}>
@@ -270,6 +310,7 @@ const styles = [
   ".invoice-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.invoice-form-grid label{display:grid;gap:6px;color:#34495e;font-size:.82rem;font-weight:700}.invoice-form-grid input,.invoice-form-grid select,.invoice-form-grid textarea,.invoice-filters input,.invoice-filters select{width:100%;min-height:42px;border:1px solid #bdc9d4;border-radius:7px;background:#fff;padding:9px 11px;color:#172b3f;font:inherit}.invoice-form-grid textarea{resize:vertical}.invoice-notes-field{grid-column:span 2}.optional{color:#8290a0;font-weight:400}.invoice-form-footer{margin-top:18px;padding-top:14px;border-top:1px solid #e5e9ed}.invoice-form-footer span{font-size:.78rem;color:#718090}.invoice-form-footer button:disabled{opacity:.55;cursor:wait}",
   ".invoice-list-heading{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-top:12px}.invoice-filters{display:flex;gap:8px;align-items:center}.invoice-filters input{min-width:220px}.invoice-filters select{width:auto;min-width:125px}",
   ".invoice-table-wrap{overflow-x:auto;border:1px solid #dce3ea;border-radius:10px;background:white}.invoice-table{width:100%;border-collapse:collapse;text-align:left}.invoice-table th{padding:12px 14px;background:#f1f5f8;color:#5d6d7c;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}.invoice-table td{padding:13px 14px;border-top:1px solid #e7ebef;vertical-align:middle;font-size:.86rem}.invoice-table td strong,.invoice-table td span{display:block}.invoice-table td span{margin-top:4px;color:#748292;font-size:.75rem;max-width:330px;white-space:normal;line-height:1.4}.invoice-table .invoice-amount{font-weight:800;color:#173b62;white-space:nowrap}",
+  ".invoice-sort-button{display:inline-flex;align-items:center;gap:6px;border:0;padding:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer}.invoice-sort-button span{color:#244969;font-size:.68rem}.invoice-sort-button:hover,.invoice-sort-button:focus-visible{color:#0b3158;text-decoration:underline;text-underline-offset:3px;outline:none}",
   ".invoice-status{display:inline-flex!important;width:max-content;border-radius:999px;padding:5px 9px;background:#fff1dc;color:#825916!important;font-weight:800}.invoice-status.paid{background:#e4f2e9;color:#286343!important}.invoice-status.overdue{background:#fae5e6;color:#9b343c!important}.invoice-status.void{background:#e9edf1;color:#687787!important}.invoice-row-actions{display:flex;gap:6px;flex-wrap:wrap}.invoice-row-actions button{border:1px solid #d3dce4;border-radius:6px;padding:6px 8px;background:#fff;color:#244969;font-size:.74rem;font-weight:700;cursor:pointer;white-space:nowrap}.invoice-row-actions button:hover{background:#eff4f8}.invoice-row-actions .void-action{color:#8b3d42}",
   ".invoice-empty{display:grid;gap:6px;justify-items:center;padding:36px 16px;color:#647487}.invoice-empty strong{color:#34495e}.invoice-empty span{font-size:.84rem}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}",
   "@media(max-width:1050px){.invoice-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.invoice-list-heading{align-items:stretch;flex-direction:column}.invoice-filters{flex-wrap:wrap}.invoice-filters input{flex:1;min-width:180px}}@media(max-width:650px){.invoice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.invoice-form-grid{grid-template-columns:1fr}.invoice-notes-field{grid-column:auto}.invoice-actions{align-items:stretch;flex-direction:column}.invoice-actions .primary-link{align-self:flex-start}.invoice-filters input{flex-basis:100%}.invoice-filters select{flex:1}.invoice-form-footer{align-items:flex-start;flex-direction:column}.invoice-breakdown-heading{align-items:flex-start;flex-direction:column}}",
