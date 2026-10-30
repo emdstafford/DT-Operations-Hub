@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useUploadHandoff } from "@/components/UploadHandoff";
 import TimecardComparisons, { type SavedReport, type TimecardDailyEntry, type TimecardDetailEntry, type TimecardSummaryEntry } from "@/components/TimecardComparisons";
 import * as XLSX from "xlsx";
+import { timecardSavedHours } from "@/lib/timecardSavedHours";
 
 type Field = "last" | "first" | "contract" | "inTime" | "outTime" | "hours" | "payCode";
 type Columns = Record<Field, number>;
@@ -108,8 +109,8 @@ function contractKeys(value: string) {
 function TimecardRows({ rows }: { rows: Shift[] }) {
   return <section className="timecard-period"><table className="data-table"><thead><tr><th>Date</th><th>Time In</th><th>Time Out</th><th>Hours</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.inTime}-${index}`}><td>{dateLabel(row.date)}</td><td>{clock(row.inTime)}</td><td>{clock(row.outTime)}</td><td>{hoursLabel(row.hundredths)}</td></tr>)}</tbody></table></section>;
 }
-function HoursInline({ current, previous, currentName }: { current: number; previous: { name: string; hours: number } | null; currentName: string }) {
-  return <span className="timecard-compare-inline">{previous && <span>Previous {previous.name}: <b>{hoursLabel(previous.hours)}</b></span>}<span>Current {currentName}: <b>{hoursLabel(current)}</b></span>{previous && <span className={current < previous.hours ? "timecard-hours-down" : current > previous.hours ? "timecard-hours-up" : ""}>Change from last payroll: <b>{hoursChange(current, previous.hours)}</b></span>}</span>;
+function HoursInline({ current, previous, currentName }: { current: number; previous: { name: string; hours: number | null } | null; currentName: string }) {
+  return <span className="timecard-compare-inline">{previous && <span>Previous {previous.name}: <b>{previous.hours === null ? "Not matched" : hoursLabel(previous.hours)}</b></span>}<span>Current {currentName}: <b>{hoursLabel(current)}</b></span>{previous && previous.hours !== null && <span className={current < previous.hours ? "timecard-hours-down" : current > previous.hours ? "timecard-hours-up" : ""}>Change from last payroll: <b>{hoursChange(current, previous.hours)}</b></span>}</span>;
 }
 export default function TimecardPacket() {
   const handoff = useUploadHandoff();
@@ -221,14 +222,8 @@ export default function TimecardPacket() {
     return () => { active = false; };
   }, [periodStart, periodEnd]);
   function savedHours(report: SavedReport | null, contract: string, employeeId?: string, name?: string) {
-    if (!report) return 0;
-    const entries = report.summary.filter((entry) => entry.contract.trim().toUpperCase() === contract.trim().toUpperCase());
-    if (!employeeId) return entries.reduce((sum, entry) => sum + entry.hundredths, 0);
-    const idRows = entries.filter((entry) => entry.employeeId === employeeId);
-    if (idRows.length) return idRows.reduce((sum, entry) => sum + entry.hundredths, 0);
-    if (employeeId.startsWith("name:") || entries.some((entry) => entry.employeeId.startsWith("name:")))
-      return entries.filter((entry) => entry.name.trim().toLowerCase() === name?.trim().toLowerCase()).reduce((sum, entry) => sum + entry.hundredths, 0);
-    return 0;
+    if (!report) return null;
+    return timecardSavedHours(report.summary, contract, employeeId, name, historyEntries);
   }
   const historyEntries = useMemo<TimecardSummaryEntry[]>(() => contracts.flatMap(({ contract, people }) => people.map((person) => ({
     contract, employeeId: person.employeeId, name: person.name, hundredths: total(person.rows),
@@ -272,7 +267,7 @@ export default function TimecardPacket() {
     </section>
     <section className="panel timecard-actions no-print"><button className="primary-link" disabled={!ready || !printContracts.length || supervisorStatus === "loading" || comparisonStatus === "loading"} onClick={() => window.print()}>Print by contract</button><span>{ready ? `${printContracts.length} contracts. Each starts on a new page. 030512, 01SHDR, and 011VAN are omitted from this packet.` : "Choose one report. All rows must be readable before printing."}</span></section>
     {ready && confirmedPayrollName ? <TimecardComparisons entries={historyEntries} dailyEntries={dailyEntries} detailRows={detailRows} start={periodStart} end={periodEnd} sourceName={file?.name || "Timecard report"} payrollName={confirmedPayrollName} /> : ready && <section className="panel no-print timecard-comparisons"><h2>Save and compare payrolls</h2><p>Enter the payroll name or number above, such as #39, to save the hour totals. Reuse it for a corrected report. You can print the timecards now.</p></section>}
-    {ready && <div className="timecard-packet"><div className="timecard-screen-heading no-print"><h2>Packet preview</h2><p>Check the hours and contract assignments before printing the packet.</p></div>{printContracts.map(({ contract, people }) => {
+    {ready && <div className="timecard-packet"><div className="timecard-screen-heading no-print"><h2>Packet preview</h2><p>Check the hours and contract assignments before printing the packet. “Not matched” means no unambiguous previous total was found; no change is calculated for that entry.</p></div>{printContracts.map(({ contract, people }) => {
       const contractRows = people.flatMap((person) => person.rows);
       const supervisors = supervisorsFor(contract, contractRows);
       return <section className="timecard-contract" key={contract}><header><div><h2>{contract === unassignedDepartment ? "Unassigned department" : `Contract ${contract}`}</h2><span>{payrollName.trim() ? `${payrollName.trim()} · ` : ""}{dateLabel(periodStart)} – {dateLabel(periodEnd)}</span></div><div className="timecard-supervisor-heading"><span>{approvedWithoutSupervisor.has(contract.trim().toUpperCase()) && !supervisors.length ? "No supervisor required" : `Supervisor${supervisors.length === 1 ? "" : "s"}`}</span><strong>{supervisors.length ? supervisors.join(", ") : approvedWithoutSupervisor.has(contract.trim().toUpperCase()) ? "Approved" : supervisorStatus === "loading" ? "Loading…" : supervisorStatus === "error" ? "Unavailable" : "Not assigned"}</strong><small>{people.length} employees</small></div></header>
