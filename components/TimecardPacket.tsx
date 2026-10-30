@@ -119,8 +119,42 @@ export default function TimecardPacket() {
   const [confirmedPayrollName, setConfirmedPayrollName] = useState("");
   const [error, setError] = useState("");
   const [excludeUnreadable, setExcludeUnreadable] = useState(false);
-  const result = useMemo(() => parse(file), [file]);
-  const ready = !!file && validColumns(file) && (result.invalid === 0 || excludeUnreadable) && result.rows.length > 0;
+  const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
+  const [savedId, setSavedId] = useState("");
+  const [savedPacket, setSavedPacket] = useState<(SavedReport & { rows: Shift[] }) | null>(null);
+  const [loadingSaved, setLoadingSaved] = useState(false);
+  const [savedError, setSavedError] = useState("");
+  const result = useMemo<Result>(() => savedPacket ? { rows: savedPacket.rows, invalid: 0, invalidRows: [], pto: 0, subtotals: 0, unassigned: 0 } : parse(file), [file, savedPacket]);
+  const ready = !loadingSaved && (!!savedPacket || (!!file && validColumns(file) && (result.invalid === 0 || excludeUnreadable))) && result.rows.length > 0;
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const { data, error } = await supabase.from("timecard_summary_history").select("id,payroll_name,pay_date,period_start,period_end,source_file,saved_at").is("archived_at", null).order("period_end", { ascending: false }).order("saved_at", { ascending: false }).limit(250);
+      if (!active) return;
+      if (error) setSavedError(`Could not load saved payrolls: ${error.message}`);
+      else setSavedReports((data ?? []) as SavedReport[]);
+    })();
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (!savedId) { setLoadingSaved(false); return; }
+    let active = true;
+    setLoadingSaved(true); setSavedError(""); setSavedPacket(null); setFile(null);
+    void (async () => {
+      try {
+        const { data, error } = await supabase.from("timecard_summary_history").select("id,payroll_name,pay_date,period_start,period_end,source_file,saved_at,summary,detail_rows").eq("id", savedId).is("archived_at", null).single();
+        if (error) throw error;
+        const details = data.detail_rows as TimecardDetailEntry[];
+        if (!Array.isArray(details) || !details.length) throw new Error("This older payroll has totals only; its time punches were not saved. Upload its original file once to enable reprinting.");
+        if (active) {
+          setSavedPacket({ ...data, rows: details.map((row) => ({ ...row, payCode: "" })) } as SavedReport & { rows: Shift[] });
+          setPayrollName(data.payroll_name); setConfirmedPayrollName("");
+        }
+      } catch (cause) { if (active) setSavedError(cause instanceof Error ? cause.message : (cause as { message?: string }).message || "Could not open this saved payroll."); }
+      finally { if (active) setLoadingSaved(false); }
+    })();
+    return () => { active = false; };
+  }, [savedId]);
   useEffect(() => { setExcludeUnreadable(false); }, [file]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [currentAssignments, setCurrentAssignments] = useState<CurrentAssignment[]>([]);
@@ -152,7 +186,8 @@ export default function TimecardPacket() {
     setError("");
     setExcludeUnreadable(false);
     try {
-      setFile(await sourceFromFile(upload));
+      const source = await sourceFromFile(upload);
+      setSavedId(""); setSavedPacket(null); setSavedError(""); setFile(source);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to read this report."); }
   }
   useEffect(() => {
@@ -192,8 +227,8 @@ export default function TimecardPacket() {
     return [...new Set(names.map((name) => name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   }
   const allDates = result.rows.map((row) => row.date).sort();
-  const periodStart = allDates[0] || "";
-  const periodEnd = allDates[allDates.length - 1] || "";
+  const periodStart = savedPacket?.period_start || allDates[0] || "";
+  const periodEnd = savedPacket?.period_end || allDates[allDates.length - 1] || "";
   useEffect(() => {
     if (!periodStart || !periodEnd) { return; }
     let active = true;
@@ -258,6 +293,11 @@ export default function TimecardPacket() {
   return <div className="report-stack timecard-stack">
     <section className="panel timecard-intro no-print"><strong>One report, grouped by contract</strong><p>Choose the timecard report for this pay period. The uploaded file is not changed; it stays in this browser tab and clears when you refresh or close it.</p><div className="timecard-inclusion-note"><h3>What is included and excluded</h3><p><strong>Included:</strong> readable timecard work rows, including holiday-coded hours. These hours appear in the packet and saved comparisons.</p><p><strong>Excluded:</strong> rows with the pay code <strong>PTO</strong> and subtotal lines. The printed packet also leaves out contracts <strong>030512, 01SHDR, and 011VAN</strong>; those contracts can still appear in saved comparison totals.</p></div></section>
     {error && <div className="alert alert-error no-print">{error}</div>}
+    <section className="panel no-print">
+      <h2>Reprint a saved payroll</h2><p>Open a saved payroll to print it with the latest comparison matching. No upload is needed when its time punches are saved.</p>
+      <label>Saved payroll<select value={savedId} onChange={(event) => { setSavedId(event.target.value); setSavedPacket(null); }}><option value="">Choose a saved payroll</option>{savedReports.map((report) => <option key={report.id} value={report.id}>{report.payroll_name} · {dateLabel(report.period_start)} – {dateLabel(report.period_end)} · saved {new Date(report.saved_at).toLocaleString("en-US")}</option>)}</select></label>
+      {loadingSaved && <p role="status">Opening saved timecards…</p>}{savedError && <p className="alert alert-error" role="alert">{savedError}</p>}{savedPacket && <p role="status">Opened {savedPacket.payroll_name} · {savedPacket.rows.length.toLocaleString()} saved time entries. Review the preview below, then choose Print by contract.</p>}
+    </section>
     <section className="panel timecard-settings no-print">
       <div className="panel-heading"><div><h2>Timecard report</h2><span>{file?.name || "Choose a report"}</span></div><label className="primary-link timecard-file-button">Choose report<input type="file" accept=".csv,.xlsx,.xls" onChange={(event) => void readFile(event.target.files?.[0])} /></label></div>
       {file && <details className="timecard-column-options" open={!validColumns(file)} key={`${file.name}-${file.sheet}-${file.headerRow}`}><summary>Match file columns {validColumns(file) ? "(review or change)" : "— action needed"}</summary><p>Select the sheet and header row, then match each required field to its column. The file stays in this browser tab.</p><div className="timecard-fields"><label>Sheet<select value={file.sheet} onChange={(event) => setFile((current) => { if (!current) return current; const sheet = event.target.value; const headerRow = 0; const headings = current.sheets[sheet]?.[headerRow] ?? []; return { ...current, sheet, headerRow, columns: detectColumns(headings), dateColumn: detectDate(headings), employeeIdColumn: detectEmployeeId(headings), combinedNameColumn: detectCombinedName(headings) }; })}>{Object.keys(file.sheets).map((sheet) => <option key={sheet} value={sheet}>{sheet}</option>)}</select></label><label>Header row<select value={file.headerRow} onChange={(event) => setFile((current) => { if (!current) return current; const headerRow = Number(event.target.value); const headings = current.sheets[current.sheet][headerRow] ?? []; return { ...current, headerRow, columns: detectColumns(headings), dateColumn: detectDate(headings), employeeIdColumn: detectEmployeeId(headings), combinedNameColumn: detectCombinedName(headings) }; })}>{file.sheets[file.sheet].slice(0, 30).map((row, index) => <option key={index} value={index}>Row {index + 1}: {row.filter(Boolean).slice(0, 3).join(" · ").slice(0, 90) || "(blank)"}</option>)}</select></label><label>Combined name (Last, First; if separate names are missing)<select value={file.combinedNameColumn} onChange={(event) => setFile((current) => current && ({ ...current, combinedNameColumn: Number(event.target.value) }))}><option value={-1}>Use Last name and First name</option>{(file.sheets[file.sheet][file.headerRow] ?? []).map((heading, index) => <option key={index} value={index}>{heading.trim() || `(unnamed column ${index + 1})`}</option>)}</select></label><label>Work date (if separate from In time)<select value={file.dateColumn} onChange={(event) => setFile((current) => current && ({ ...current, dateColumn: Number(event.target.value) }))}><option value={-1}>Date is included in In time</option>{(file.sheets[file.sheet][file.headerRow] ?? []).map((heading, index) => <option key={index} value={index}>{heading.trim() || `(unnamed column ${index + 1})`} · {String.fromCharCode(65 + index)}</option>)}</select></label><label>Employee ID (optional)<select value={file.employeeIdColumn} onChange={(event) => setFile((current) => current && ({ ...current, employeeIdColumn: Number(event.target.value) }))}><option value={-1}>Match by name</option>{(file.sheets[file.sheet][file.headerRow] ?? []).map((heading, index) => <option key={index} value={index}>{heading.trim() || `(unnamed column ${index + 1})`} · {String.fromCharCode(65 + index)}</option>)}</select></label>{fields.map((field) => <label key={field}>{fieldLabels[field]}<select value={file.columns[field]} onChange={(event) => setFile((current) => current && ({ ...current, columns: { ...current.columns, [field]: Number(event.target.value) } }))}><option value={-1}>Choose column</option>{(file.sheets[file.sheet][file.headerRow] ?? []).map((heading, index) => <option key={index} value={index}>{heading.trim() || `(unnamed column ${index + 1})`} · {String.fromCharCode(65 + index)}</option>)}</select></label>)}</div>{!validColumns(file) && <p role="alert">Match the date, time, hours, department, earnings code, and either both name columns or a combined Payroll Name column.</p>}{validColumns(file) && result.rows.length === 0 && <p role="alert">No timecard rows were found. Check the sheet, Payroll Name or separate name columns, Work date, and Hours columns.</p>}{validColumns(file) && result.invalid > 0 && <p role="alert">{result.invalid} rows could not be read. Check the mapping and data before saving or printing.</p>}</details>}
@@ -266,7 +306,7 @@ export default function TimecardPacket() {
       {file && result.invalid > 0 && <details className="timecard-invalid-review"><summary>Review {result.invalid} unreadable rows before saving →</summary><p>These rows are separate from the supervisor assignments. Subtotal lines are skipped automatically; these rows still need review. Excluding them removes their hours from this report and its saved comparison.</p><div className="table-scroll"><table className="data-table"><thead><tr><th>File row</th><th>Reason</th><th>Employee</th><th>Contract</th><th>Work date</th><th>Hours</th></tr></thead><tbody>{result.invalidRows.slice(0, 100).map((row) => <tr key={row.line}><td>{row.line}</td><td>{row.reason}</td><td>{row.name || "—"}</td><td>{row.contract || "—"}</td><td>{row.date || "—"}</td><td>{row.hours || "—"}</td></tr>)}</tbody></table></div>{result.invalid > 100 && <p>Showing the first 100 rows. Correct the source file to review the rest.</p>}<label className="timecard-exclude-confirm"><input type="checkbox" checked={excludeUnreadable} onChange={(event) => setExcludeUnreadable(event.target.checked)} /> I reviewed these rows and want to exclude all {result.invalid} unreadable rows from this payroll packet and saved totals.</label></details>}
     </section>
     <section className="panel timecard-actions no-print"><button className="primary-link" disabled={!ready || !printContracts.length || supervisorStatus === "loading" || comparisonStatus === "loading"} onClick={() => window.print()}>Print by contract</button><span>{ready ? `${printContracts.length} contracts. Each starts on a new page. 030512, 01SHDR, and 011VAN are omitted from this packet.` : "Choose one report. All rows must be readable before printing."}</span></section>
-    {ready && confirmedPayrollName ? <TimecardComparisons entries={historyEntries} dailyEntries={dailyEntries} detailRows={detailRows} start={periodStart} end={periodEnd} sourceName={file?.name || "Timecard report"} payrollName={confirmedPayrollName} /> : ready && <section className="panel no-print timecard-comparisons"><h2>Save and compare payrolls</h2><p>Enter the payroll name or number above, such as #39, to save the hour totals. Reuse it for a corrected report. You can print the timecards now.</p></section>}
+    {!savedPacket && ready && confirmedPayrollName ? <TimecardComparisons entries={historyEntries} dailyEntries={dailyEntries} detailRows={detailRows} start={periodStart} end={periodEnd} sourceName={file?.name || "Timecard report"} payrollName={confirmedPayrollName} /> : !savedPacket && ready && <section className="panel no-print timecard-comparisons"><h2>Save and compare payrolls</h2><p>Enter the payroll name or number above, such as #39, to save the hour totals. Reuse it for a corrected report. You can print the timecards now.</p></section>}
     {ready && <div className="timecard-packet"><div className="timecard-screen-heading no-print"><h2>Packet preview</h2><p>Check the hours and contract assignments before printing the packet. “Not matched” means no unambiguous previous total was found; no change is calculated for that entry.</p></div>{printContracts.map(({ contract, people }) => {
       const contractRows = people.flatMap((person) => person.rows);
       const supervisors = supervisorsFor(contract, contractRows);
