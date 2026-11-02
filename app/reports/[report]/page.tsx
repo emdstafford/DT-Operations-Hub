@@ -120,29 +120,28 @@ export default function ReportLauncherPage(){
     const noteHtml=(row:ReportRow)=>rowNotes(row).length?rowNotes(row).map((note)=>`<div style="margin:0 0 5px"><strong>${escapeHtml(note.status.replaceAll("_"," "))}</strong>: ${escapeHtml(note.note)}${note.requestedOn?`<br><span style="color:#607286;font-size:11px">USPS requested ${escapeHtml(note.requestedOn)}</span>`:""}</div>`).join(""):"—";
     const noteText=(row:ReportRow)=>rowNotes(row).length?rowNotes(row).map((note)=>`${note.status.replaceAll("_"," ")}: ${note.note}${note.requestedOn?` (USPS requested ${note.requestedOn})`:""}`).join(" | "):"—";
     const columns=[
-      {key:"operatingDate",label:"Operating date",width:"12%",align:"left"},
-      {key:"contract",label:"Contract",width:"8%",align:"left"},
-      {key:"trip",label:"Trip",width:"6%",align:"left"},
-      {key:"loadNumber",label:"Load",width:"12%",align:"left"},
-      {key:"missingStops",label:"Missing stops",width:"8%",align:"right"},
-      {key:"missingLocations",label:"Missing locations",width:"20%",align:"left"},
-      {key:"status",label:"Status",width:"10%",align:"left"},
-      {key:"notes",label:"Operational notes",width:"24%",align:"left"},
+      {key:"operatingDate",label:"Operating date",align:"left"},
+      {key:"contract",label:"Contract",align:"right"},
+      {key:"trip",label:"Trip",align:"right"},
+      {key:"loadNumber",label:"Load",align:"right"},
+      {key:"missingStops",label:"Missing geofence stops",align:"right"},
+      {key:"missingLocations",label:"Missing locations",align:"right"},
+      {key:"notes",label:"Operational notes",align:"left"},
     ];
-    const headerCells=columns.map((column)=>`<th width="${column.width}" bgcolor="#f2f5f7" style="width:${column.width};padding:9px 8px;border:1px solid #d7e0ea;background:#f2f5f7;color:#536577;text-align:${column.align};font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;vertical-align:bottom">${column.label}</th>`).join("");
+    const headerCells=columns.map((column)=>`<th bgcolor="#f2f5f7" style="padding:11px 13px;background:#f2f5f7;color:#536577;text-align:${column.align};font-family:Inter,Arial,sans-serif;font-size:11px;font-weight:bold;letter-spacing:.06em;text-transform:uppercase;vertical-align:bottom">${column.label}</th>`).join("");
     const tableRows=rows.map((row)=>{
       const valuesByColumn:Record<string,string>={
         operatingDate:escapeHtml(String(row.operatingDate||"")),contract:escapeHtml(String(row.contract||"")),trip:escapeHtml(String(row.trip||"—")),
         loadNumber:escapeHtml(String(row.loadNumber||"")),missingStops:Number(row.missingStops||0).toLocaleString(),
-        missingLocations:escapeHtml(String(row.missingLocations||"—")),status:escapeHtml(String(row.status||"—")),notes:noteHtml(row),
+        missingLocations:escapeHtml(String(row.missingLocations||"—")),notes:noteHtml(row),
       };
-      return `<tr>${columns.map((column)=>`<td width="${column.width}" style="width:${column.width};padding:8px;border:1px solid #edf0f3;color:#243746;text-align:${column.align};font-family:Arial,sans-serif;font-size:12px;line-height:1.4;vertical-align:top;overflow-wrap:anywhere">${valuesByColumn[column.key]}</td>`).join("")}</tr>`;
+      return `<tr>${columns.map((column)=>`<td style="padding:11px 13px;border-top:1px solid #edf0f3;color:#243746;text-align:${column.align};font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.4;vertical-align:top;overflow-wrap:anywhere">${valuesByColumn[column.key]}</td>`).join("")}</tr>`;
     }).join("");
     const affectedLoads=rows.length.toLocaleString();
     const missingTotal=rows.reduce((sum,row)=>sum+Number(row.missingStops||0),0).toLocaleString();
     const reportDates=`${values.start||"All dates"} – ${values.end||"All dates"}`;
-    const html=`<div style="max-width:1100px;margin:0 auto;background:#fff;color:#243746;font-family:Arial,sans-serif"><div style="padding:4px 0 12px;border-bottom:3px solid #17375e"><div style="color:#536577;font-size:11px;font-weight:bold;letter-spacing:1px;text-transform:uppercase">Davenport Transportation</div><div style="margin-top:4px;color:#0f2747;font-size:21px;font-weight:bold">Geofence / Missed Stops</div><div style="margin-top:4px;color:#607286;font-size:12px">${reportDates}</div></div><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:12px 0;border-collapse:collapse"><tr><td style="width:50%;padding:10px;border:1px solid #d7e0ea;background:#f5f8fa"><div style="color:#607286;font-size:11px">Affected loads</div><strong style="display:block;margin-top:4px;color:#0f2747;font-size:20px">${affectedLoads}</strong></td><td style="width:50%;padding:10px;border:1px solid #d7e0ea;background:#f5f8fa"><div style="color:#607286;font-size:11px">Stops without geofence check-in</div><strong style="display:block;margin-top:4px;color:#0f2747;font-size:20px">${missingTotal}</strong></td></tr></table><table width="100%" border="1" bordercolor="#d7e0ea" cellpadding="0" cellspacing="0" style="width:100%;table-layout:fixed;border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px"><thead><tr>${headerCells}</tr></thead><tbody>${tableRows}</tbody></table></div>`;
-    const text=["Geofence / Missed Stops",`${values.start||"All dates"} – ${values.end||"All dates"}`,`${rows.length.toLocaleString()} affected loads · ${rows.reduce((sum,row)=>sum+Number(row.missingStops||0),0).toLocaleString()} stops without geofence check-in`,"","Operating date\tContract\tTrip\tLoad\tMissing stops\tMissing locations\tStatus\tOperational notes",...rows.map((row)=>`${row.operatingDate}\t${row.contract}\t${row.trip||"—"}\t${row.loadNumber}\t${row.missingStops}\t${row.missingLocations||"—"}\t${row.status||"—"}\t${noteText(row)}`)].join("\n");
+    const html=`<div style="max-width:1100px;margin:0 auto;background:#fff;color:#243746;font-family:Inter,Arial,sans-serif"><div style="padding:4px 0 12px;border-bottom:3px solid #17375e"><div style="color:#536577;font-size:11px;font-weight:bold;letter-spacing:1px;text-transform:uppercase">Davenport Transportation</div><div style="margin-top:4px;color:#0f2747;font-size:21px;font-weight:bold">Geofence / Missed Stops</div><div style="margin-top:4px;color:#607286;font-size:12px">${reportDates}</div></div><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:12px 0;border-collapse:collapse"><tr><td style="width:50%;padding:10px;border:1px solid #d7e0ea;background:#f5f8fa"><div style="color:#607286;font-size:11px">Affected loads</div><strong style="display:block;margin-top:4px;color:#0f2747;font-size:20px">${affectedLoads}</strong></td><td style="width:50%;padding:10px;border:1px solid #d7e0ea;background:#f5f8fa"><div style="color:#607286;font-size:11px">Stops without geofence check-in</div><strong style="display:block;margin-top:4px;color:#0f2747;font-size:20px">${missingTotal}</strong></td></tr></table><table width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-family:Inter,Arial,sans-serif;font-size:13px"><thead><tr>${headerCells}</tr></thead><tbody>${tableRows}</tbody></table></div>`;
+    const text=["Geofence / Missed Stops",`${values.start||"All dates"} – ${values.end||"All dates"}`,`${rows.length.toLocaleString()} affected loads · ${rows.reduce((sum,row)=>sum+Number(row.missingStops||0),0).toLocaleString()} stops without geofence check-in`,"","Operating date\tContract\tTrip\tLoad\tMissing geofence stops\tMissing locations\tOperational notes",...rows.map((row)=>`${row.operatingDate}\t${row.contract}\t${row.trip||"—"}\t${row.loadNumber}\t${row.missingStops}\t${row.missingLocations||"—"}\t${noteText(row)}`)].join("\n");
     try{
       if(typeof ClipboardItem!=="undefined"&&navigator.clipboard.write) await navigator.clipboard.write([new ClipboardItem({"text/plain":new Blob([text],{type:"text/plain"}),"text/html":new Blob([html],{type:"text/html"})})]);
       else await navigator.clipboard.writeText(text);
