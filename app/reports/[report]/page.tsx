@@ -117,10 +117,31 @@ export default function ReportLauncherPage(){
   async function copyGeofenceEmailReport(){
     if(!rows.length){setError("Generate a report with matching missed-stop records first.");return;}
     const rowNotes=(row:ReportRow)=>row.notes||[];
-    const noteHtml=(row:ReportRow)=>rowNotes(row).length?rowNotes(row).map((note)=>`<div style="margin:0 0 5px"><strong>${escapeHtml(note.status.replaceAll("_"," "))}</strong>: ${escapeHtml(note.note)}${note.requestedOn?`<br><small>USPS requested ${escapeHtml(note.requestedOn)}</small>`:""}</div>`).join(""):"—";
+    const noteHtml=(row:ReportRow)=>rowNotes(row).length?rowNotes(row).map((note)=>`<div style="margin:0 0 5px"><strong>${escapeHtml(note.status.replaceAll("_"," "))}</strong>: ${escapeHtml(note.note)}${note.requestedOn?`<br><span style="color:#607286;font-size:11px">USPS requested ${escapeHtml(note.requestedOn)}</span>`:""}</div>`).join(""):"—";
     const noteText=(row:ReportRow)=>rowNotes(row).length?rowNotes(row).map((note)=>`${note.status.replaceAll("_"," ")}: ${note.note}${note.requestedOn?` (USPS requested ${note.requestedOn})`:""}`).join(" | "):"—";
-    const tableRows=rows.map((row)=>`<tr><td>${escapeHtml(String(row.operatingDate||""))}</td><td>${escapeHtml(String(row.contract||""))}</td><td>${escapeHtml(String(row.trip||"—"))}</td><td>${escapeHtml(String(row.loadNumber||""))}</td><td style="text-align:right">${Number(row.missingStops||0)}</td><td>${escapeHtml(String(row.missingLocations||"—"))}</td><td>${escapeHtml(String(row.status||"—"))}</td><td>${noteHtml(row)}</td></tr>`).join("");
-    const html=`<div style="font-family:Arial,sans-serif;color:#243746"><div style="background:#123b61;color:#fff;padding:18px 22px"><div style="font-size:11px;letter-spacing:1px">DAVENPORT TRANSPORTATION</div><h2 style="margin:5px 0">Geofence / Missed Stops</h2><div>${values.start||"All dates"} – ${values.end||"All dates"}</div></div><p><strong>${rows.length.toLocaleString()} affected loads</strong> · ${rows.reduce((sum,row)=>sum+Number(row.missingStops||0),0).toLocaleString()} stops without geofence check-in</p><table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr>${["Operating date","Contract","Trip","Load","Missing stops","Missing locations","Status","Operational notes"].map((label)=>`<th style="padding:7px;border:1px solid #b8c5d3;background:#123b61;color:#fff;text-align:left">${label}</th>`).join("")}</tr></thead><tbody>${tableRows}</tbody></table></div>`;
+    const columns=[
+      {key:"operatingDate",label:"Operating date",width:"12%",align:"left"},
+      {key:"contract",label:"Contract",width:"8%",align:"left"},
+      {key:"trip",label:"Trip",width:"6%",align:"left"},
+      {key:"loadNumber",label:"Load",width:"12%",align:"left"},
+      {key:"missingStops",label:"Missing stops",width:"8%",align:"right"},
+      {key:"missingLocations",label:"Missing locations",width:"20%",align:"left"},
+      {key:"status",label:"Status",width:"10%",align:"left"},
+      {key:"notes",label:"Operational notes",width:"24%",align:"left"},
+    ];
+    const headerCells=columns.map((column)=>`<th width="${column.width}" bgcolor="#f2f5f7" style="width:${column.width};padding:9px 8px;border:1px solid #d7e0ea;background:#f2f5f7;color:#536577;text-align:${column.align};font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;vertical-align:bottom">${column.label}</th>`).join("");
+    const tableRows=rows.map((row)=>{
+      const valuesByColumn:Record<string,string>={
+        operatingDate:escapeHtml(String(row.operatingDate||"")),contract:escapeHtml(String(row.contract||"")),trip:escapeHtml(String(row.trip||"—")),
+        loadNumber:escapeHtml(String(row.loadNumber||"")),missingStops:Number(row.missingStops||0).toLocaleString(),
+        missingLocations:escapeHtml(String(row.missingLocations||"—")),status:escapeHtml(String(row.status||"—")),notes:noteHtml(row),
+      };
+      return `<tr>${columns.map((column)=>`<td width="${column.width}" style="width:${column.width};padding:8px;border:1px solid #edf0f3;color:#243746;text-align:${column.align};font-family:Arial,sans-serif;font-size:12px;line-height:1.4;vertical-align:top;overflow-wrap:anywhere">${valuesByColumn[column.key]}</td>`).join("")}</tr>`;
+    }).join("");
+    const affectedLoads=rows.length.toLocaleString();
+    const missingTotal=rows.reduce((sum,row)=>sum+Number(row.missingStops||0),0).toLocaleString();
+    const reportDates=`${values.start||"All dates"} – ${values.end||"All dates"}`;
+    const html=`<div style="max-width:1100px;margin:0 auto;background:#fff;color:#243746;font-family:Arial,sans-serif"><div style="padding:4px 0 12px;border-bottom:3px solid #17375e"><div style="color:#536577;font-size:11px;font-weight:bold;letter-spacing:1px;text-transform:uppercase">Davenport Transportation</div><div style="margin-top:4px;color:#0f2747;font-size:21px;font-weight:bold">Geofence / Missed Stops</div><div style="margin-top:4px;color:#607286;font-size:12px">${reportDates}</div></div><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:12px 0;border-collapse:collapse"><tr><td style="width:50%;padding:10px;border:1px solid #d7e0ea;background:#f5f8fa"><div style="color:#607286;font-size:11px">Affected loads</div><strong style="display:block;margin-top:4px;color:#0f2747;font-size:20px">${affectedLoads}</strong></td><td style="width:50%;padding:10px;border:1px solid #d7e0ea;background:#f5f8fa"><div style="color:#607286;font-size:11px">Stops without geofence check-in</div><strong style="display:block;margin-top:4px;color:#0f2747;font-size:20px">${missingTotal}</strong></td></tr></table><table width="100%" border="1" bordercolor="#d7e0ea" cellpadding="0" cellspacing="0" style="width:100%;table-layout:fixed;border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px"><thead><tr>${headerCells}</tr></thead><tbody>${tableRows}</tbody></table></div>`;
     const text=["Geofence / Missed Stops",`${values.start||"All dates"} – ${values.end||"All dates"}`,`${rows.length.toLocaleString()} affected loads · ${rows.reduce((sum,row)=>sum+Number(row.missingStops||0),0).toLocaleString()} stops without geofence check-in`,"","Operating date\tContract\tTrip\tLoad\tMissing stops\tMissing locations\tStatus\tOperational notes",...rows.map((row)=>`${row.operatingDate}\t${row.contract}\t${row.trip||"—"}\t${row.loadNumber}\t${row.missingStops}\t${row.missingLocations||"—"}\t${row.status||"—"}\t${noteText(row)}`)].join("\n");
     try{
       if(typeof ClipboardItem!=="undefined"&&navigator.clipboard.write) await navigator.clipboard.write([new ClipboardItem({"text/plain":new Blob([text],{type:"text/plain"}),"text/html":new Blob([html],{type:"text/html"})})]);
