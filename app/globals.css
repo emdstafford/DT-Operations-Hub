@@ -127,6 +127,13 @@ button, input { font: inherit; }
 .data-table th:first-child, .data-table td:first-child { text-align: left; }
 .data-table td { padding: 11px 13px; text-align: right; border-top: 1px solid #edf0f3; }
 .data-table tbody tr:hover { background: #f7f9fb; }
+.geofence-report-table td:last-child { min-width:220px; text-align:left; white-space:normal; }
+@media print{
+  @page{size:landscape;margin:.4in}
+  .geofence-report-table{width:100%;font-size:7.5pt}
+  .geofence-report-table th,.geofence-report-table td{padding:5px 6px!important;white-space:normal;overflow-wrap:anywhere}
+  .geofence-report-table td:last-child{min-width:180px}
+}
 .attention-row { background: #eef2f5; }
 .top-performer-row { color: #174e27; background: #c9e7cf; }
 .bottom-contract-row { color: #742430; background: #f0c8cd; }
