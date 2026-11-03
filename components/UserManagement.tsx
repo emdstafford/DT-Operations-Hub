@@ -35,7 +35,7 @@ const blankDraft: AccessDraft = {
 const roleOptions: { value: OperationsRole; label: string }[] = [
   { value: "", label: "No Dashboard or Contracts access" },
   { value: "dashboard_contracts_fuel_viewer", label: "Dashboard + Contracts (view only)" },
-  { value: "dashboard_fuel_viewer", label: "Dashboard only (view only)" },
+  { value: "dashboard_fuel_viewer", label: "Dashboard + Fuel (view only)" },
   { value: "viewer", label: "Operations viewer (includes Reports)" },
   { value: "uploader", label: "Operations uploader" },
   { value: "admin", label: "Administrator" },
