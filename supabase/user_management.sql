@@ -75,6 +75,7 @@ returns table (
   email text,
   operations_role text,
   operations_active boolean,
+  contract_financial_active boolean,
   fuel_active boolean,
   fuel_can_upload boolean,
   payroll_active boolean,
@@ -94,12 +95,15 @@ begin
     select all_users.email,
       approved.role,
       coalesce(approved.active, false),
+      coalesce(contract_financial.active, false),
       coalesce(fuel.active, false),
       coalesce(fuel.can_upload, false),
       coalesce(payroll.active, false),
       coalesce(tech.active, false)
     from (
       select a.email from public.approved_users a
+      union
+      select c.email from public.contract_financial_users c
       union
       select f.email from public.fuel_tool_users f
       union
@@ -108,6 +112,7 @@ begin
       select t.email from public.tech_invoice_tool_users t
     ) all_users
     left join public.approved_users approved on approved.email = all_users.email
+    left join public.contract_financial_users contract_financial on contract_financial.email = all_users.email
     left join public.fuel_tool_users fuel on fuel.email = all_users.email
     left join public.payroll_tool_users payroll on payroll.email = all_users.email
     left join public.tech_invoice_tool_users tech on tech.email = all_users.email
@@ -120,6 +125,7 @@ grant execute on function public.list_hub_user_access() to authenticated;
 create or replace function public.manage_hub_user_access(
   p_email text,
   p_operations_role text,
+  p_contract_financial_active boolean,
   p_fuel_active boolean,
   p_fuel_can_upload boolean,
   p_payroll_active boolean,
@@ -158,6 +164,10 @@ begin
     on conflict (email) do update set role = excluded.role, active = true;
   end if;
 
+  insert into public.contract_financial_users (email, active)
+  values (target_email, coalesce(p_contract_financial_active, false))
+  on conflict (email) do update set active = excluded.active;
+
   insert into public.fuel_tool_users (email, can_upload, active)
   values (target_email, coalesce(p_fuel_can_upload, false), coalesce(p_fuel_active, false))
   on conflict (email) do update
@@ -172,7 +182,7 @@ begin
   on conflict (email) do update set active = excluded.active;
 end;
 $$;
-revoke all on function public.manage_hub_user_access(text, text, boolean, boolean, boolean, boolean) from public;
-grant execute on function public.manage_hub_user_access(text, text, boolean, boolean, boolean, boolean) to authenticated;
+revoke all on function public.manage_hub_user_access(text, text, boolean, boolean, boolean, boolean, boolean) from public;
+grant execute on function public.manage_hub_user_access(text, text, boolean, boolean, boolean, boolean, boolean) to authenticated;
 
 notify pgrst, 'reload schema';
