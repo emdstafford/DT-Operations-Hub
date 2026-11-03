@@ -54,6 +54,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       const canManageReports = role === "admin" || role === "uploader";
       const isReportManagementPath = reportManagementPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
       const isTechInvoicePath = pathname === "/tech-invoices" || pathname.startsWith("/tech-invoices/");
+      const isUserManagementPath = pathname === "/admin/users" || pathname.startsWith("/admin/users/");
       const isLimitedOperationsPath = pathname === "/"
         || pathname === "/contracts"
         || pathname.startsWith("/contracts/")
@@ -75,6 +76,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       } else if (pathname === "/auth/callback" || pathname === "/account/password") {
         // Every approved employee can set a password, including tool-only users.
         return;
+      } else if (isUserManagementPath && role !== "admin") {
+        router.replace("/");
       } else if (isLimitedOperationsUser && !isLimitedOperationsPath) {
         router.replace("/");
       } else if (isTechInvoicePath && !canUseTechInvoices) {
