@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 const publicPaths = ["/login", "/auth/callback"];
 const reportManagementPaths = ["/upload", "/history", "/schedule-builder", "/historical-upload", "/admin"];
 const limitedOperationsRole = "dashboard_contracts_fuel_viewer";
+const legacyTechInvoiceEmails = new Set(["estafford@dtexpress.net", "ccochran@dtexpress.net"]);
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -50,7 +51,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       const canUseOperations = Boolean(operationsResult.data);
       const canUsePayroll = Boolean(payrollResult.data) && !isLimitedOperationsUser;
       const canUseFuel = Boolean(fuelResult.data);
-      const canUseTechInvoices = Boolean(techInvoiceResult.data) && !isLimitedOperationsUser;
+      const hasLegacyTechInvoiceAccess = Boolean(techInvoiceResult.error) && legacyTechInvoiceEmails.has(email);
+      const canUseTechInvoices = (Boolean(techInvoiceResult.data) || hasLegacyTechInvoiceAccess) && !isLimitedOperationsUser;
       const canManageReports = role === "admin" || role === "uploader";
       const isReportManagementPath = reportManagementPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
       const isTechInvoicePath = pathname === "/tech-invoices" || pathname.startsWith("/tech-invoices/");
