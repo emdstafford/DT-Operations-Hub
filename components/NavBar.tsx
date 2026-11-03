@@ -42,8 +42,8 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
         {operationsAccess && operationsRole !== "dashboard_fuel_viewer" && <Link className={pathname.startsWith("/contracts") ? "active" : ""} href="/contracts">Contracts</Link>}
         {(operationsAccess || fuelAccess || payrollAccess) && !isNoReportsRole && <Link className={pathname.startsWith("/reports") ? "active" : ""} href="/reports">Reports</Link>}
         {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel</Link>}
-        {payrollAccess && !isRestrictedRole && <Link className={pathname.startsWith("/payroll") ? "active" : ""} href="/payroll">Payroll</Link>}
-        {techInvoiceAccess && !isRestrictedRole && <Link className={pathname.startsWith("/tech-invoices") ? "active" : ""} href="/tech-invoices">Tech invoices</Link>}
+        {payrollAccess && !isContractsFuelViewer && <Link className={pathname.startsWith("/payroll") ? "active" : ""} href="/payroll">Payroll</Link>}
+        {techInvoiceAccess && !isContractsFuelViewer && <Link className={pathname.startsWith("/tech-invoices") ? "active" : ""} href="/tech-invoices">Tech invoices</Link>}
         {operationsAccess && canManageReports && <Link className={pathname.startsWith("/schedule-builder") ? "active" : ""} href="/schedule-builder">Schedule</Link>}
         {operationsAccess && canManageReports && <Link className={pathname.startsWith("/history") ? "active" : ""} href="/history">History</Link>}
         {hasUserManagement && <Link className={pathname.startsWith("/admin/users") ? "active" : ""} href="/admin/users">User access</Link>}
