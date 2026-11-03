@@ -65,11 +65,6 @@ create policy "standard operations users read history"
   on public.report_history for select to authenticated
   using (public.is_approved(array['admin', 'uploader', 'viewer']));
 
-drop policy if exists "load level history read" on public.load_level_history;
-create policy "standard operations users read load level history"
-  on public.load_level_history for select to authenticated
-  using (public.is_approved(array['admin', 'uploader', 'viewer']));
-
 create or replace function public.list_hub_user_access()
 returns table (
   email text,
