@@ -55,6 +55,9 @@ export default function UserManagement() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [passwordNotice, setPasswordNotice] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [resettingEmail, setResettingEmail] = useState("");
 
   async function loadUsers() {
     setLoading(true);
@@ -139,6 +142,22 @@ export default function UserManagement() {
     await loadUsers();
   }
 
+  async function sendPasswordReset(email: string) {
+    setPasswordNotice("");
+    setPasswordError("");
+    if (!window.confirm(`Send a secure password reset link to ${email}? It will be emailed directly to that address. You will not see or set their password.`)) return;
+    setResettingEmail(email);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/account/password`,
+    });
+    setResettingEmail("");
+    if (resetError) {
+      setPasswordError(resetError.message);
+      return;
+    }
+    setPasswordNotice(`If the account exists, a reset link was sent to ${email}.`);
+  }
+
   const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 8, font: "inherit" };
   const labelStyle = { display: "block", fontWeight: 700, marginBottom: 6 };
   const cardStyle = { border: "1px solid #dbe3ec", borderRadius: 12, padding: 18, background: "#fff" };
@@ -197,9 +216,11 @@ export default function UserManagement() {
         <div><p className="eyebrow">Current access</p><h2 style={{ marginTop: 0 }}>DT Hub users</h2></div>
         <button type="button" className="hub-secondary-link" onClick={() => void loadUsers()} disabled={loading}>Refresh</button>
       </div>
+      {passwordError && <p role="alert" style={{ color: "#991b1b" }}>{passwordError}</p>}
+      {passwordNotice && <p role="status" style={{ color: "#166534" }}>{passwordNotice}</p>}
       {loading ? <p>Loading users…</p> : error && users.length === 0 ? <p role="alert" style={{ color: "#991b1b" }}>Could not load access records. Apply the User Management setup SQL in Supabase, then refresh. Details: {error}</p> : users.length === 0 ? <p>No access records found.</p> : <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-          <thead><tr>{["Employee", "Dashboard / Contracts", "Contract data", "Fuel", "Payroll", "Tech Invoices", "Edit"].map((heading) => <th key={heading} scope="col" style={{ textAlign: "left", padding: "10px 8px", borderBottom: "2px solid #cbd5e1" }}>{heading}</th>)}</tr></thead>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 940 }}>
+          <thead><tr>{["Employee", "Dashboard / Contracts", "Contract data", "Fuel", "Payroll", "Tech Invoices", "Password", "Edit"].map((heading) => <th key={heading} scope="col" style={{ textAlign: "left", padding: "10px 8px", borderBottom: "2px solid #cbd5e1" }}>{heading}</th>)}</tr></thead>
           <tbody>{users.map((user) => <tr key={user.email}>
             <th scope="row" style={{ textAlign: "left", padding: "10px 8px", borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>{user.email}</th>
             <td style={{ padding: "10px 8px", borderBottom: "1px solid #e2e8f0" }}>{roleLabel(user.operations_role, user.operations_active)}</td>
@@ -207,6 +228,9 @@ export default function UserManagement() {
             <td style={{ padding: "10px 8px", borderBottom: "1px solid #e2e8f0" }}>{user.fuel_active ? user.fuel_can_upload ? "Upload + view" : "Read only" : "No access"}</td>
             <td style={{ padding: "10px 8px", borderBottom: "1px solid #e2e8f0" }}>{user.payroll_active ? "Yes" : "No"}</td>
             <td style={{ padding: "10px 8px", borderBottom: "1px solid #e2e8f0" }}>{user.tech_invoice_active ? "Yes" : "No"}</td>
+            <td style={{ padding: "10px 8px", borderBottom: "1px solid #e2e8f0" }}>
+              <button className="hub-secondary-link" type="button" disabled={resettingEmail === user.email} onClick={() => void sendPasswordReset(user.email)}>{resettingEmail === user.email ? "Sending…" : "Send reset link"}</button>
+            </td>
             <td style={{ padding: "10px 8px", borderBottom: "1px solid #e2e8f0" }}>
               <button className="hub-secondary-link" type="button" disabled={user.email.toLowerCase() === currentEmail} onClick={() => editUser(user)}>{user.email.toLowerCase() === currentEmail ? "Your account" : "Edit"}</button>
             </td>
