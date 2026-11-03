@@ -199,7 +199,7 @@ export default function UserManagement() {
       </div>
       {loading ? <p>Loading users…</p> : error && users.length === 0 ? <p role="alert" style={{ color: "#991b1b" }}>Could not load access records. Apply the User Management setup SQL in Supabase, then refresh. Details: {error}</p> : users.length === 0 ? <p>No access records found.</p> : <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-          <thead><tr>{["Employee", "Dashboard / Contracts", "Fuel", "Payroll", "Tech Invoices", "Edit"].map((heading) => <th key={heading} scope="col" style={{ textAlign: "left", padding: "10px 8px", borderBottom: "2px solid #cbd5e1" }}>{heading}</th>)}</tr></thead>
+          <thead><tr>{["Employee", "Dashboard / Contracts", "Contract data", "Fuel", "Payroll", "Tech Invoices", "Edit"].map((heading) => <th key={heading} scope="col" style={{ textAlign: "left", padding: "10px 8px", borderBottom: "2px solid #cbd5e1" }}>{heading}</th>)}</tr></thead>
           <tbody>{users.map((user) => <tr key={user.email}>
             <th scope="row" style={{ textAlign: "left", padding: "10px 8px", borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>{user.email}</th>
             <td style={{ padding: "10px 8px", borderBottom: "1px solid #e2e8f0" }}>{roleLabel(user.operations_role, user.operations_active)}</td>
