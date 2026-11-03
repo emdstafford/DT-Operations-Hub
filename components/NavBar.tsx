@@ -6,13 +6,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-const restrictedRoles = new Set(["dashboard_fuel_viewer", "dashboard_contracts_fuel_viewer"]);
+const noReportsRoles = new Set(["dashboard_fuel_viewer", "dashboard_contracts_fuel_viewer"]);
 
 export default function NavBar({ operationsRole, payrollAccess, fuelAccess, techInvoiceAccess }: { operationsRole: string; payrollAccess: boolean; fuelAccess: boolean; techInvoiceAccess: boolean }) {
   const pathname = usePathname();
   const operationsAccess = Boolean(operationsRole);
   const canManageReports = operationsRole === "admin" || operationsRole === "uploader";
-  const isRestrictedRole = restrictedRoles.has(operationsRole);
+  const isNoReportsRole = noReportsRoles.has(operationsRole);
+  const isContractsFuelViewer = operationsRole === "dashboard_contracts_fuel_viewer";
   const hasUserManagement = operationsRole === "admin";
   const [employee, setEmployee] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -39,7 +40,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
       <nav id="primary-navigation" className={`main-nav${menuOpen ? " is-open" : ""}`} aria-label="Primary navigation" onClick={() => setMenuOpen(false)}>
         {operationsAccess && <Link className={pathname === "/" ? "active" : ""} href="/">Dashboard</Link>}
         {operationsAccess && operationsRole !== "dashboard_fuel_viewer" && <Link className={pathname.startsWith("/contracts") ? "active" : ""} href="/contracts">Contracts</Link>}
-        {(operationsAccess || fuelAccess || payrollAccess) && !isRestrictedRole && <Link className={pathname.startsWith("/reports") ? "active" : ""} href="/reports">Reports</Link>}
+        {(operationsAccess || fuelAccess || payrollAccess) && !isNoReportsRole && <Link className={pathname.startsWith("/reports") ? "active" : ""} href="/reports">Reports</Link>}
         {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel</Link>}
         {payrollAccess && !isRestrictedRole && <Link className={pathname.startsWith("/payroll") ? "active" : ""} href="/payroll">Payroll</Link>}
         {techInvoiceAccess && !isRestrictedRole && <Link className={pathname.startsWith("/tech-invoices") ? "active" : ""} href="/tech-invoices">Tech invoices</Link>}
