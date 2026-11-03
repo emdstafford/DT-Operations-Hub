@@ -9,7 +9,8 @@ import { supabase } from "@/lib/supabase";
 
 const publicPaths = ["/login", "/auth/callback"];
 const reportManagementPaths = ["/upload", "/history", "/schedule-builder", "/historical-upload", "/admin"];
-const techInvoiceEmails = new Set(["estafford@dtexpress.net", "ccochran@dtexpress.net"]);
+const limitedOperationsRole = "dashboard_contracts_fuel_viewer";
+const legacyTechInvoiceEmails = new Set(["estafford@dtexpress.net", "ccochran@dtexpress.net"]);
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -38,43 +39,58 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       }
 
       const email = nextSession.user.email?.toLowerCase() ?? "";
-      const canUseTechInvoices = techInvoiceEmails.has(email);
-      const [operationsResult, payrollResult, fuelResult] = await Promise.all([
+      const [operationsResult, payrollResult, fuelResult, techInvoiceResult] = await Promise.all([
         supabase.from("approved_users").select("email, role").eq("email", email).eq("active", true).maybeSingle(),
         supabase.from("payroll_tool_users").select("email").eq("email", email).eq("active", true).maybeSingle(),
         supabase.from("fuel_tool_users").select("email").eq("email", email).eq("active", true).maybeSingle(),
+        supabase.from("tech_invoice_tool_users").select("email").eq("email", email).eq("active", true).maybeSingle(),
       ]);
       if (!active) return;
-      const canUseOperations = Boolean(operationsResult.data);
-      const canUsePayroll = Boolean(payrollResult.data);
-      const canUseFuel = Boolean(fuelResult.data);
       const role = String(operationsResult.data?.role || "");
+      const isLimitedOperationsUser = role === limitedOperationsRole;
+      const canUseOperations = Boolean(operationsResult.data);
+      const canUsePayroll = Boolean(payrollResult.data) && !isLimitedOperationsUser;
+      const canUseFuel = Boolean(fuelResult.data);
+      const hasLegacyTechInvoiceAccess = Boolean(techInvoiceResult.error) && legacyTechInvoiceEmails.has(email);
+      const canUseTechInvoices = (Boolean(techInvoiceResult.data) || hasLegacyTechInvoiceAccess) && !isLimitedOperationsUser;
       const canManageReports = role === "admin" || role === "uploader";
       const isReportManagementPath = reportManagementPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
       const isTechInvoicePath = pathname === "/tech-invoices" || pathname.startsWith("/tech-invoices/");
+      const isUserManagementPath = pathname === "/admin/users" || pathname.startsWith("/admin/users/");
+      const isLimitedOperationsPath = pathname === "/"
+        || pathname === "/contracts"
+        || pathname.startsWith("/contracts/")
+        || pathname === "/fuel"
+        || pathname.startsWith("/fuel/")
+        || pathname === "/account/password";
+
       setOperationsRole(role);
       setPayrollAccess(canUsePayroll);
       setFuelAccess(canUseFuel);
       setTechInvoiceAccess(canUseTechInvoices);
       setChecking(false);
 
-      if (!canUseOperations && !canUsePayroll && !canUseFuel) {
+      if (!canUseOperations && !canUsePayroll && !canUseFuel && !canUseTechInvoices) {
         await supabase.auth.signOut();
         if (active) router.replace("/login?error=not-approved");
       } else if (pathname === "/login") {
-        router.replace(role === "dashboard_fuel_viewer" ? "/fuel" : canUseOperations ? "/" : canUseFuel ? "/fuel" : "/payroll");
+        router.replace(role === "dashboard_fuel_viewer" ? "/fuel" : canUseOperations ? "/" : canUseFuel ? "/fuel" : canUsePayroll ? "/payroll" : "/tech-invoices");
       } else if (pathname === "/auth/callback" || pathname === "/account/password") {
-        // Every approved employee can set a password, including payroll-only users.
+        // Every approved employee can set a password, including tool-only users.
         return;
+      } else if (isUserManagementPath && role !== "admin") {
+        router.replace("/");
+      } else if (isLimitedOperationsUser && !isLimitedOperationsPath) {
+        router.replace("/");
       } else if (isTechInvoicePath && !canUseTechInvoices) {
-        router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : "/payroll");
+        router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : canUsePayroll ? "/payroll" : "/login");
       } else if (pathname.startsWith("/payroll") && !canUsePayroll) {
         router.replace(canUseOperations ? "/" : canUseFuel ? "/fuel" : "/login");
       } else if (pathname.startsWith("/fuel") && !canUseFuel) {
         router.replace(canUseOperations ? "/" : "/payroll");
       } else if (!pathname.startsWith("/payroll") && !pathname.startsWith("/fuel") && !canUseOperations) {
-        router.replace(canUseFuel ? "/fuel" : "/payroll");
-      } else if (role === "dashboard_fuel_viewer" && pathname !== "/" && !pathname.startsWith("/fuel") && pathname !== "/account/password") {
+        router.replace(canUseFuel ? "/fuel" : canUsePayroll ? "/payroll" : "/tech-invoices");
+      } else if (role === "dashboard_fuel_viewer" && pathname !== "/" && !pathname.startsWith("/fuel")) {
         router.replace("/");
       } else if (isReportManagementPath && !canManageReports) {
         router.replace("/");
@@ -91,12 +107,19 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     };
   }, [isPublic, pathname, router]);
 
+  const isLimitedOperationsUser = operationsRole === limitedOperationsRole;
+  const isLimitedOperationsPath = pathname === "/"
+    || pathname === "/contracts"
+    || pathname.startsWith("/contracts/")
+    || pathname === "/fuel"
+    || pathname.startsWith("/fuel/")
+    || pathname === "/account/password";
+
   if (checking) return <main className="auth-loading"><img src="https://cdn.prod.website-files.com/6493ca96ecc7e42995686bc5/68fbcce63d1ad0ff30d74399_Draft%20LogoDT.png" alt="Davenport Transportation" /><span>Loading DT Intelligence Hub…</span></main>;
   if (isPublic) return <>{children}</>;
-  if (!session || (operationsRole === "dashboard_fuel_viewer" && pathname !== "/" && !pathname.startsWith("/fuel"))) return null;
+  if (!session || (isLimitedOperationsUser && !isLimitedOperationsPath)) return null;
   return <AccessRole.Provider value={operationsRole}><div className="app-frame">
     <NavBar operationsRole={operationsRole} payrollAccess={payrollAccess} fuelAccess={fuelAccess} techInvoiceAccess={techInvoiceAccess} />
     <div className="app-content">{children}</div>
   </div></AccessRole.Provider>;
 }
-
