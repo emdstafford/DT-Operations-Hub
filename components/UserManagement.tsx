@@ -8,6 +8,7 @@ type UserAccess = {
   email: string;
   operations_role: string | null;
   operations_active: boolean;
+  contract_financial_active: boolean;
   fuel_active: boolean;
   fuel_can_upload: boolean;
   payroll_active: boolean;
@@ -16,6 +17,7 @@ type UserAccess = {
 type AccessDraft = {
   email: string;
   operationsRole: OperationsRole;
+  contractFinancialActive: boolean;
   fuelActive: boolean;
   fuelCanUpload: boolean;
   payrollActive: boolean;
@@ -24,6 +26,7 @@ type AccessDraft = {
 const blankDraft: AccessDraft = {
   email: "",
   operationsRole: "",
+  contractFinancialActive: false,
   fuelActive: false,
   fuelCanUpload: false,
   payrollActive: false,
@@ -74,6 +77,7 @@ export default function UserManagement() {
     setDraft({
       email: user.email,
       operationsRole: user.operations_active ? (user.operations_role as OperationsRole) || "" : "",
+      contractFinancialActive: user.contract_financial_active,
       fuelActive: user.fuel_active,
       fuelCanUpload: user.fuel_can_upload,
       payrollActive: user.payroll_active,
@@ -108,6 +112,7 @@ export default function UserManagement() {
     }
     const summary = [
       draft.operationsRole ? roleOptions.find((option) => option.value === draft.operationsRole)?.label : "No Dashboard or Contracts access",
+      `Contract schedules/rates: ${enabled(draft.contractFinancialActive)}`,
       `Fuel reports: ${draft.fuelActive ? draft.fuelCanUpload ? "access with upload" : "read only" : "no access"}`,
       `Payroll: ${enabled(draft.payrollActive)}`,
       `Tech Invoices: ${enabled(draft.techInvoiceActive)}`,
@@ -118,6 +123,7 @@ export default function UserManagement() {
     const { error: saveError } = await supabase.rpc("manage_hub_user_access", {
       p_email: email,
       p_operations_role: draft.operationsRole || null,
+      p_contract_financial_active: draft.contractFinancialActive,
       p_fuel_active: draft.fuelActive,
       p_fuel_can_upload: draft.fuelCanUpload,
       p_payroll_active: draft.payrollActive,
@@ -163,6 +169,10 @@ export default function UserManagement() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16, marginTop: 16 }}>
           <div style={cardStyle}>
+            <h3 style={{ marginTop: 0 }}>Contracts</h3>
+            <label style={checkboxRow}><input type="checkbox" checked={draft.contractFinancialActive} onChange={(event) => setDraft({ ...draft, contractFinancialActive: event.target.checked })} /><span><strong>Contract schedules and rates</strong><br /><small>Access detailed trip schedules and contract rate snapshots.</small></span></label>
+          </div>
+          <div style={cardStyle}>
             <h3 style={{ marginTop: 0 }}>Fuel</h3>
             <label style={checkboxRow}><input type="checkbox" checked={draft.fuelActive} onChange={(event) => setDraft({ ...draft, fuelActive: event.target.checked, fuelCanUpload: event.target.checked ? draft.fuelCanUpload : false })} /><span><strong>Fuel reports</strong><br /><small>View fuel records and contract totals.</small></span></label>
             <label style={{ ...checkboxRow, opacity: draft.fuelActive ? 1 : 0.55 }}><input type="checkbox" disabled={!draft.fuelActive} checked={draft.fuelCanUpload} onChange={(event) => setDraft({ ...draft, fuelCanUpload: event.target.checked })} /><span><strong>Upload fuel files</strong><br /><small>Allows importing or changing fuel data.</small></span></label>
@@ -193,6 +203,7 @@ export default function UserManagement() {
           <tbody>{users.map((user) => <tr key={user.email}>
             <th scope="row" style={{ textAlign: "left", padding: "10px 8px", borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>{user.email}</th>
             <td style={{ padding: "10px 8px", borderBottom: "1px solid #e2e8f0" }}>{roleLabel(user.operations_role, user.operations_active)}</td>
+            <td style={{ padding: "10px 8px", borderBottom: "1px solid #e2e8f0" }}>{user.contract_financial_active ? "Schedules + rates" : "Standard"}</td>
             <td style={{ padding: "10px 8px", borderBottom: "1px solid #e2e8f0" }}>{user.fuel_active ? user.fuel_can_upload ? "Upload + view" : "Read only" : "No access"}</td>
             <td style={{ padding: "10px 8px", borderBottom: "1px solid #e2e8f0" }}>{user.payroll_active ? "Yes" : "No"}</td>
             <td style={{ padding: "10px 8px", borderBottom: "1px solid #e2e8f0" }}>{user.tech_invoice_active ? "Yes" : "No"}</td>
