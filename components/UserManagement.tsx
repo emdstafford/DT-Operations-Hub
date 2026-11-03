@@ -184,7 +184,7 @@ export default function UserManagement() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
-          <button className="hub-primary-button" type="submit" disabled={saving}>{saving ? "Saving…" : "Save access"}</button>
+          <button className="primary-link" type="submit" disabled={saving}>{saving ? "Saving…" : "Save access"}</button>
           <button className="hub-secondary-link" type="button" onClick={startNewUser} disabled={saving}>Clear form</button>
         </div>
       </form>
