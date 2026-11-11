@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { normalizeTimecardContract } from "@/lib/timecardContracts";
 
 export type TimecardSummaryEntry = { contract: string; employeeId: string; name: string; hundredths: number };
 export type TimecardDailyEntry = { date: string; contract: string; hundredths: number };
@@ -14,7 +15,7 @@ const day = (date: string) => new Intl.DateTimeFormat("en-US", { month: "short",
 export function compare(before: Map<string, { label: string; hours: number }>, after: Map<string, { label: string; hours: number }>): Comparison[] {
   return [...new Set([...before.keys(), ...after.keys()])].map((key) => { const old = before.get(key), now = after.get(key); const previous = old?.hours ?? 0, current = now?.hours ?? 0; return { key, label: now?.label || old?.label || key, previous, current, delta: current - previous, kind: !old ? "new" as const : !now ? "missing" as const : "changed" as const }; }).filter((row) => row.kind !== "changed" || row.delta !== 0).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || a.label.localeCompare(b.label));
 }
-export function totals(rows: TimecardSummaryEntry[], kind: "driver" | "contract") { const map = new Map<string, { label: string; hours: number }>(); for (const row of rows) { const key = kind === "contract" ? row.contract : row.employeeId; const current = map.get(key); map.set(key, { label: kind === "contract" ? row.contract : row.name, hours: (current?.hours || 0) + row.hundredths }); } return map; }
+export function totals(rows: TimecardSummaryEntry[], kind: "driver" | "contract") { const map = new Map<string, { label: string; hours: number }>(); for (const row of rows) { const contract = normalizeTimecardContract(row.contract); const key = kind === "contract" ? contract : row.employeeId; const current = map.get(key); map.set(key, { label: kind === "contract" ? contract : row.name, hours: (current?.hours || 0) + row.hundredths }); } return map; }
 
 export default function TimecardComparisons({ entries, dailyEntries, detailRows, start, end, sourceName, payrollName }: { entries: TimecardSummaryEntry[]; dailyEntries: TimecardDailyEntry[]; detailRows: TimecardDetailEntry[]; start: string; end: string; sourceName: string; payrollName: string }) {
   const [previous, setPrevious] = useState<SavedReport | null>(null), [status, setStatus] = useState(""), [error, setError] = useState(""), [showAll, setShowAll] = useState(false), [saving, setSaving] = useState(false);

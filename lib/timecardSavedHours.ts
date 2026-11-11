@@ -1,5 +1,7 @@
 type Entry = { contract: string; employeeId: string; name: string; hundredths: number };
-const contractKey = (value: string) => value.trim().toUpperCase().replace(/^0+(?=\d)/, "");
+import { normalizeTimecardContract } from "@/lib/timecardContracts";
+
+const contractKey = normalizeTimecardContract;
 const idKey = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]/g, "").replace(/^0+(?=\d)/, "");
 const normalizeName = (value: string) => value.trim().toLocaleLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 const nameKey = (value: string) => normalizeName(value);

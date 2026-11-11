@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { compare, totals, type SavedReport, type TimecardSummaryEntry } from "@/components/TimecardComparisons";
+import { normalizeTimecardContract } from "@/lib/timecardContracts";
 
 type HistoryRow = SavedReport & { employee_count: number; contract_count: number; total_hundredths: number; archived_at: string | null };
 const hour = (hundredths: number) => (hundredths / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -58,10 +59,10 @@ export default function TimecardHistory() {
   const archivedReports = reports.filter((item) => !!item.archived_at);
   const before = activeReports.find((item) => item.id === beforeId);
   const after = activeReports.find((item) => item.id === afterId);
-  const availableContracts = useMemo(() => [...new Set([...(before?.summary ?? []), ...(after?.summary ?? [])].map((entry) => entry.contract))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [before, after]);
+  const availableContracts = useMemo(() => [...new Set([...(before?.summary ?? []), ...(after?.summary ?? [])].map((entry) => normalizeTimecardContract(entry.contract)))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [before, after]);
   const includedContracts = selectedContracts === null ? availableContracts : selectedContracts.filter((contract) => availableContracts.includes(contract));
-  const beforeEntries = (before?.summary ?? []).filter((entry) => includedContracts.includes(entry.contract));
-  const afterEntries = (after?.summary ?? []).filter((entry) => includedContracts.includes(entry.contract));
+  const beforeEntries = (before?.summary ?? []).filter((entry) => includedContracts.includes(normalizeTimecardContract(entry.contract)));
+  const afterEntries = (after?.summary ?? []).filter((entry) => includedContracts.includes(normalizeTimecardContract(entry.contract)));
   const driverChanges = useMemo(() => before && after ? compare(totals(beforeEntries, "driver"), totals(afterEntries, "driver")) : [], [before, after, selectedContracts]);
   const contractChanges = useMemo(() => before && after ? compare(totals(beforeEntries, "contract"), totals(afterEntries, "contract")) : [], [before, after, selectedContracts]);
   const beforeTotal = beforeEntries.reduce((sum, entry) => sum + entry.hundredths, 0);

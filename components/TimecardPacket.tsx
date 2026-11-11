@@ -6,6 +6,7 @@ import { useUploadHandoff } from "@/components/UploadHandoff";
 import TimecardComparisons, { type SavedReport, type TimecardDailyEntry, type TimecardDetailEntry, type TimecardSummaryEntry } from "@/components/TimecardComparisons";
 import * as XLSX from "xlsx";
 import { timecardSavedHours } from "@/lib/timecardSavedHours";
+import { normalizeTimecardContract } from "@/lib/timecardContracts";
 
 type Field = "last" | "first" | "contract" | "inTime" | "outTime" | "hours" | "payCode";
 type Columns = Record<Field, number>;
@@ -66,13 +67,7 @@ function parse(source: Source | null): Result {
     const date = workDate(cells[col.inTime] ?? "") ?? (source.dateColumn >= 0 ? workDate(cells[source.dateColumn] ?? "") : null);
     const hourText = (cells[col.hours] ?? "").trim().replaceAll(",", "");
     const hours = Number(hourText);
-    // Treat department codes such as 03774T and 3774T as one contract in the
-    // packet and in the summary saved for future payroll comparisons. Keep the
-    // two explicitly zero-prefixed non-contract codes as they are.
-    const normalizedContract = rawContract.trim().toUpperCase();
-    const contract = normalizedContract
-      ? (["01SHDR", "011VAN"].includes(normalizedContract) ? normalizedContract : normalizedContract.replace(/^0+(?=\d)/, ""))
-      : unassignedDepartment;
+    const contract = rawContract ? normalizeTimecardContract(rawContract) : unassignedDepartment;
     const comma = rawName.indexOf(",");
     const separateNames = col.last >= 0 && col.first >= 0;
     const last = separateNames ? (cells[col.last] ?? "").trim() : comma >= 0 ? rawName.slice(0, comma).trim() : "";
@@ -107,10 +102,6 @@ function clock(value: string) {
   const match = /(?:^|\s)(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i.exec(value.trim());
   if (match) return `${Number(match[1])}:${match[2]} ${match[3].toUpperCase()}`;
   return value.trim() || "—";
-}
-function contractKeys(value: string) {
-  const raw = value.trim().toUpperCase();
-  return [...new Set([raw, raw.replace(/^0+(?=\d)/, "")])];
 }
 function TimecardRows({ rows }: { rows: Shift[] }) {
   return <section className="timecard-period"><table className="data-table"><thead><tr><th>Date</th><th>Time In</th><th>Time Out</th><th>Hours</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.inTime}-${index}`}><td>{dateLabel(row.date)}</td><td>{clock(row.inTime)}</td><td>{clock(row.outTime)}</td><td>{hoursLabel(row.hundredths)}</td></tr>)}</tbody></table></section>;
@@ -175,8 +166,9 @@ export default function TimecardPacket() {
   const contracts = useMemo(() => {
     const groups = new Map<string, Map<string, Shift[]>>();
     for (const row of result.rows) {
-      if (!groups.has(row.contract)) groups.set(row.contract, new Map());
-      const people = groups.get(row.contract)!;
+      const contract = normalizeTimecardContract(row.contract);
+      if (!groups.has(contract)) groups.set(contract, new Map());
+      const people = groups.get(contract)!;
       const person = `${row.employeeId}\u0000${row.last}\u0000${row.first}`;
       if (!people.has(person)) people.set(person, []);
       people.get(person)!.push(row);
@@ -225,11 +217,11 @@ export default function TimecardPacket() {
     return () => { active = false; };
   }, []);
   function supervisorsFor(contract: string, rows: Shift[]) {
-    const keys = contractKeys(contract);
-    const datedForContract = assignments.filter((item) => keys.includes(item.contract_number.trim().toUpperCase()));
+    const contractKey = normalizeTimecardContract(contract);
+    const datedForContract = assignments.filter((item) => normalizeTimecardContract(item.contract_number) === contractKey);
     const datedNames = datedForContract.filter((item) => rows.some((row) => item.start_date <= row.date && (!item.end_date || row.date <= item.end_date))).map((item) => item.supervisor);
     // Fall back only when there is no dated history for the contract at all.
-    const names = datedNames.length ? datedNames : datedForContract.length ? [] : currentAssignments.filter((item) => keys.includes(item.contract_number.trim().toUpperCase())).map((item) => item.supervisor);
+    const names = datedNames.length ? datedNames : datedForContract.length ? [] : currentAssignments.filter((item) => normalizeTimecardContract(item.contract_number) === contractKey).map((item) => item.supervisor);
     return [...new Set(names.map((name) => name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   }
   const allDates = result.rows.map((row) => row.date).sort();
@@ -272,9 +264,10 @@ export default function TimecardPacket() {
   const dailyEntries = useMemo<TimecardDailyEntry[]>(() => {
     const totals = new Map<string, TimecardDailyEntry>();
     for (const row of result.rows) {
-      const key = `${row.date}\u0000${row.contract}`;
+      const contract = normalizeTimecardContract(row.contract);
+      const key = `${row.date}\u0000${contract}`;
       const current = totals.get(key);
-      totals.set(key, { date: row.date, contract: row.contract, hundredths: (current?.hundredths ?? 0) + row.hundredths });
+      totals.set(key, { date: row.date, contract, hundredths: (current?.hundredths ?? 0) + row.hundredths });
     }
     return [...totals.values()].filter((entry) => entry.hundredths > 0);
   }, [result.rows]);
