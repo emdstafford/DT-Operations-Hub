@@ -66,7 +66,13 @@ function parse(source: Source | null): Result {
     const date = workDate(cells[col.inTime] ?? "") ?? (source.dateColumn >= 0 ? workDate(cells[source.dateColumn] ?? "") : null);
     const hourText = (cells[col.hours] ?? "").trim().replaceAll(",", "");
     const hours = Number(hourText);
-    const contract = rawContract || unassignedDepartment;
+    // Treat department codes such as 03774T and 3774T as one contract in the
+    // packet and in the summary saved for future payroll comparisons. Keep the
+    // two explicitly zero-prefixed non-contract codes as they are.
+    const normalizedContract = rawContract.trim().toUpperCase();
+    const contract = normalizedContract
+      ? (["01SHDR", "011VAN"].includes(normalizedContract) ? normalizedContract : normalizedContract.replace(/^0+(?=\d)/, ""))
+      : unassignedDepartment;
     const comma = rawName.indexOf(",");
     const separateNames = col.last >= 0 && col.first >= 0;
     const last = separateNames ? (cells[col.last] ?? "").trim() : comma >= 0 ? rawName.slice(0, comma).trim() : "";
