@@ -65,7 +65,7 @@ export default function TimecardHistory() {
   const beforeEntries = (before?.summary ?? []).filter((entry) => includedContracts.includes(normalizeTimecardContract(entry.contract)));
   const afterEntries = (after?.summary ?? []).filter((entry) => includedContracts.includes(normalizeTimecardContract(entry.contract)));
   const driverChanges = before && after ? compare(totals(beforeEntries, "driver"), totals(afterEntries, "driver")) : [];
-  const contractChanges = before && after ? compare(totals(beforeEntries, "contract"), totals(afterEntries, "contract")) : [];
+  const contractChanges = before && after ? compare(totals(beforeEntries, "contract"), totals(afterEntries, "contract")).sort((a, b) => a.label.localeCompare(b.label, "en", { numeric: true, sensitivity: "base" })) : [];
   const beforeTotal = beforeEntries.reduce((sum, entry) => sum + entry.hundredths, 0);
   const afterTotal = afterEntries.reduce((sum, entry) => sum + entry.hundredths, 0);
   const allSelected = includedContracts.length === availableContracts.length;
