@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { compare, totals, type SavedReport, type TimecardSummaryEntry } from "@/components/TimecardComparisons";
+import { compare, totals, type SavedReport } from "@/components/TimecardComparisons";
 import { normalizeTimecardContract } from "@/lib/timecardContracts";
 
 type HistoryRow = SavedReport & { employee_count: number; contract_count: number; total_hundredths: number; archived_at: string | null };
@@ -59,12 +60,12 @@ export default function TimecardHistory() {
   const archivedReports = reports.filter((item) => !!item.archived_at);
   const before = activeReports.find((item) => item.id === beforeId);
   const after = activeReports.find((item) => item.id === afterId);
-  const availableContracts = useMemo(() => [...new Set([...(before?.summary ?? []), ...(after?.summary ?? [])].map((entry) => normalizeTimecardContract(entry.contract)))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [before, after]);
+  const availableContracts = [...new Set([...(before?.summary ?? []), ...(after?.summary ?? [])].map((entry) => normalizeTimecardContract(entry.contract)))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const includedContracts = selectedContracts === null ? availableContracts : selectedContracts.filter((contract) => availableContracts.includes(contract));
   const beforeEntries = (before?.summary ?? []).filter((entry) => includedContracts.includes(normalizeTimecardContract(entry.contract)));
   const afterEntries = (after?.summary ?? []).filter((entry) => includedContracts.includes(normalizeTimecardContract(entry.contract)));
-  const driverChanges = useMemo(() => before && after ? compare(totals(beforeEntries, "driver"), totals(afterEntries, "driver")) : [], [before, after, selectedContracts]);
-  const contractChanges = useMemo(() => before && after ? compare(totals(beforeEntries, "contract"), totals(afterEntries, "contract")) : [], [before, after, selectedContracts]);
+  const driverChanges = before && after ? compare(totals(beforeEntries, "driver"), totals(afterEntries, "driver")) : [];
+  const contractChanges = before && after ? compare(totals(beforeEntries, "contract"), totals(afterEntries, "contract")) : [];
   const beforeTotal = beforeEntries.reduce((sum, entry) => sum + entry.hundredths, 0);
   const afterTotal = afterEntries.reduce((sum, entry) => sum + entry.hundredths, 0);
   const allSelected = includedContracts.length === availableContracts.length;
@@ -117,16 +118,17 @@ export default function TimecardHistory() {
     {!loading && !error && !reports.length && <section className="panel"><p>No payrolls saved yet. Open Timecard Report and upload a file to start.</p></section>}
     {!!reports.length && <>
       <section className="panel timecard-history-summary">
-        <div className="panel-heading"><div><h2>Saved payrolls</h2><span>{activeReports.length} available · raw time punches stay in the browser</span></div></div>
+        <div className="panel-heading"><div><h2>Saved payrolls</h2><span>{activeReports.length} available · reopen saved reports with their detailed timecards</span></div></div>
         {actionMessage && <p className="timecard-action-status" role="status">{actionMessage}</p>}
         <div className="table-scroll"><table className="data-table"><thead><tr><th>Payroll</th><th>Timecard dates</th><th>Drivers</th><th>Contracts</th><th>Total hours</th><th>Manage</th></tr></thead><tbody>
-          {activeReports.map((row) => <tr key={row.id}><td>{version(row)}</td><td>{formatDate(row.period_start)}–{formatDate(row.period_end)}</td><td>{row.employee_count}</td><td>{row.contract_count}</td><td>{hour(Number(row.total_hundredths))}</td><td><button type="button" className="hub-secondary-link" disabled={!!busyId} onClick={() => void changeArchive(row, false)}>Archive</button>{canDelete && <button type="button" className="timecard-delete" disabled={!!busyId} onClick={() => void deleteReport(row)}>Delete</button>}</td></tr>)}
+          {activeReports.map((row) => <tr key={row.id}><td>{version(row)}</td><td>{formatDate(row.period_start)}–{formatDate(row.period_end)}</td><td>{row.employee_count}</td><td>{row.contract_count}</td><td>{hour(Number(row.total_hundredths))}</td><td><Link className="hub-secondary-link" href={`/payroll/timecards?payroll=${encodeURIComponent(row.id)}`}>Open full report</Link><button type="button" className="hub-secondary-link" disabled={!!busyId} onClick={() => void changeArchive(row, false)}>Archive</button>{canDelete && <button type="button" className="timecard-delete" disabled={!!busyId} onClick={() => void deleteReport(row)}>Delete</button>}</td></tr>)}
         </tbody></table></div>
         {!!archivedReports.length && <details className="timecard-history-pick"><summary>Archived payrolls ({archivedReports.length})</summary><div className="timecard-versions">{archivedReports.map((row) => <div className="timecard-version-row" key={row.id}><span>{version(row)} · {hour(Number(row.total_hundredths))} hours</span><div><button type="button" disabled={!!busyId} onClick={() => void changeArchive(row, true)}>Restore</button>{canDelete && <button type="button" className="timecard-delete" disabled={!!busyId} onClick={() => void deleteReport(row)}>Delete</button>}</div></div>)}</div></details>}
       </section>
 
       {!!activeReports.length && <section className="panel timecard-comparisons timecard-print-comparison">
-        <div className="panel-heading"><div><h2>Compare two payrolls</h2><span>Choose the two uploads, then select the contracts to include.</span></div><button type="button" className="primary-link" disabled={!validComparison} onClick={printComparison}>Print comparison</button></div>
+        <div className="panel-heading"><div><h2>Compare two payrolls</h2><span>Choose the two uploads, then select the contracts to include.</span></div><button type="button" className="hub-secondary-link" disabled={!validComparison} onClick={printComparison}>Print summary only</button></div>
+        {validComparison && <p className="no-print"><Link className="primary-link" href={`/payroll/timecards?payroll=${encodeURIComponent(afterId)}&previous=${encodeURIComponent(beforeId)}`}>Open original report with timecards →</Link> Choose a contract or supervisor in the full report, then print.</p>}
         <div className="timecard-print-title print-only"><p>Davenport Transportation · Payroll comparison</p><h1>{before?.payroll_name} → {after?.payroll_name}</h1><span>{before && after ? `${formatDate(before.period_start)}–${formatDate(before.period_end)} compared with ${formatDate(after.period_start)}–${formatDate(after.period_end)}` : ""}</span><span> · ${includedContracts.length} selected contracts</span></div>
         <div className="timecard-payroll-fields">
           <label>Earlier payroll<select value={beforeId} onChange={(event) => { setBeforeId(event.target.value); setSelectedContracts(null); }}><option value="">Choose payroll</option>{activeReports.map((row) => <option key={row.id} value={row.id}>{version(row)}</option>)}</select></label>
