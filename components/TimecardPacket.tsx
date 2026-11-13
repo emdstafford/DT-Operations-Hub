@@ -137,7 +137,11 @@ export default function TimecardPacket() {
       const { data, error } = await supabase.from("timecard_summary_history").select("id,payroll_name,pay_date,period_start,period_end,source_file,saved_at").is("archived_at", null).order("period_end", { ascending: false }).order("saved_at", { ascending: false }).limit(250);
       if (!active) return;
       if (error) setSavedError(`Could not load saved payrolls: ${error.message}`);
-      else setSavedReports((data ?? []) as SavedReport[]);
+      else {
+        const reports = (data ?? []) as SavedReport[];
+        setSavedReports(reports);
+        if (new URLSearchParams(window.location.search).get("reprint") === "latest" && reports.length) setSavedId(reports[0].id);
+      }
     })();
     return () => { active = false; };
   }, []);
@@ -312,7 +316,7 @@ export default function TimecardPacket() {
   return <div className="report-stack timecard-stack">
     <section className="panel timecard-intro no-print"><strong>One report, grouped by contract</strong><p>Choose the timecard report for this pay period. The uploaded file is not changed. After you name and save a payroll, its timecard entries are available here to reopen and print anytime.</p><div className="timecard-inclusion-note"><h3>What is included and excluded</h3><p><strong>Included:</strong> readable timecard work rows, including holiday-coded hours. These hours appear in the packet and saved comparisons.</p><p><strong>Excluded:</strong> rows with the pay code <strong>PTO</strong> and subtotal lines. The printed packet also leaves out contracts <strong>030512, 01SHDR, and 011VAN</strong>; those contracts can still appear in saved comparison totals.</p></div></section>
     {error && <div className="alert alert-error no-print">{error}</div>}
-    <section className="panel no-print">
+    <section className="panel no-print" id="saved-payroll">
       <h2>Reprint a saved payroll</h2><p>Open a saved payroll to print it with the latest comparison matching. No upload is needed when its time punches are saved.</p>
       <label>Saved payroll<select value={savedId} onChange={(event) => { setSavedId(event.target.value); setSavedPacket(null); setSelectedContract(""); setSelectedSupervisor(""); }}><option value="">Choose a saved payroll</option>{savedReports.map((report) => <option key={report.id} value={report.id}>{report.payroll_name} · {dateLabel(report.period_start)} – {dateLabel(report.period_end)} · saved {new Date(report.saved_at).toLocaleString("en-US")}</option>)}</select></label>
       {loadingSaved && <p role="status">Opening saved timecards…</p>}{savedError && <p className="alert alert-error" role="alert">{savedError}</p>}{savedPacket && <p role="status">Opened {savedPacket.payroll_name} · {savedPacket.rows.length.toLocaleString()} saved time entries. Review the preview below, then choose a contract or supervisor and print the original report layout.</p>}
