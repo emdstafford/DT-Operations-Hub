@@ -36,11 +36,15 @@ export default function TimecardComparisons({ entries, dailyEntries, detailRows,
         const payload = { payroll_name: normalizedName, pay_date: end, period_start: start, period_end: end, source_file: sourceName, summary_hash: hash, employee_count: new Set(current.map(e=>e.employeeId)).size, contract_count: new Set(current.map(e=>e.contract)).size, total_hundredths: current.reduce((sum,row)=>sum+row.hundredths,0), summary: current, daily_summary: dailyEntries, detail_rows: detailRows, saved_by: user.user.id, archived_at: null, archived_by: null };
         let message = "Hour totals saved for future comparisons.";
         if (samePayroll) {
-          if (samePayroll.summary_hash === hash && !samePayroll.archived_at) message = `Duplicate upload skipped. These totals are already saved as ${samePayroll.payroll_name}.`;
+          if (samePayroll.summary_hash === hash && !samePayroll.archived_at) {
+            const { error: detailError } = await supabase.from("timecard_summary_history").update({ detail_rows: detailRows }).eq("id", samePayroll.id);
+            if (detailError) throw detailError;
+            message = `Totals and detailed timecards are saved as ${samePayroll.payroll_name}, ready to reopen anytime.`;
+          }
           else { const { error: updateError } = await supabase.from("timecard_summary_history").update(payload).eq("id", samePayroll.id); if (updateError) throw updateError; message = `Corrected ${normalizedName} replaced the previously saved totals for these same dates.`; }
         } else {
           const { data: duplicateHash, error: hashError } = await supabase.from("timecard_summary_history").select("id,payroll_name,archived_at").eq("summary_hash",hash).maybeSingle(); if (hashError) throw hashError;
-          if (duplicateHash) { if (duplicateHash.archived_at) { const { error: restoreError } = await supabase.from("timecard_summary_history").update({archived_at:null,archived_by:null}).eq("id",duplicateHash.id); if (restoreError) throw restoreError; } message = `Duplicate upload skipped. These totals are already saved as ${duplicateHash.payroll_name}.`; }
+          if (duplicateHash) { const { error: detailError } = await supabase.from("timecard_summary_history").update({ detail_rows: detailRows }).eq("id", duplicateHash.id); if (detailError) throw detailError; if (duplicateHash.archived_at) { const { error: restoreError } = await supabase.from("timecard_summary_history").update({archived_at:null,archived_by:null}).eq("id",duplicateHash.id); if (restoreError) throw restoreError; } message = `Duplicate upload skipped. These totals are already saved as ${duplicateHash.payroll_name}.`; }
           else { const { error: insertError } = await supabase.from("timecard_summary_history").insert(payload); if (insertError && insertError.code !== "23505") throw insertError; }
         }
         const { data, error: historyError } = await supabase.from("timecard_summary_history").select("id,payroll_name,pay_date,period_start,period_end,source_file,saved_at,summary").is("archived_at",null).lt("period_end",start).order("period_end",{ascending:false}).order("saved_at",{ascending:false}).limit(1).maybeSingle(); if (historyError) throw historyError;

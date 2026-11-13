@@ -118,6 +118,14 @@ export default function TimecardPacket() {
   const [excludeUnreadable, setExcludeUnreadable] = useState(false);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [savedId, setSavedId] = useState("");
+  const [comparisonId, setComparisonId] = useState("");
+  const [selectedSupervisor, setSelectedSupervisor] = useState("");
+  const [selectedContract, setSelectedContract] = useState("");
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setSavedId(params.get("payroll") || "");
+    setComparisonId(params.get("previous") || "");
+  }, []);
   const [savedPacket, setSavedPacket] = useState<(SavedReport & { rows: Shift[] }) | null>(null);
   const [loadingSaved, setLoadingSaved] = useState(false);
   const [savedError, setSavedError] = useState("");
@@ -178,7 +186,12 @@ export default function TimecardPacket() {
       people: [...people].sort(([, rowsA], [, rowsB]) => rowsA[0].last.localeCompare(rowsB[0].last, undefined, { sensitivity: "base" }) || rowsA[0].first.localeCompare(rowsB[0].first, undefined, { sensitivity: "base" }) || rowsA[0].employeeId.localeCompare(rowsB[0].employeeId)).map(([, rows]) => ({ name: `${rows[0].last}, ${rows[0].first}`, employeeId: rows[0].employeeId, rows: rows.sort((a, b) => a.date.localeCompare(b.date) || a.inTime.localeCompare(b.inTime)) })),
     }));
   }, [result.rows]);
-  const printContracts = contracts.filter(({ contract }) => !omitFromTimecardPrint(contract));
+  const eligibleContracts = contracts.filter(({ contract }) => !omitFromTimecardPrint(contract));
+  const packetSupervisors = [...new Set(eligibleContracts.flatMap(({ contract, people }) => supervisorsFor(contract, people.flatMap((person) => person.rows))))].sort((a, b) => a.localeCompare(b));
+  const printContracts = eligibleContracts.filter(({ contract, people }) =>
+    (!selectedContract || contract === selectedContract) &&
+    (!selectedSupervisor || supervisorsFor(contract, people.flatMap((person) => person.rows)).includes(selectedSupervisor)));
+
   async function readFile(upload?: File) {
     if (!upload) return;
     setError("");
@@ -240,7 +253,14 @@ export default function TimecardPacket() {
       if (!active) return;
       if (history.error || baseline.error) { setPreviousPayroll(null); setFirstPayroll(null); setComparisonStatus("error"); return; }
       const reports = (history.data ?? []) as SavedReport[];
-      setPreviousPayroll(reports.find((report) => report.period_end < periodStart) ?? null);
+      let previous = comparisonId ? reports.find((report) => report.id === comparisonId) ?? null : reports.find((report) => report.period_end < periodStart) ?? null;
+      if (comparisonId && !previous) {
+        const selected = await supabase.from("timecard_summary_history").select("id,payroll_name,pay_date,period_start,period_end,source_file,saved_at,summary").eq("id", comparisonId).is("archived_at", null).single();
+        if (!active) return;
+        if (selected.error) { setPreviousPayroll(null); setComparisonStatus("error"); return; }
+        previous = selected.data as SavedReport;
+      }
+      setPreviousPayroll(previous);
       let first = reports.find((report) => report.id === baseline.data?.report_id) ?? null;
       if (!first && baseline.data?.report_id) {
         const original = await supabase.from("timecard_summary_history").select("id,payroll_name,pay_date,period_start,period_end,source_file,saved_at,summary")
@@ -253,7 +273,7 @@ export default function TimecardPacket() {
       setComparisonStatus("ready");
     })();
     return () => { active = false; };
-  }, [periodStart, periodEnd]);
+  }, [periodStart, periodEnd, comparisonId]);
   function savedHours(report: SavedReport | null, contract: string, employeeId?: string, name?: string) {
     if (!report) return null;
     return timecardSavedHours(report.summary, contract, employeeId, name, historyEntries);
@@ -290,12 +310,12 @@ export default function TimecardPacket() {
     finally { setAssignmentSaving(""); }
   }
   return <div className="report-stack timecard-stack">
-    <section className="panel timecard-intro no-print"><strong>One report, grouped by contract</strong><p>Choose the timecard report for this pay period. The uploaded file is not changed; it stays in this browser tab and clears when you refresh or close it.</p><div className="timecard-inclusion-note"><h3>What is included and excluded</h3><p><strong>Included:</strong> readable timecard work rows, including holiday-coded hours. These hours appear in the packet and saved comparisons.</p><p><strong>Excluded:</strong> rows with the pay code <strong>PTO</strong> and subtotal lines. The printed packet also leaves out contracts <strong>030512, 01SHDR, and 011VAN</strong>; those contracts can still appear in saved comparison totals.</p></div></section>
+    <section className="panel timecard-intro no-print"><strong>One report, grouped by contract</strong><p>Choose the timecard report for this pay period. The uploaded file is not changed. After you name and save a payroll, its timecard entries are available here to reopen and print anytime.</p><div className="timecard-inclusion-note"><h3>What is included and excluded</h3><p><strong>Included:</strong> readable timecard work rows, including holiday-coded hours. These hours appear in the packet and saved comparisons.</p><p><strong>Excluded:</strong> rows with the pay code <strong>PTO</strong> and subtotal lines. The printed packet also leaves out contracts <strong>030512, 01SHDR, and 011VAN</strong>; those contracts can still appear in saved comparison totals.</p></div></section>
     {error && <div className="alert alert-error no-print">{error}</div>}
     <section className="panel no-print">
       <h2>Reprint a saved payroll</h2><p>Open a saved payroll to print it with the latest comparison matching. No upload is needed when its time punches are saved.</p>
-      <label>Saved payroll<select value={savedId} onChange={(event) => { setSavedId(event.target.value); setSavedPacket(null); }}><option value="">Choose a saved payroll</option>{savedReports.map((report) => <option key={report.id} value={report.id}>{report.payroll_name} · {dateLabel(report.period_start)} – {dateLabel(report.period_end)} · saved {new Date(report.saved_at).toLocaleString("en-US")}</option>)}</select></label>
-      {loadingSaved && <p role="status">Opening saved timecards…</p>}{savedError && <p className="alert alert-error" role="alert">{savedError}</p>}{savedPacket && <p role="status">Opened {savedPacket.payroll_name} · {savedPacket.rows.length.toLocaleString()} saved time entries. Review the preview below, then choose Print by contract.</p>}
+      <label>Saved payroll<select value={savedId} onChange={(event) => { setSavedId(event.target.value); setSavedPacket(null); setSelectedContract(""); setSelectedSupervisor(""); }}><option value="">Choose a saved payroll</option>{savedReports.map((report) => <option key={report.id} value={report.id}>{report.payroll_name} · {dateLabel(report.period_start)} – {dateLabel(report.period_end)} · saved {new Date(report.saved_at).toLocaleString("en-US")}</option>)}</select></label>
+      {loadingSaved && <p role="status">Opening saved timecards…</p>}{savedError && <p className="alert alert-error" role="alert">{savedError}</p>}{savedPacket && <p role="status">Opened {savedPacket.payroll_name} · {savedPacket.rows.length.toLocaleString()} saved time entries. Review the preview below, then choose a contract or supervisor and print the original report layout.</p>}
     </section>
     <section className="panel timecard-settings no-print">
       <div className="panel-heading"><div><h2>Timecard report</h2><span>{file?.name || "Choose a report"}</span></div><label className="primary-link timecard-file-button">Choose report<input type="file" accept=".csv,.xlsx,.xls" onChange={(event) => void readFile(event.target.files?.[0])} /></label></div>
@@ -304,7 +324,20 @@ export default function TimecardPacket() {
       {file && <div className="timecard-status"><span>{result.rows.length.toLocaleString()} rows · {hoursLabel(total(result.rows))} hours</span><span>{result.pto} PTO rows excluded</span><span>{result.subtotals} subtotal lines skipped</span>{result.unassigned > 0 && <strong>{result.unassigned} work entries have no department and are included under Unassigned department.</strong>}{comparisonStatus === "loading" && <span>Looking up previous payroll hours…</span>}{comparisonStatus === "ready" && !firstPayroll && previousPayroll && <strong>To show the first ADP payroll, select it under “First payroll in the new system” on Timecard Comparisons.</strong>}{comparisonStatus === "error" && <strong>Saved payroll comparisons are unavailable. The time entries can still print.</strong>}{file.employeeIdColumn < 0 && <strong>No employee ID column found. Comparisons will match drivers by name.</strong>}{result.invalid > 0 && <strong>{result.invalid} rows need review before they can be included.</strong>}{supervisorStatus === "error" && <strong>Supervisor assignments could not be loaded; contract headings will show “Supervisor unavailable.”</strong>}{unassigned.length > 0 && <details className="timecard-unassigned"><summary>{unassigned.length} historical contract{unassigned.length === 1 ? " has" : "s have"} no supervisor assignment for these dates. Review contracts →</summary><p>These contracts may be completed now. Choose who supervised them during the dates in this file. This is separate from reviewing unreadable rows.</p>{unassigned.map(({contract,people}) => { const rows = people.flatMap((person) => person.rows); const dates = rows.map((row) => row.date).sort(); return <div className="timecard-unassigned-row" key={contract}><strong>{contract} · {dateLabel(dates[0])} – {dateLabel(dates[dates.length-1])}</strong><select aria-label={`Supervisor for ${contract}`} value={assignmentName[contract] || ""} onChange={(event) => { setAssignmentName((current) => ({ ...current, [contract]: event.target.value })); setAssignmentErrors((current) => ({ ...current, [contract]: "" })); }}><option value="">Choose supervisor</option>{knownSupervisors.map((name) => <option key={name} value={name}>{name}</option>)}</select><button type="button" disabled={!!assignmentSaving} onClick={() => void assignSupervisor(contract, rows)}>{assignmentSaving === contract ? "Saving…" : "Save assignment"}</button>{assignmentErrors[contract] && <span className="timecard-assignment-error" role="alert">{assignmentErrors[contract]}</span>}</div>; })}</details>}</div>}
       {file && result.invalid > 0 && <details className="timecard-invalid-review"><summary>Review {result.invalid} unreadable rows before saving →</summary><p>These rows are separate from the supervisor assignments. Subtotal lines are skipped automatically; these rows still need review. Excluding them removes their hours from this report and its saved comparison.</p><div className="table-scroll"><table className="data-table"><thead><tr><th>File row</th><th>Reason</th><th>Employee</th><th>Contract</th><th>Work date</th><th>Hours</th></tr></thead><tbody>{result.invalidRows.slice(0, 100).map((row) => <tr key={row.line}><td>{row.line}</td><td>{row.reason}</td><td>{row.name || "—"}</td><td>{row.contract || "—"}</td><td>{row.date || "—"}</td><td>{row.hours || "—"}</td></tr>)}</tbody></table></div>{result.invalid > 100 && <p>Showing the first 100 rows. Correct the source file to review the rest.</p>}<label className="timecard-exclude-confirm"><input type="checkbox" checked={excludeUnreadable} onChange={(event) => setExcludeUnreadable(event.target.checked)} /> I reviewed these rows and want to exclude all {result.invalid} unreadable rows from this payroll packet and saved totals.</label></details>}
     </section>
-    <section className="panel timecard-actions no-print"><button className="primary-link" disabled={!ready || !printContracts.length || supervisorStatus === "loading" || comparisonStatus === "loading"} onClick={() => window.print()}>Print by contract</button><span>{ready ? `${printContracts.length} contracts. Each starts on a new page. 030512, 01SHDR, and 011VAN are omitted from this packet.` : "Choose one report. All rows must be readable before printing."}</span></section>
+    {ready && <section className="panel no-print">
+      <h2>Pull the original payroll report</h2>
+      <p>The same timecard layout as the first payroll run, with previous hours, current hours, and the difference for each driver and contract.</p>
+      <div className="timecard-payroll-fields">
+        <label>Compare with<select value={comparisonId} onChange={(event) => setComparisonId(event.target.value)}><option value="">Previous pay period (automatic)</option>{savedReports.filter((report) => report.id !== savedId).map((report) => <option key={report.id} value={report.id}>{report.payroll_name} · {dateLabel(report.period_start)} – {dateLabel(report.period_end)}</option>)}</select></label>
+        <label>Supervisor<select value={selectedSupervisor} disabled={supervisorStatus !== "ready"} onChange={(event) => { setSelectedSupervisor(event.target.value); setSelectedContract(""); }}><option value="">All supervisors</option>{packetSupervisors.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+        <label>Contract<select value={selectedContract} onChange={(event) => setSelectedContract(event.target.value)}><option value="">All contracts</option>{eligibleContracts.filter(({ contract, people }) => !selectedSupervisor || supervisorsFor(contract, people.flatMap((person) => person.rows)).includes(selectedSupervisor)).map(({ contract }) => <option key={contract} value={contract}>{contract === unassignedDepartment ? "Unassigned department" : contract}</option>)}</select></label>
+      </div>
+      {comparisonStatus === "loading" && <p role="status">Loading comparison hours…</p>}
+      {comparisonStatus === "error" && <p role="alert">Comparison hours could not be loaded. Try opening this payroll again before printing.</p>}
+      {comparisonStatus === "ready" && !previousPayroll && <p>No previous payroll is available. Choose a saved comparison payroll above.</p>}
+      {!printContracts.length && <p>No contracts match this selection.</p>}
+    </section>}
+    <section className="panel timecard-actions no-print"><button className="primary-link" disabled={!ready || !printContracts.length || supervisorStatus === "loading" || comparisonStatus !== "ready" || !previousPayroll} onClick={() => window.print()}>Print payroll report with timecards</button><span>{ready ? `${printContracts.length} contracts. Each starts on a new page. 030512, 01SHDR, and 011VAN are omitted from this packet.` : "Choose one report. All rows must be readable before printing."}</span></section>
     {!savedPacket && ready && confirmedPayrollName ? <TimecardComparisons entries={historyEntries} dailyEntries={dailyEntries} detailRows={detailRows} start={periodStart} end={periodEnd} sourceName={file?.name || "Timecard report"} payrollName={confirmedPayrollName} /> : !savedPacket && ready && <section className="panel no-print timecard-comparisons"><h2>Save and compare payrolls</h2><p>Enter the payroll name or number above, such as #39, to save the hour totals. Reuse it for a corrected report. You can print the timecards now.</p></section>}
     {ready && <div className="timecard-packet"><div className="timecard-screen-heading no-print"><h2>Packet preview</h2><p>Check the hours and contract assignments before printing the packet. “Not matched” means no unambiguous previous total was found; no change is calculated for that entry.</p></div>{printContracts.map(({ contract, people }) => {
       const contractRows = people.flatMap((person) => person.rows);
