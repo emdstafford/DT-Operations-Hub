@@ -313,14 +313,11 @@ export default function TimecardPacket() {
     } catch (reason) { setAssignmentErrors((current) => ({ ...current, [contract]: reason instanceof Error ? reason.message : "Could not save this assignment." })); }
     finally { setAssignmentSaving(""); }
   }
-  return <div className="report-stack timecard-stack">
+  return <div className="report-stack timecard-stack" id="saved-payroll">
+    <details className="panel timecard-intro no-print"><summary style={{ cursor: "pointer", fontWeight: 700 }}>What is included and excluded</summary><p>Choose the timecard report for this pay period. The uploaded file is not changed. After you name and save a payroll, its timecard entries are available here to reopen and print anytime.</p><div className="timecard-inclusion-note"><p><strong>Included:</strong> readable timecard work rows, including holiday-coded hours. These hours appear in the packet and saved comparisons.</p><p><strong>Excluded:</strong> rows with the pay code <strong>PTO</strong> and subtotal lines. The printed packet also leaves out contracts <strong>030512, 01SHDR, and 011VAN</strong>; those contracts can still appear in saved comparison totals.</p></div></details>
 
     {error && <div className="alert alert-error no-print">{error}</div>}
-    <section className="panel no-print" id="saved-payroll">
-      <h2>Reprint a saved payroll</h2><p>Open a saved payroll to print it with the latest comparison matching. No upload is needed when its time punches are saved.</p>
-      <label>Saved payroll<select value={savedId} onChange={(event) => { setSavedId(event.target.value); setSavedPacket(null); setSelectedContract(""); setSelectedSupervisor(""); }}><option value="">Choose a saved payroll</option>{savedReports.map((report) => <option key={report.id} value={report.id}>{report.payroll_name} · {dateLabel(report.period_start)} – {dateLabel(report.period_end)} · saved {new Date(report.saved_at).toLocaleString("en-US")}</option>)}</select></label>
-      {loadingSaved && <p role="status">Opening saved timecards…</p>}{savedError && <p className="alert alert-error" role="alert">{savedError}</p>}{savedPacket && <p role="status">Opened {savedPacket.payroll_name} · {savedPacket.rows.length.toLocaleString()} saved time entries. Review the preview below, then choose a contract or supervisor and print the original report layout.</p>}
-    </section>
+    <div className="no-print">{loadingSaved && <p role="status">Opening saved timecards…</p>}{savedError && <p className="alert alert-error" role="alert">{savedError}</p>}</div>
 
     {ready && <section className="panel no-print">
       <h2>Pull the original payroll report</h2>
@@ -346,6 +343,12 @@ export default function TimecardPacket() {
         <footer><span>Reviewed by: ____________________ &nbsp; Date: ______________</span></footer>
       </section>;
     })}</div>}
+    <details className="panel no-print">
+      <summary style={{ cursor: "pointer", fontWeight: 700 }}>Reprint a saved payroll</summary><p>Open a saved payroll to print it with the latest comparison matching. No upload is needed when its time punches are saved.</p>
+      <label>Saved payroll<select value={savedId} onChange={(event) => { setSavedId(event.target.value); setSavedPacket(null); setSelectedContract(""); setSelectedSupervisor(""); }}><option value="">Choose a saved payroll</option>{savedReports.map((report) => <option key={report.id} value={report.id}>{report.payroll_name} · {dateLabel(report.period_start)} – {dateLabel(report.period_end)} · saved {new Date(report.saved_at).toLocaleString("en-US")}</option>)}</select></label>
+      {savedPacket && <p role="status">Opened {savedPacket.payroll_name} · {savedPacket.rows.length.toLocaleString()} saved time entries. Review the preview below, then choose a contract or supervisor and print the original report layout.</p>}
+    </details>
+
     <details className="panel timecard-settings no-print" open={!!file && !savedPacket}>
       <summary style={{ cursor: "pointer", fontWeight: 700 }}>Upload a new or corrected payroll</summary>
       <div className="panel-heading"><div><h2>Timecard report</h2><span>{file?.name || "Choose a report"}</span></div><label className="primary-link timecard-file-button">Choose report<input type="file" accept=".csv,.xlsx,.xls" onChange={(event) => void readFile(event.target.files?.[0])} /></label></div>
@@ -355,6 +358,6 @@ export default function TimecardPacket() {
       {file && result.invalid > 0 && <details className="timecard-invalid-review"><summary>Review {result.invalid} unreadable rows before saving →</summary><p>These rows are separate from the supervisor assignments. Subtotal lines are skipped automatically; these rows still need review. Excluding them removes their hours from this report and its saved comparison.</p><div className="table-scroll"><table className="data-table"><thead><tr><th>File row</th><th>Reason</th><th>Employee</th><th>Contract</th><th>Work date</th><th>Hours</th></tr></thead><tbody>{result.invalidRows.slice(0, 100).map((row) => <tr key={row.line}><td>{row.line}</td><td>{row.reason}</td><td>{row.name || "—"}</td><td>{row.contract || "—"}</td><td>{row.date || "—"}</td><td>{row.hours || "—"}</td></tr>)}</tbody></table></div>{result.invalid > 100 && <p>Showing the first 100 rows. Correct the source file to review the rest.</p>}<label className="timecard-exclude-confirm"><input type="checkbox" checked={excludeUnreadable} onChange={(event) => setExcludeUnreadable(event.target.checked)} /> I reviewed these rows and want to exclude all {result.invalid} unreadable rows from this payroll packet and saved totals.</label></details>}
     </details>
     {!savedPacket && ready && confirmedPayrollName ? <TimecardComparisons entries={historyEntries} dailyEntries={dailyEntries} detailRows={detailRows} start={periodStart} end={periodEnd} sourceName={file?.name || "Timecard report"} payrollName={confirmedPayrollName} /> : !savedPacket && ready && <section className="panel no-print timecard-comparisons"><h2>Save and compare payrolls</h2><p>Enter the payroll name or number above, such as #39, to save the hour totals. Reuse it for a corrected report. You can print the timecards now.</p></section>}
-    <details className="panel timecard-intro no-print"><summary style={{ cursor: "pointer", fontWeight: 700 }}>What is included and excluded</summary><p>Choose the timecard report for this pay period. The uploaded file is not changed. After you name and save a payroll, its timecard entries are available here to reopen and print anytime.</p><div className="timecard-inclusion-note"><p><strong>Included:</strong> readable timecard work rows, including holiday-coded hours. These hours appear in the packet and saved comparisons.</p><p><strong>Excluded:</strong> rows with the pay code <strong>PTO</strong> and subtotal lines. The printed packet also leaves out contracts <strong>030512, 01SHDR, and 011VAN</strong>; those contracts can still appear in saved comparison totals.</p></div></details>
+
   </div>;
 }
