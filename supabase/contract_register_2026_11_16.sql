@@ -2,6 +2,17 @@
 -- Metadata only: preserves every payroll, fuel, load, rate, and assignment-history row.
 -- Does not infer supervisor-effective dates from contract-term dates.
 begin;
+-- Keep superseded contract terms and supervisor metadata in a private audit log.
+create schema if not exists dt_contract_internal;
+revoke all on schema dt_contract_internal from public, anon, authenticated;
+create table if not exists dt_contract_internal.register_revisions (
+  id bigint generated always as identity primary key,
+  recorded_at timestamptz not null default now(),
+  reason text not null,
+  previous_record jsonb not null
+);
+alter table dt_contract_internal.register_revisions enable row level security;
+revoke all on dt_contract_internal.register_revisions from public, anon, authenticated;
 create temporary table supplied_contracts (
   contract_number text primary key, supervisor text not null, region text not null,
   start_date date not null, end_date date not null,
@@ -77,10 +88,15 @@ insert into supplied_contracts values
   ('378L7', 'Jason Birchfield', 'Knoxville, TN', '2026-07-01', '2026-11-13'),
   ('378M8', 'Jason Birchfield', 'Knoxville, TN', '2026-04-01', '2026-11-13');
 
+insert into dt_contract_internal.register_revisions(reason, previous_record)
+select 'Before Emily contract register 2026-11-16', to_jsonb(c)
+from public.contract_supervisors c
+join supplied_contracts s using (contract_number);
+
 insert into public.contract_supervisors
   (contract_number, supervisor, region, start_date, end_date, active, source)
 select contract_number, supervisor, region, start_date, end_date,
-  current_date between start_date and end_date, 'Emily contract register 2026-11-16'
+  (now() at time zone 'America/New_York')::date between start_date and end_date, 'Emily contract register 2026-11-16'
 from supplied_contracts
 on conflict (contract_number) do update set
   supervisor = excluded.supervisor, region = excluded.region,
