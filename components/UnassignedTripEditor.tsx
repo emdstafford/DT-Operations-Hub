@@ -6,6 +6,7 @@ import {supabase} from "@/lib/supabase";
 import {normalizeTripContract,type UnassignedTripRow} from "@/components/WeeklyUnassignedTrips";
 
 type Draft = {regular:string;extra:string;baseRevision:number};
+type ContractPeriod = {contract_number:string;start_date:string|null;end_date:string|null};
 type Status = "ready"|"saving"|"saved"|"conflict"|"error";
 type RowState = {status:Status;message?:string};
 const zero={regular:0,extra:0};
@@ -18,6 +19,8 @@ const dateDisplay=(d:string)=>new Intl.DateTimeFormat("en-US",{month:"short",day
 export default function UnassignedTripEditor(){
  const [weekStart,setWeekStart]=useState("");
  const [contracts,setContracts]=useState<string[]>([]);
+ const [contractPeriods,setContractPeriods]=useState<ContractPeriod[]>([]);
+ const [periodError,setPeriodError]=useState("");
  const [saved,setSaved]=useState<UnassignedTripRow[]>([]);
  const [drafts,setDrafts]=useState<Record<string,Draft>>({});
  const [statuses,setStatuses]=useState<Record<string,RowState>>({});
@@ -39,10 +42,25 @@ export default function UnassignedTripEditor(){
  const end=weekStart?dateAfter(weekStart,6):"";
  const rowsByContract=useMemo(()=>new Map(saved.map(r=>[r.contract_number,r])),[saved]);
  const options=useMemo(()=>Array.from(new Set([...contracts,...saved.map(r=>r.contract_number)].map(normalizeTripContract).filter(Boolean))).sort(compare),[contracts,saved]);
- const filtered=useMemo(()=>options.filter(c=>(!filter||c.toLowerCase().includes(filter.toLowerCase()))&&(!showOnlyPending||!rowsByContract.has(c)||!!drafts[c])).sort((a,b)=>order==="ascending"?compare(a,b):compare(b,a)),[options,filter,showOnlyPending,rowsByContract,drafts,order]);
+ const endedContracts=useMemo(()=>{
+  if(!weekStart||periodError)return new Set<string>();
+  const periods=new Map<string,ContractPeriod[]>();
+  for(const row of contractPeriods){
+   const key=normalizeTripContract(row.contract_number);
+   periods.set(key,[...(periods.get(key)??[]),row]);
+  }
+  return new Set(options.filter(contract=>{
+   const known=periods.get(contract);
+   if(!known?.length)return false; // Unknown dates must never hide a contract.
+   // A contract remains selectable if it was in service for any part of the selected week.
+   return known.every(period=>Boolean((period.end_date&&period.end_date<weekStart)||(period.start_date&&period.start_date>end)));
+  }));
+ },[options,contractPeriods,weekStart,end,periodError]);
+ const available=useMemo(()=>options.filter(c=>!endedContracts.has(c)||!!drafts[c]),[options,endedContracts,drafts]);
+ const filtered=useMemo(()=>available.filter(c=>(!filter||c.toLowerCase().includes(filter.toLowerCase()))&&(!showOnlyPending||!rowsByContract.has(c)||!!drafts[c])).sort((a,b)=>order==="ascending"?compare(a,b):compare(b,a)),[available,filter,showOnlyPending,rowsByContract,drafts,order]);
  const pending=Object.keys(drafts).length;
  const totals=saved.reduce((a,r)=>({regular:a.regular+r.trip_count,extra:a.extra+r.extra_trip_count}),zero);
- const readyCount=options.filter(c=>rowsByContract.has(c)).length;
+ const readyCount=available.filter(c=>rowsByContract.has(c)).length;
 
  const refresh=useCallback(async(start:string)=>{
   const {data,error}=await supabase.from("weekly_unassigned_trips").select("week_start,week_end,contract_number,trip_count,extra_trip_count,revision,updated_by,updated_at").eq("week_start",start);
@@ -57,10 +75,11 @@ export default function UnassignedTripEditor(){
    const {data:user}=await supabase.auth.getUser();
    const email=user.user?.email?.toLowerCase();
    if(!email){if(active){setLoading(false);setReadError("Please sign in to view this page.");}return;}
-   const [approval,contractResult,latest]=await Promise.all([
+   const [approval,contractResult,latest,periodResult]=await Promise.all([
     supabase.from("approved_users").select("role").eq("email",email).eq("active",true).maybeSingle(),
     supabase.rpc("contract_options"),
-    supabase.from("report_history").select("period_end").eq("report_type","usps_loads").order("period_end",{ascending:false}).limit(1).maybeSingle()
+    supabase.from("report_history").select("period_end").eq("report_type","usps_loads").order("period_end",{ascending:false}).limit(1).maybeSingle(),
+    supabase.from("contract_supervisors").select("contract_number,start_date,end_date").limit(1000)
    ]);
    if(!active)return;
    const role=approval.data?.role;
@@ -68,6 +87,8 @@ export default function UnassignedTripEditor(){
    setHasAccess(Boolean(role));
    if(contractResult.error)setReadError("Contract list could not be loaded: "+contractResult.error.message);
    else setContracts((contractResult.data??[]).map((r:{contract_number:string})=>r.contract_number));
+   if(periodResult.error)setPeriodError("Contract expiration dates could not be loaded, so all contracts are shown: "+periodResult.error.message);
+   else setContractPeriods((periodResult.data??[]) as ContractPeriod[]);
    const anchor=latest.data?.period_end||new Date().toISOString().slice(0,10);
    setWeekStart(weekFor(anchor));
    setLoading(false);
@@ -152,13 +173,13 @@ export default function UnassignedTripEditor(){
   <section className="panel" style={{padding:20,marginBottom:16}}>
    <div style={{display:"flex",gap:18,alignItems:"end",flexWrap:"wrap",justifyContent:"space-between"}}>
     <label style={{display:"grid",gap:5,fontWeight:700}}>Reporting week (Saturday–Friday)<input type="date" value={weekStart} onChange={e=>changeWeek(e.target.value)} disabled={saving} style={{padding:10,border:"1px solid #bcc8d3",borderRadius:6}} /></label>
-    <div style={{display:"flex",gap:20,flexWrap:"wrap"}}><div><small>Regular</small><strong style={{display:"block",fontSize:24}}>{totals.regular}</strong></div><div><small>Extra</small><strong style={{display:"block",fontSize:24}}>{totals.extra}</strong></div><div><small>Total</small><strong style={{display:"block",fontSize:24}}>{totals.regular+totals.extra}</strong></div><div><small>Contracts saved</small><strong style={{display:"block",fontSize:24}}>{readyCount} / {options.length}</strong></div></div>
+    <div style={{display:"flex",gap:20,flexWrap:"wrap"}}><div><small>Regular</small><strong style={{display:"block",fontSize:24}}>{totals.regular}</strong></div><div><small>Extra</small><strong style={{display:"block",fontSize:24}}>{totals.extra}</strong></div><div><small>Total</small><strong style={{display:"block",fontSize:24}}>{totals.regular+totals.extra}</strong></div><div><small>Contracts saved</small><strong style={{display:"block",fontSize:24}}>{readyCount} / {available.length}</strong></div></div>
    </div>
    <p style={{fontSize:13,color:"#526171",marginBottom:0}}>{weekStart?`${dateDisplay(weekStart)} – ${dateDisplay(end)}`:"Loading reporting week…"} · Blank means not entered; enter 0 to record that no trips were unassigned. Unsaved edits stay on this device until Save Changes.</p>
   </section>
   <section className="panel" style={{padding:20}}>
    <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",alignItems:"end",marginBottom:16}}>
-    <div><h2 style={{margin:"0 0 6px"}}>All contracts</h2><span style={{fontSize:13,color:"#667789"}}>Counts save individually per contract, preventing one editor from replacing the other editor&apos;s entries.</span></div>
+    <div><h2 style={{margin:"0 0 6px"}}>Contracts for this reporting week</h2><span style={{fontSize:13,color:"#667789"}}>Counts save individually per contract, preventing one editor from replacing the other editor&apos;s entries.</span></div>
     <button className="primary-link" onClick={()=>void saveAll()} disabled={!canEdit||!pending||saving||loading}>{saving?"Saving…":`Save Changes (${pending})`}</button>
    </div>
    <div style={{display:"flex",gap:16,alignItems:"end",flexWrap:"wrap",marginBottom:16}}>
@@ -167,6 +188,8 @@ export default function UnassignedTripEditor(){
     <label style={{display:"flex",gap:6,alignItems:"center",paddingBottom:10}}><input type="checkbox" checked={showOnlyPending} onChange={e=>setShowOnlyPending(e.target.checked)} />Only not entered / unsaved</label>
    </div>
    {readError&&<p className="alert alert-error" role="alert">{readError}</p>}
+   {periodError&&<p className="alert alert-error" role="alert">{periodError}</p>}
+   {!periodError&&endedContracts.size>0&&<p style={{fontSize:13,color:"#526171"}}>{endedContracts.size} ended contracts excluded for this reporting week. They remain available in earlier weeks when their service dates overlap.</p>}
    {message&&<p role="status" style={{color:"#123b61",fontWeight:600}}>{message}</p>}
    <div style={{overflowX:"auto"}}>
    <table style={{width:"100%",borderCollapse:"collapse",minWidth:690,fontSize:13}}>
@@ -191,7 +214,7 @@ export default function UnassignedTripEditor(){
    {!filtered.length&&!loading&&<p>No matching contracts.</p>}
    </div>
    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginTop:16}}>
-    <span style={{fontSize:13,color:"#667789"}}>{filtered.length} contracts displayed · {pending} unsaved · Updates from the other editor appear automatically.</span>
+    <span style={{fontSize:13,color:"#667789"}}>{filtered.length} active contracts displayed · {pending} unsaved · Updates from the other editor appear automatically.</span>
     <button className="primary-link" onClick={()=>void saveAll()} disabled={!canEdit||!pending||saving||loading}>{saving?"Saving…":`Save Changes (${pending})`}</button>
    </div>
   </section>
