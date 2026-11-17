@@ -83,7 +83,7 @@ function filteredEmail(data: HubData, start: string, end: string, supervisors: s
     contracts.length?`Contracts: ${contracts.join(", ")}`:"All contracts",
     `Overall Completion: ${percent(data.totals.completion_percent)}`,"",
     "Supervisor\tTotal Stops\tIncomplete\t% Complete\tRegular Unassigned\tExtra Unassigned",
-    ...data.supervisors.map(row=>{const counts=supervisorCounts(row.supervisor);return `${row.supervisor}\t${row.total_stops}\t${row.incomplete_stops}\t${percent(row.completion_percent)}\t${counts.hasData?counts.regular:"—"}\t${counts.hasData?counts.extra:"—"}`;}),
+    ...data.supervisors.map(row=>{const counts=supervisorCounts(row.supervisor??"");return `${row.supervisor}\t${row.total_stops}\t${row.incomplete_stops}\t${percent(row.completion_percent)}\t${counts.hasData?counts.regular:"—"}\t${counts.hasData?counts.extra:"—"}`;}),
     ...(includeSupervisorDetail?["","Supervisor Contract Breakdown",
       "Supervisor\tContract\tTotal Stops\tCompleted\tIncomplete\t% Complete\tRegular Unassigned\tExtra Unassigned",
       ...data.supervisor_contracts.map(row=>{const counts=unassignedCounts(row.contract_number??"");return `${row.supervisor}\t${row.contract_number}\t${row.total_stops}\t${row.completed_stops}\t${row.incomplete_stops}\t${percent(row.completion_percent)}\t${counts?.regular??"—"}\t${counts?.extra??"—"}`;})]:[]),
