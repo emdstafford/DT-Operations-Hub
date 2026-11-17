@@ -8,7 +8,7 @@ export const fullTripWeek=(start:string,end:string)=>!!start&&!!end&&new Date(st
 type Props={start:string;end:string;contracts:string[];onRowsChange:(rows:UnassignedTripRow[],ready:boolean)=>void};
 export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange}:Props){
  const [rows,setRows]=useState<UnassignedTripRow[]>([]);
- const [draft,setDraft]=useState<Record<string,{regular:string;extra:string}>>({});
+ const [draft,setDraft]=useState<Record<string,{regular:string;extra:string;baseRevision:number}>>({});
  const [saving,setSaving]=useState<string|null>(null);
  const [selected,setSelected]=useState("");
  const [loading,setLoading]=useState(true);
@@ -18,7 +18,7 @@ export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange}
  const options=useMemo(()=>Array.from(new Set([...contracts,...rows.map(r=>r.contract_number)].map(normalizeTripContract).filter(Boolean))).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})),[contracts,rows]);
  const current=options.includes(selected)?selected:options[0]??"";
  const saved=rows.find(r=>r.contract_number===current);
- const currentDraft=draft[current]??{regular:String(saved?.trip_count??""),extra:String(saved?.extra_trip_count??"")};
+ const currentDraft=draft[current]??{regular:String(saved?.trip_count??""),extra:String(saved?.extra_trip_count??""),baseRevision:saved?.revision??0};
  const totals=rows.reduce((a,r)=>({regular:a.regular+r.trip_count,extra:a.extra+r.extra_trip_count}),{regular:0,extra:0});
  const load=useCallback(async()=>{
   if(!valid){setRows([]);setLoading(false);onRowsChange([],false);return;}
@@ -48,7 +48,7 @@ export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange}
   if(!current||!valid)return;
   if(!/^(0|[1-9][0-9]*)$/.test(currentDraft.regular)||!/^(0|[1-9][0-9]*)$/.test(currentDraft.extra)){setError("Enter whole-number counts for both regular and extra trips (zero is allowed).");return;}
   setSaving(current);setError("");
-  const {error:err}=await supabase.rpc("save_weekly_unassigned_trip_count",{p_week_start:start,p_contract:current,p_count:Number(currentDraft.regular),p_extra_count:Number(currentDraft.extra),p_expected_revision:saved?.revision??0});
+  const {error:err}=await supabase.rpc("save_weekly_unassigned_trip_count",{p_week_start:start,p_contract:current,p_count:Number(currentDraft.regular),p_extra_count:Number(currentDraft.extra),p_expected_revision:currentDraft.baseRevision});
   if(err){await load();setError(err.message);}
   else{setDraft(old=>{const next={...old};delete next[current];return next;});await load();}
   setSaving(null);
