@@ -8,7 +8,7 @@ import { AccessRole } from "@/components/AccessRole";
 import { supabase } from "@/lib/supabase";
 
 const publicPaths = ["/login", "/auth/callback"];
-const reportManagementPaths = ["/upload", "/history", "/schedule-builder", "/historical-upload", "/admin"];
+const reportManagementPaths = ["/unassigned-trips", "/upload", "/history", "/schedule-builder", "/historical-upload", "/admin"];
 const limitedOperationsRole = "dashboard_contracts_fuel_viewer";
 const legacyTechInvoiceEmails = new Set(["estafford@dtexpress.net", "ccochran@dtexpress.net"]);
 
