@@ -3,7 +3,7 @@
 import Link from "next/link";
 import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {supabase} from "@/lib/supabase";
-import {normalizeTripContract,type UnassignedTripRow} from "@/components/WeeklyUnassignedTrips";
+import {normalizeTripContract,includeUnassignedContract,type UnassignedTripRow} from "@/components/WeeklyUnassignedTrips";
 
 type Draft = {regular:string;extra:string;baseRevision:number};
 type ContractPeriod = {contract_number:string;start_date:string|null;end_date:string|null};
@@ -40,8 +40,8 @@ export default function UnassignedTripEditor(){
  savedRef.current=saved;
  weekRef.current=weekStart;
  const end=weekStart?dateAfter(weekStart,6):"";
- const rowsByContract=useMemo(()=>new Map(saved.map(r=>[r.contract_number,r])),[saved]);
- const options=useMemo(()=>Array.from(new Set([...contracts,...saved.map(r=>r.contract_number)].map(normalizeTripContract).filter(Boolean))).sort(compare),[contracts,saved]);
+ const rowsByContract=useMemo(()=>new Map(saved.filter(r=>includeUnassignedContract(r.contract_number)).map(r=>[r.contract_number,r])),[saved]);
+ const options=useMemo(()=>Array.from(new Set([...contracts,...saved.map(r=>r.contract_number)].map(normalizeTripContract).filter(c=>Boolean(c)&&includeUnassignedContract(c)))).sort(compare),[contracts,saved]);
  const endedContracts=useMemo(()=>{
   if(!weekStart||periodError)return new Set<string>();
   const periods=new Map<string,ContractPeriod[]>();
@@ -59,7 +59,7 @@ export default function UnassignedTripEditor(){
  const available=useMemo(()=>options.filter(c=>!endedContracts.has(c)||!!drafts[c]),[options,endedContracts,drafts]);
  const filtered=useMemo(()=>available.filter(c=>(!filter||c.toLowerCase().includes(filter.toLowerCase()))&&(!showOnlyPending||!rowsByContract.has(c)||!!drafts[c])).sort((a,b)=>order==="ascending"?compare(a,b):compare(b,a)),[available,filter,showOnlyPending,rowsByContract,drafts,order]);
  const pending=Object.keys(drafts).length;
- const totals=saved.reduce((a,r)=>({regular:a.regular+r.trip_count,extra:a.extra+r.extra_trip_count}),zero);
+ const totals=saved.filter(r=>includeUnassignedContract(r.contract_number)).reduce((a,r)=>({regular:a.regular+r.trip_count,extra:a.extra+r.extra_trip_count}),zero);
  const readyCount=available.filter(c=>rowsByContract.has(c)).length;
 
  const refresh=useCallback(async(start:string)=>{
@@ -129,7 +129,7 @@ export default function UnassignedTripEditor(){
  }
  async function saveAll(){
   if(!weekStart||saving||!canEdit||!pending)return;
-  const entries=Object.entries(draftsRef.current);
+  const entries=Object.entries(draftsRef.current).filter(([contract])=>includeUnassignedContract(contract));
   const invalid=entries.filter(([,v])=>!validCount(v.regular)||!validCount(v.extra));
   if(invalid.length){setMessage("Enter a whole number (including 0) in both columns for: "+invalid.map(([c])=>c).join(", ")+".");return;}
   setSaving(true);
