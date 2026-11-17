@@ -39,6 +39,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
       <button type="button" className="mobile-nav-toggle" aria-controls="primary-navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? "Close" : "Menu"}</button>
       <nav id="primary-navigation" className={`main-nav${menuOpen ? " is-open" : ""}`} aria-label="Primary navigation" onClick={() => setMenuOpen(false)}>
         {operationsAccess && <Link className={pathname === "/" ? "active" : ""} href="/">Dashboard</Link>}
+        {operationsAccess && canManageReports && <Link className={pathname.startsWith("/unassigned-trips") ? "active" : ""} href="/unassigned-trips">Unassigned Trips</Link>}
         {operationsAccess && operationsRole !== "dashboard_fuel_viewer" && <Link className={pathname.startsWith("/contracts") ? "active" : ""} href="/contracts">Contracts</Link>}
         {(operationsAccess || fuelAccess || payrollAccess) && !isNoReportsRole && <Link className={pathname.startsWith("/reports") ? "active" : ""} href="/reports">Reports</Link>}
         {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel</Link>}
