@@ -212,6 +212,15 @@ export default function UnassignedTripEditor(){
    </div>
    <p style={{fontSize:13,color:"#526171",marginBottom:0}}>{weekStart?`${dateDisplay(weekStart)} – ${dateDisplay(end)}`:"Loading reporting week…"} · Both editors must select the same reporting week. Counts save automatically after you type; blanks remain unentered until edited.</p>
   </section>
+  <section className="panel" style={{padding:"16px 20px",marginBottom:16,borderLeft:"4px solid #123b61"}} aria-label="LoadTrek search instructions">
+   <h2 style={{margin:"0 0 8px",fontSize:18}}>LoadTrek search checklist</h2>
+   <p style={{margin:"0 0 10px",color:"#526171",fontSize:13}}>Before counting trips, use these search settings in LoadTrek for the reporting week selected above.</p>
+   <div style={{display:"flex",gap:22,flexWrap:"wrap",alignItems:"center"}}>
+    <div><strong style={{display:"block",fontSize:12,color:"#526171"}}>Date range (inclusive)</strong><strong style={{display:"block",fontSize:16,color:"#123b61"}}>{weekStart?`${dateDisplay(weekStart)} – ${dateDisplay(end)}`:"Select a reporting week above"}</strong></div>
+    <div><strong style={{display:"block",fontSize:12,color:"#526171"}}>Include all three search selections</strong><span style={{display:"block",fontSize:14,fontWeight:700}}>Unassigned · Assigned · USPS Remote Tenders</span></div>
+   </div>
+   <p style={{fontSize:12,margin:"10px 0 0",color:"#526171"}}>Use the same Saturday–Friday dates in both LoadTrek and this page. Enter Regular and Extra unassigned counts in their separate columns below.</p>
+  </section>
   <section className="panel" style={{padding:20}}>
    <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",alignItems:"end",marginBottom:16}}>
     <div><h2 style={{margin:"0 0 6px"}}>Contracts for this reporting week</h2><span style={{fontSize:13,color:"#667789"}}>Counts save individually per contract, preventing one editor from replacing the other editor&apos;s entries.</span></div>
