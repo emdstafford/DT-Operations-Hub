@@ -50,13 +50,17 @@ export default function UnassignedTripEditor(){
  const rowsByContract=useMemo(()=>new Map(saved.filter(r=>includeUnassignedContract(r.contract_number)).map(r=>[r.contract_number,r])),[saved]);
  const options=useMemo(()=>Array.from(new Set([...contracts,...saved.map(r=>r.contract_number)].map(normalizeTripContract).filter(c=>Boolean(c)&&includeUnassignedContract(c)))).sort(compare),[contracts,saved]);
  const endedContracts=useMemo(()=>{
-  if(!weekStart||periodError)return new Set<string>();
+  if(!weekStart)return new Set<string>();
   const periods=new Map<string,ContractPeriod[]>();
   for(const row of contractPeriods){
    const key=normalizeTripContract(row.contract_number);
    periods.set(key,[...(periods.get(key)??[]),row]);
   }
   return new Set(options.filter(contract=>{
+   // Contract 3773G expired November 13, 2026. Hide it from weeks
+   // beginning after that date; keep the final active week and its history.
+   if(contract==="3773G")return weekStart>"2026-11-13";
+   if(periodError)return false; // Keep all other contracts visible on lookup errors.
    const known=periods.get(contract);
    if(!known?.length)return false; // Unknown dates must never hide a contract.
    // A contract remains selectable if it was in service for any part of the selected week.
