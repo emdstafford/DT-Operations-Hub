@@ -29,13 +29,14 @@ export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange,
  const saved=rows.find(r=>r.contract_number===current);
  const currentDraft=draft[current]??{regular:String(saved?.trip_count??""),extra:String(saved?.extra_trip_count??""),baseRevision:saved?.revision??0};
  const totals=rows.filter(r=>includeUnassignedContract(r.contract_number)).reduce((a,r)=>({regular:a.regular+r.trip_count,extra:a.extra+r.extra_trip_count}),{regular:0,extra:0});
+ const summaryWeeks=[...new Set(rows.map(r=>`${r.week_start} to ${r.week_end}`))].sort();
  const load=useCallback(async()=>{
   if(!valid){setRows([]);setLoading(false);onRowsChange([],true);return;}
   setLoading(true);
-  // Summary reads all complete saved Saturday–Friday weeks in the selected report range.
+  // Summary reads saved weekly totals for every Saturday–Friday week overlapping the selected dates.
   const query=supabase.from("weekly_unassigned_trips").select("week_start,week_end,contract_number,trip_count,extra_trip_count,revision,updated_by,updated_at");
   const {data,error:err}=summaryOnly
-   ? await query.gte("week_start",start).lte("week_end",end).order("week_start").order("contract_number").limit(10000)
+   ? await query.lte("week_start",end).gte("week_end",start).order("week_start").order("contract_number").limit(10000)
    : await query.eq("week_start",start).order("contract_number");
   if(err){setError(err.message);onRowsChange([],false);}
   else{const next=((data??[]) as UnassignedTripRow[]).filter(r=>includeUnassignedContract(r.contract_number));setRows(next);onRowsChange(next,true);setError("");}
@@ -70,9 +71,10 @@ export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange,
  }
  if(summaryOnly)return <section className="panel" style={{padding:20,marginBottom:18}}>
   <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",alignItems:"center"}}>
-   <div><p className="eyebrow">Weekly summary</p><h2 style={{margin:"4px 0 6px"}}>Unassigned Trips</h2><p style={{margin:0,color:"#667789",fontSize:13}}>{start} – {end} · {loading?"Loading…":!valid?"Choose reporting dates":rows.length?`${rows.length} saved contract-week entries`:"No saved full weeks in this range"}</p></div>
+   <div><p className="eyebrow">Weekly summary</p><h2 style={{margin:"4px 0 6px"}}>Unassigned Trips</h2><p style={{margin:0,color:"#667789",fontSize:13}}>{start} – {end} · {loading?"Loading…":!valid?"Choose reporting dates":rows.length?`${rows.length} saved contract-week entries across overlapping weeks`:"No saved unassigned weeks overlap these dates"}</p></div>
    <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}><span>Regular <strong>{totals.regular}</strong></span><span>Extra <strong>{totals.extra}</strong></span><span>Total <strong>{totals.regular+totals.extra}</strong></span><Link className="primary-link" href="/unassigned-trips">Open Unassigned Trips</Link></div>
   </div>
+  {summaryWeeks.length>0&&<p style={{margin:"8px 0 0",fontSize:12,color:"#667789"}}>Includes full saved weekly counts for: {summaryWeeks.join("; ")}. Partial date selections include entire overlapping weeks.</p>}
  </section>;
  return <section className="panel" style={{padding:20,marginBottom:18}}>
   <div style={{display:"flex",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
