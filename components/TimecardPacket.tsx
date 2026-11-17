@@ -106,6 +106,33 @@ function clock(value: string) {
 function TimecardRows({ rows }: { rows: Shift[] }) {
   return <section className="timecard-period"><table className="data-table"><thead><tr><th>Date</th><th>Time In</th><th>Time Out</th><th>Hours</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.inTime}-${index}`}><td>{dateLabel(row.date)}</td><td>{clock(row.inTime)}</td><td>{clock(row.outTime)}</td><td>{hoursLabel(row.hundredths)}</td></tr>)}</tbody></table></section>;
 }
+type TimecardPerson = {name:string;employeeId:string;rows:Shift[]};
+type PrintPersonPart = {person:TimecardPerson;rows:Shift[];continued:boolean};
+
+/** Contract-local printed sheets. Browser page counters cannot reliably reset per contract. */
+function paginateContractPeople(people:TimecardPerson[]):PrintPersonPart[][] {
+ const pages:PrintPersonPart[][] = [];
+ let page:PrintPersonPart[] = [];
+ let used=0;
+ // Conservative row budget for US Letter portrait, including a repeated contract
+ // heading, employee heading, comparison and timecard column headings.
+ const capacity=15;
+ function nextPage(){if(page.length){pages.push(page);page=[];used=0;}}
+ for(const person of people){
+  let offset=0;
+  do {
+   const available=capacity-used-3;
+   if(available<1){nextPage();continue;}
+   const take=Math.min(available,person.rows.length-offset);
+   page.push({person,rows:person.rows.slice(offset,offset+take),continued:offset>0});
+   used+=3+take;
+   offset+=take;
+   if(offset<person.rows.length)nextPage();
+  } while(offset<person.rows.length);
+ }
+ nextPage();
+ return pages.length?pages:[[]];
+}
 function HoursInline({ current, previous, currentName }: { current: number; previous: { name: string; hours: number | null } | null; currentName: string }) {
   return <span className="timecard-compare-inline">{previous && <span>Previous {previous.name}: <b>{previous.hours === null ? "Not matched" : hoursLabel(previous.hours)}</b></span>}<span>Current {currentName}: <b>{hoursLabel(current)}</b></span>{previous && previous.hours !== null && <span className={current < previous.hours ? "timecard-hours-down" : current > previous.hours ? "timecard-hours-up" : ""}>Change from last payroll: <b>{hoursChange(current, previous.hours)}</b></span>}</span>;
 }
@@ -360,6 +387,18 @@ export default function TimecardPacket({ reprintMode = false }: { reprintMode?: 
         {people.map((person) => <div className="timecard-person" key={person.name}><h3><span className="timecard-driver-name">{person.name}</span><HoursInline current={total(person.rows)} currentName={payrollName.trim() || "this report"} previous={previousPayroll ? { name: previousPayroll.payroll_name, hours: savedHours(previousPayroll, contract, person.employeeId, person.name) } : null} /></h3><TimecardRows rows={person.rows} /></div>)}
         <footer><span>Reviewed by: ____________________ &nbsp; Date: ______________</span></footer>
       </section>;
+    })}</div>}
+    {ready && <div className="timecard-print-pages" aria-hidden="true">{printContracts.flatMap(({ contract, people })=>{
+      const contractRows = people.flatMap(person=>person.rows);
+      const supervisors = supervisorsFor(contract,contractRows);
+      const contractPages = paginateContractPeople(people);
+      return contractPages.map((parts,pageIndex)=><section className="timecard-contract timecard-numbered-sheet" key={`${contract}-page-${pageIndex}`}>
+        <div className="timecard-sheet-page-number">Page {pageIndex+1}</div>
+        <header><div><h2>{contract === unassignedDepartment ? "Unassigned department" : `Contract ${contract}`}{pageIndex>0?" (continued)":""}</h2><span>{payrollName.trim() ? `${payrollName.trim()} · ` : ""}{dateLabel(periodStart)} – {dateLabel(periodEnd)}</span></div><div className="timecard-supervisor-heading"><span>{approvedWithoutSupervisor.has(contract.trim().toUpperCase()) && !supervisors.length ? "No supervisor required" : `Supervisor${supervisors.length===1?"":"s"}`}</span><strong>{supervisors.length?supervisors.join(", "):approvedWithoutSupervisor.has(contract.trim().toUpperCase())?"Approved":supervisorStatus==="loading"?"Loading…":supervisorStatus==="error"?"Unavailable":"Not assigned"}</strong><small>{people.length} employees</small></div></header>
+        {pageIndex===0&&<div className="timecard-contract-totals"><div className="timecard-contract-hours"><strong>Contract hours</strong><HoursInline current={total(contractRows)} currentName={payrollName.trim()||"this report"} previous={previousPayroll?{name:previousPayroll.payroll_name,hours:savedHours(previousPayroll,contract)}:null}/></div></div>}
+        {parts.map((part,index)=><div className="timecard-person" key={`${part.person.employeeId}-${index}`}><h3><span className="timecard-driver-name">{part.person.name}{part.continued?" (continued)":""}</span><HoursInline current={total(part.person.rows)} currentName={payrollName.trim()||"this report"} previous={previousPayroll?{name:previousPayroll.payroll_name,hours:savedHours(previousPayroll,contract,part.person.employeeId,part.person.name)}:null}/></h3><TimecardRows rows={part.rows}/></div>)}
+        {pageIndex===contractPages.length-1&&<footer><span>Reviewed by: ____________________ &nbsp; Date: ______________</span></footer>}
+      </section>);
     })}</div>}
     <details className="panel no-print">
       <summary style={{ cursor: "pointer", fontWeight: 700 }}>Reprint a saved payroll</summary><p>Open a saved payroll to print it with the latest comparison matching. No upload is needed when its time punches are saved.</p>
