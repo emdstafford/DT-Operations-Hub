@@ -5,6 +5,7 @@ import {supabase} from "@/lib/supabase";
 
 export type UnassignedTripRow = {week_start:string;week_end:string;contract_number:string;trip_count:number;extra_trip_count:number;revision:number;updated_by:string;updated_at:string};
 export const normalizeTripContract=(v:string)=>v.trim().toUpperCase().replace(/^0+/,"");
+export const includeUnassignedContract=(value:string)=>normalizeTripContract(value)!=="30512";
 export const fullTripWeek=(start:string,end:string)=>!!start&&!!end&&new Date(start+"T12:00:00Z").getUTCDay()===6&&new Date(new Date(start+"T12:00:00Z").getTime()+6*86400000).toISOString().slice(0,10)===end;
 type Props={start:string;end:string;contracts:string[];onRowsChange:(rows:UnassignedTripRow[],ready:boolean)=>void;summaryOnly?:boolean};
 export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange,summaryOnly=false}:Props){
@@ -16,17 +17,17 @@ export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange,
  const [error,setError]=useState("");
  const [canEdit,setCanEdit]=useState(false);
  const valid=fullTripWeek(start,end);
- const options=useMemo(()=>Array.from(new Set([...contracts,...rows.map(r=>r.contract_number)].map(normalizeTripContract).filter(Boolean))).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})),[contracts,rows]);
+ const options=useMemo(()=>Array.from(new Set([...contracts,...rows.map(r=>r.contract_number)].map(normalizeTripContract).filter(c=>Boolean(c)&&includeUnassignedContract(c)))).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})),[contracts,rows]);
  const current=options.includes(selected)?selected:options[0]??"";
  const saved=rows.find(r=>r.contract_number===current);
  const currentDraft=draft[current]??{regular:String(saved?.trip_count??""),extra:String(saved?.extra_trip_count??""),baseRevision:saved?.revision??0};
- const totals=rows.reduce((a,r)=>({regular:a.regular+r.trip_count,extra:a.extra+r.extra_trip_count}),{regular:0,extra:0});
+ const totals=rows.filter(r=>includeUnassignedContract(r.contract_number)).reduce((a,r)=>({regular:a.regular+r.trip_count,extra:a.extra+r.extra_trip_count}),{regular:0,extra:0});
  const load=useCallback(async()=>{
   if(!valid){setRows([]);setLoading(false);onRowsChange([],true);return;}
   setLoading(true);
   const {data,error:err}=await supabase.from("weekly_unassigned_trips").select("week_start,week_end,contract_number,trip_count,extra_trip_count,revision,updated_by,updated_at").eq("week_start",start).order("contract_number");
   if(err){setError(err.message);onRowsChange([],false);}
-  else{const next=data as UnassignedTripRow[]??[];setRows(next);onRowsChange(next,true);setError("");}
+  else{const next=((data??[]) as UnassignedTripRow[]).filter(r=>includeUnassignedContract(r.contract_number));setRows(next);onRowsChange(next,true);setError("");}
   setLoading(false);
  },[valid,start,onRowsChange]);
  useEffect(()=>{
