@@ -9,6 +9,7 @@ export const normalizeTripContract=(v:string)=>{
  const key=v.trim().toUpperCase().replace(/^0+/,"");
  if(key==="2407X")return "2407U";
  if(key==="3254D")return "3253V";
+ if(key==="3107E")return "3103T";
  return key;
 };
 export const includeUnassignedContract=(value:string)=>normalizeTripContract(value)!=="30512";
