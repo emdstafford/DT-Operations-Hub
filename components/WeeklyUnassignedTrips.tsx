@@ -21,7 +21,7 @@ export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange}
  const currentDraft=draft[current]??{regular:String(saved?.trip_count??""),extra:String(saved?.extra_trip_count??""),baseRevision:saved?.revision??0};
  const totals=rows.reduce((a,r)=>({regular:a.regular+r.trip_count,extra:a.extra+r.extra_trip_count}),{regular:0,extra:0});
  const load=useCallback(async()=>{
-  if(!valid){setRows([]);setLoading(false);onRowsChange([],false);return;}
+  if(!valid){setRows([]);setLoading(false);onRowsChange([],true);return;}
   setLoading(true);
   const {data,error:err}=await supabase.from("weekly_unassigned_trips").select("week_start,week_end,contract_number,trip_count,extra_trip_count,revision,updated_by,updated_at").eq("week_start",start).order("contract_number");
   if(err){setError(err.message);onRowsChange([],false);}
