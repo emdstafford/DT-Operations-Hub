@@ -4,10 +4,12 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {supabase} from "@/lib/supabase";
 
 export type UnassignedTripRow = {week_start:string;week_end:string;contract_number:string;trip_count:number;extra_trip_count:number;revision:number;updated_by:string;updated_at:string};
-// 2407X was superseded by 2407U; preserve source records but use the current code on this entry screen.
+// Use current contract codes on the Unassigned Trips screen without rewriting historical source records.
 export const normalizeTripContract=(v:string)=>{
  const key=v.trim().toUpperCase().replace(/^0+/,"");
- return key==="2407X"?"2407U":key;
+ if(key==="2407X")return "2407U";
+ if(key==="3254D")return "3253V";
+ return key;
 };
 export const includeUnassignedContract=(value:string)=>normalizeTripContract(value)!=="30512";
 export const fullTripWeek=(start:string,end:string)=>!!start&&!!end&&new Date(start+"T12:00:00Z").getUTCDay()===6&&new Date(new Date(start+"T12:00:00Z").getTime()+6*86400000).toISOString().slice(0,10)===end;
