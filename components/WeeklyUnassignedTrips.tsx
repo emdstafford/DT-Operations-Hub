@@ -23,7 +23,7 @@ export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange,
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const [canEdit,setCanEdit]=useState(false);
- const valid=fullTripWeek(start,end);
+ const valid=summaryOnly ? Boolean(start&&end&&start<=end) : fullTripWeek(start,end);
  const options=useMemo(()=>Array.from(new Set([...contracts,...rows.map(r=>r.contract_number)].map(normalizeTripContract).filter(c=>Boolean(c)&&includeUnassignedContract(c)))).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})),[contracts,rows]);
  const current=options.includes(selected)?selected:options[0]??"";
  const saved=rows.find(r=>r.contract_number===current);
@@ -32,11 +32,15 @@ export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange,
  const load=useCallback(async()=>{
   if(!valid){setRows([]);setLoading(false);onRowsChange([],true);return;}
   setLoading(true);
-  const {data,error:err}=await supabase.from("weekly_unassigned_trips").select("week_start,week_end,contract_number,trip_count,extra_trip_count,revision,updated_by,updated_at").eq("week_start",start).order("contract_number");
+  // Summary reads all complete saved Saturday–Friday weeks in the selected report range.
+  const query=supabase.from("weekly_unassigned_trips").select("week_start,week_end,contract_number,trip_count,extra_trip_count,revision,updated_by,updated_at");
+  const {data,error:err}=summaryOnly
+   ? await query.gte("week_start",start).lte("week_end",end).order("week_start").order("contract_number").limit(10000)
+   : await query.eq("week_start",start).order("contract_number");
   if(err){setError(err.message);onRowsChange([],false);}
   else{const next=((data??[]) as UnassignedTripRow[]).filter(r=>includeUnassignedContract(r.contract_number));setRows(next);onRowsChange(next,true);setError("");}
   setLoading(false);
- },[valid,start,onRowsChange]);
+ },[valid,start,end,summaryOnly,onRowsChange]);
  useEffect(()=>{
   let active=true;
   void supabase.auth.getUser().then(async ({data})=>{
@@ -49,9 +53,11 @@ export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange,
  useEffect(()=>{void load();},[load]);
  useEffect(()=>{
   if(!valid)return;
-  const channel=supabase.channel("unassigned-"+start).on("postgres_changes",{event:"*",schema:"public",table:"weekly_unassigned_trips",filter:"week_start=eq."+start},()=>{void load();}).subscribe();
-  return()=>{void supabase.removeChannel(channel);};
- },[start,valid,load]);
+  const channel=supabase.channel("unassigned-"+start+"-"+end)
+   .on("postgres_changes",{event:"*",schema:"public",table:"weekly_unassigned_trips",...(summaryOnly?{}:{filter:"week_start=eq."+start})},()=>{void load();}).subscribe();
+  const poll=window.setInterval(()=>{void load();},10000);
+  return()=>{window.clearInterval(poll);void supabase.removeChannel(channel);};
+ },[start,end,valid,summaryOnly,load]);
  function edit(kind:"regular"|"extra",value:string){setDraft(old=>({...old,[current]:{...currentDraft,[kind]:value}}));}
  async function save(){
   if(!current||!valid)return;
@@ -64,7 +70,7 @@ export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange,
  }
  if(summaryOnly)return <section className="panel" style={{padding:20,marginBottom:18}}>
   <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",alignItems:"center"}}>
-   <div><p className="eyebrow">Weekly summary</p><h2 style={{margin:"4px 0 6px"}}>Unassigned Trips</h2><p style={{margin:0,color:"#667789",fontSize:13}}>{start} – {end} · {loading?"Loading…":!valid?"Select a full Saturday–Friday week":rows.length?`${rows.length} contracts saved`:"Not entered"}</p></div>
+   <div><p className="eyebrow">Weekly summary</p><h2 style={{margin:"4px 0 6px"}}>Unassigned Trips</h2><p style={{margin:0,color:"#667789",fontSize:13}}>{start} – {end} · {loading?"Loading…":!valid?"Choose reporting dates":rows.length?`${rows.length} saved contract-week entries`:"No saved full weeks in this range"}</p></div>
    <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}><span>Regular <strong>{totals.regular}</strong></span><span>Extra <strong>{totals.extra}</strong></span><span>Total <strong>{totals.regular+totals.extra}</strong></span><Link className="primary-link" href="/unassigned-trips">Open Unassigned Trips</Link></div>
   </div>
  </section>;
