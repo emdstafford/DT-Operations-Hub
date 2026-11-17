@@ -179,7 +179,7 @@ export default function UnassignedTripEditor(){
   </section>
   <section className="panel" style={{padding:20}}>
    <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",alignItems:"end",marginBottom:16}}>
-    <div><h2 style={{margin:"0 0 6px"}}>All contracts</h2><span style={{fontSize:13,color:"#667789"}}>Counts save individually per contract, preventing one editor from replacing the other editor&apos;s entries.</span></div>
+    <div><h2 style={{margin:"0 0 6px"}}>Contracts for this reporting week</h2><span style={{fontSize:13,color:"#667789"}}>Counts save individually per contract, preventing one editor from replacing the other editor&apos;s entries.</span></div>
     <button className="primary-link" onClick={()=>void saveAll()} disabled={!canEdit||!pending||saving||loading}>{saving?"Saving…":`Save Changes (${pending})`}</button>
    </div>
    <div style={{display:"flex",gap:16,alignItems:"end",flexWrap:"wrap",marginBottom:16}}>
