@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import WeeklyUnassignedTrips, { type UnassignedTripRow } from "@/components/WeeklyUnassignedTrips";
+import WeeklyUnassignedTrips, { includeUnassignedContract, type UnassignedTripRow } from "@/components/WeeklyUnassignedTrips";
 import type { OperationalNote } from "@/components/ContractOperationalNotes";
 import DashboardFuelChecks from "@/components/DashboardFuelChecks";
 import { useAccessRole } from "@/components/AccessRole";
@@ -44,7 +44,7 @@ function filteredEmail(data: HubData, start: string, end: string, supervisors: s
     return `<section style="break-inside:avoid;page-break-inside:avoid;margin-top:22px"><h3 style="margin:0;padding:10px 12px;color:${showCompanyRankings && supervisorIndex < 5 ? "#174e27" : "#123b61"};background:${showCompanyRankings && supervisorIndex < 5 ? "#c9e7cf" : "#eef2f5"};border:1px solid #d6dde3">${escapeHtml(supervisor.supervisor || "Unassigned")} — ${percent(supervisor.completion_percent)}</h3><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Contract</th><th style="${header}">Total Stops</th><th style="${header}">Completed</th><th style="${header}">Missed Stops</th><th style="${header}">% Complete</th></tr></thead><tbody>${rows}<tr style="font-weight:bold;background:#eef2f5"><td style="${nameCell}">Supervisor Total</td><td style="${cell}">${number(supervisor.total_stops)}</td><td style="${cell}">${number(supervisor.completed_stops)}</td><td style="${cell}">${number(supervisor.incomplete_stops)}</td><td style="${cell}">${percent(supervisor.completion_percent)}</td></tr></tbody></table></section>`;
   }).join("");
   const supervisorContracts = new Set(data.supervisor_contracts.filter(r=>!supervisors.length||supervisors.includes(r.supervisor)).map(r=>r.contract_number));
-  const filteredTrips=unassignedTrips.filter(r => (!contracts.length||contracts.includes(r.contract_number)) && (!supervisors.length||supervisorContracts.has(r.contract_number)) && (r.trip_count>0||r.extra_trip_count>0));
+  const filteredTrips=unassignedTrips.filter(r => includeUnassignedContract(r.contract_number) && (!contracts.length||contracts.includes(r.contract_number)) && (!supervisors.length||supervisorContracts.has(r.contract_number)) && (r.trip_count>0||r.extra_trip_count>0));
   const totalRegular=filteredTrips.reduce((n,r)=>n+r.trip_count,0);
   const totalExtra=filteredTrips.reduce((n,r)=>n+r.extra_trip_count,0);
   const unassignedSection = `<h3 style="margin:24px 0 8px;color:#123b61">Unassigned Trips</h3><p style="color:#405366">Regular: <strong>${totalRegular}</strong> &nbsp; Extra: <strong>${totalExtra}</strong> &nbsp; Combined: <strong>${totalRegular+totalExtra}</strong></p><table style="width:100%;border-collapse:collapse"><thead><tr><th style="${header}">Contract</th><th style="${header}">Regular</th><th style="${header}">Extra</th><th style="${header}">Total</th></tr></thead><tbody>${filteredTrips.map(r=>`<tr><td style="${nameCell}">${escapeHtml(r.contract_number)}</td><td style="${cell}">${r.trip_count}</td><td style="${cell}">${r.extra_trip_count}</td><td style="${cell}">${r.trip_count+r.extra_trip_count}</td></tr>`).join("")||`<tr><td colspan="4" style="padding:9px">${unassignedTrips.length?"No unassigned trips recorded for this reporting week.":"Not entered for this reporting week."}</td></tr>`}</tbody></table>`;
