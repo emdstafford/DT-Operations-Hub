@@ -4,7 +4,11 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {supabase} from "@/lib/supabase";
 
 export type UnassignedTripRow = {week_start:string;week_end:string;contract_number:string;trip_count:number;extra_trip_count:number;revision:number;updated_by:string;updated_at:string};
-export const normalizeTripContract=(v:string)=>v.trim().toUpperCase().replace(/^0+/,"");
+// 2407X was superseded by 2407U; preserve source records but use the current code on this entry screen.
+export const normalizeTripContract=(v:string)=>{
+ const key=v.trim().toUpperCase().replace(/^0+/,"");
+ return key==="2407X"?"2407U":key;
+};
 export const includeUnassignedContract=(value:string)=>normalizeTripContract(value)!=="30512";
 export const fullTripWeek=(start:string,end:string)=>!!start&&!!end&&new Date(start+"T12:00:00Z").getUTCDay()===6&&new Date(new Date(start+"T12:00:00Z").getTime()+6*86400000).toISOString().slice(0,10)===end;
 type Props={start:string;end:string;contracts:string[];onRowsChange:(rows:UnassignedTripRow[],ready:boolean)=>void;summaryOnly?:boolean};
