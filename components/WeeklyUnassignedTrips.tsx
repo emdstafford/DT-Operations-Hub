@@ -1,12 +1,13 @@
 "use client";
+import Link from "next/link";
 import {useCallback,useEffect,useMemo,useState} from "react";
 import {supabase} from "@/lib/supabase";
 
 export type UnassignedTripRow = {week_start:string;week_end:string;contract_number:string;trip_count:number;extra_trip_count:number;revision:number;updated_by:string;updated_at:string};
 export const normalizeTripContract=(v:string)=>v.trim().toUpperCase().replace(/^0+/,"");
 export const fullTripWeek=(start:string,end:string)=>!!start&&!!end&&new Date(start+"T12:00:00Z").getUTCDay()===6&&new Date(new Date(start+"T12:00:00Z").getTime()+6*86400000).toISOString().slice(0,10)===end;
-type Props={start:string;end:string;contracts:string[];onRowsChange:(rows:UnassignedTripRow[],ready:boolean)=>void};
-export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange}:Props){
+type Props={start:string;end:string;contracts:string[];onRowsChange:(rows:UnassignedTripRow[],ready:boolean)=>void;summaryOnly?:boolean};
+export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange,summaryOnly=false}:Props){
  const [rows,setRows]=useState<UnassignedTripRow[]>([]);
  const [draft,setDraft]=useState<Record<string,{regular:string;extra:string;baseRevision:number}>>({});
  const [saving,setSaving]=useState<string|null>(null);
@@ -53,6 +54,12 @@ export default function WeeklyUnassignedTrips({start,end,contracts,onRowsChange}
   else{setDraft(old=>{const next={...old};delete next[current];return next;});await load();}
   setSaving(null);
  }
+ if(summaryOnly)return <section className="panel" style={{padding:20,marginBottom:18}}>
+  <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",alignItems:"center"}}>
+   <div><p className="eyebrow">Weekly summary</p><h2 style={{margin:"4px 0 6px"}}>Unassigned Trips</h2><p style={{margin:0,color:"#667789",fontSize:13}}>{start} – {end} · {loading?"Loading…":!valid?"Select a full Saturday–Friday week":rows.length?`${rows.length} contracts saved`:"Not entered"}</p></div>
+   <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}><span>Regular <strong>{totals.regular}</strong></span><span>Extra <strong>{totals.extra}</strong></span><span>Total <strong>{totals.regular+totals.extra}</strong></span><Link className="primary-link" href="/unassigned-trips">Open Unassigned Trips</Link></div>
+  </div>
+ </section>;
  return <section className="panel" style={{padding:20,marginBottom:18}}>
   <div style={{display:"flex",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
    <div><p className="eyebrow">Shared weekly entry</p><h2 style={{margin:"4px 0 8px"}}>Unassigned Trips</h2><p style={{margin:0,fontSize:13,color:"#667789"}}>{start} through {end} · Regular and Extra trips are tracked separately</p></div>

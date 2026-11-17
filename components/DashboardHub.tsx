@@ -430,7 +430,7 @@ export default function DashboardHub() {
         </div>
       </details>
     </section>
-    {!dashboardFuelOnly && <WeeklyUnassignedTrips start={start} end={end} contracts={contractOptions} onRowsChange={onUnassignedChange} />}
+    {!dashboardFuelOnly && <WeeklyUnassignedTrips start={start} end={end} contracts={contractOptions} onRowsChange={onUnassignedChange} summaryOnly />}
     <PeriodAnnotations start={start} end={end} />
     {error && <div className="alert alert-error">{error.includes("dashboard_hub_filtered") ? "The dashboard database update still needs to be installed in Supabase." : error}</div>}
     {loading ? <section className="hub-loading">Loading your operations picture…</section> : <>
