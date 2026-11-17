@@ -44,5 +44,5 @@ begin
  return v_row;
 end $$;
 revoke all on function public.save_weekly_unassigned_trip_count(date,text,integer,integer,integer) from public, anon;
-grant execute on function public.save_weekly_unassigned_trip_count(date,text,integer,integer) to authenticated;
+grant execute on function public.save_weekly_unassigned_trip_count(date,text,integer,integer,integer) to authenticated;
 alter publication supabase_realtime add table public.weekly_unassigned_trips;
