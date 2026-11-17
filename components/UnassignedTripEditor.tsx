@@ -35,6 +35,8 @@ export default function UnassignedTripEditor(){
  const [readError,setReadError]=useState("");
  const [canEdit,setCanEdit]=useState(false);
  const [hasAccess,setHasAccess]=useState(false);
+ const [currentEmail,setCurrentEmail]=useState("");
+ const [removing,setRemoving]=useState("");
  const [order,setOrder]=useState<"ascending"|"descending">("ascending");
  const [filter,setFilter]=useState("");
  const [showOnlyPending,setShowOnlyPending]=useState(false);
@@ -66,6 +68,7 @@ export default function UnassignedTripEditor(){
  const pending=Object.keys(drafts).length;
  const totals=saved.filter(r=>includeUnassignedContract(r.contract_number)).reduce((a,r)=>({regular:a.regular+r.trip_count,extra:a.extra+r.extra_trip_count}),zero);
  const readyCount=available.filter(c=>rowsByContract.has(c)).length;
+ const ownSaved=saved.filter(r=>r.updated_by.toLowerCase()===currentEmail&&includeUnassignedContract(r.contract_number));
 
  const refresh=useCallback(async(start:string)=>{
   const {data,error}=await supabase.from("weekly_unassigned_trips").select("week_start,week_end,contract_number,trip_count,extra_trip_count,revision,updated_by,updated_at").eq("week_start",start);
@@ -87,6 +90,7 @@ export default function UnassignedTripEditor(){
     supabase.from("contract_supervisors").select("contract_number,start_date,end_date").limit(1000)
    ]);
    if(!active)return;
+   setCurrentEmail(email);
    const role=approval.data?.role;
    setCanEdit(role==="admin"||role==="uploader");
    setHasAccess(Boolean(role));
@@ -131,6 +135,7 @@ export default function UnassignedTripEditor(){
   setMessage("");
  }
  function discard(contract:string){
+  if(savesInFlight.current.has(contract)){setMessage("This contract is saving. Once saved, use Remove saved entry to undo it.");return;}
   setDrafts(prev=>{const next={...prev};delete next[contract];return next;});
   setStatuses(prev=>{const next={...prev};delete next[contract];return next;});
  }
@@ -171,9 +176,30 @@ export default function UnassignedTripEditor(){
   return()=>{timers.forEach(t=>window.clearTimeout(t));};
  },[drafts,statuses,weekStart,canEdit,persist]);
 
+ async function removeSavedEntry(contract:string){
+  const existing=rowsByContract.get(contract);
+  if(!existing||!canEdit||existing.updated_by.toLowerCase()!==currentEmail||removing||drafts[contract]||savesInFlight.current.size)return;
+  if(!window.confirm(`Remove the saved counts for contract ${contract} from ${dateDisplay(weekStart)}–${dateDisplay(end)}? This does not affect another reporting week or contract.`))return;
+  setRemoving(contract);setMessage("");
+  const {error}=await supabase.rpc("remove_my_unassigned_trip_count",{p_week_start:weekStart,p_contract:contract,p_expected_revision:existing.revision});
+  if(error)setMessage("Could not remove "+contract+": "+error.message);
+  else {await refresh(weekStart);setMessage("Removed the saved entry for "+contract+" from this reporting week. A removal audit was retained.");}
+  setRemoving("");
+ }
+ async function removeMyWeek(){
+  if(!weekStart||!canEdit||!currentEmail||!ownSaved.length||removing||pending||savesInFlight.current.size)return;
+  const count=ownSaved.length;
+  const confirmed=window.prompt(`Remove your ${count} saved contract entries for ${dateDisplay(weekStart)}–${dateDisplay(end)}? Chasity's entries and other weeks will remain unchanged. Type REMOVE to confirm.`);
+  if(confirmed!=="REMOVE")return;
+  setRemoving("week");setMessage("");
+  const {data,error}=await supabase.rpc("remove_my_unassigned_trip_counts_for_week",{p_week_start:weekStart});
+  if(error)setMessage("Could not remove this week's entries: "+error.message);
+  else {await refresh(weekStart);setMessage(`Removed ${Number(data??0)} of your saved entries from ${dateDisplay(weekStart)}–${dateDisplay(end)}. A removal audit was retained. Other editors' entries were not changed.`);}
+  setRemoving("");
+ }
  function changeWeek(value:string){
   if(!value)return;
-  if((pending||savesInFlight.current.size>0)&&!window.confirm("Entries may still be saving. Switch reporting weeks and discard unfinished edits?"))return;
+  if((pending||savesInFlight.current.size>0||!!removing)&&!window.confirm("Entries may still be saving. Switch reporting weeks and discard unfinished edits?"))return;
   setWeekStart(weekFor(value));
  }
  if(!hasAccess&&!loading)return <main className="page-shell"><p>You do not have access to this page.</p></main>;
@@ -200,6 +226,11 @@ export default function UnassignedTripEditor(){
    {periodError&&<p className="alert alert-error" role="alert">{periodError}</p>}
    {!periodError&&endedContracts.size>0&&<p style={{fontSize:13,color:"#526171"}}>{endedContracts.size} ended contracts excluded for this reporting week. They remain available in earlier weeks when their service dates overlap.</p>}
    {message&&<p role="status" style={{color:"#123b61",fontWeight:600}}>{message}</p>}
+   {canEdit&&ownSaved.length>0&&<div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:14,padding:"10px 12px",border:"1px solid #d8e1e8",borderRadius:7}}>
+     <span style={{fontSize:13}}>Wrong reporting week? You have {ownSaved.length} saved contract entr{ownSaved.length===1?"y":"ies"} for {dateDisplay(weekStart)}–{dateDisplay(end)}.</span>
+     <button type="button" disabled={!!removing||pending>0||savesInFlight.current.size>0} onClick={()=>void removeMyWeek()} style={{background:"white",color:"#8d2734",border:"1px solid #b47a80",borderRadius:6,padding:"8px 11px",fontWeight:700,cursor:"pointer"}}>{removing==="week"?"Removing…":"Remove my saved entries for this week"}</button>
+     <small style={{color:"#667789"}}>Requires confirmation. Does not remove another person's entries.</small>
+   </div>}
    <div style={{overflowX:"auto"}}>
    <table style={{width:"100%",borderCollapse:"collapse",minWidth:690,fontSize:13}}>
     <thead><tr style={{background:"#123b61",color:"white"}}><th style={{padding:10,textAlign:"left"}}>Contract</th><th style={{padding:10,textAlign:"right"}}>Regular unassigned</th><th style={{padding:10,textAlign:"right"}}>Extra unassigned</th><th style={{padding:10,textAlign:"right"}}>Total</th><th style={{padding:10,textAlign:"left"}}>Status / last updated by</th><th style={{padding:10}}> </th></tr></thead>
@@ -216,7 +247,10 @@ export default function UnassignedTripEditor(){
       <td style={{padding:"6px 10px",textAlign:"right"}}><input type="number" min="0" step="1" aria-label={`Extra unassigned trips for ${contract}`} value={extra} disabled={!canEdit} onChange={e=>edit(contract,"extra",e.target.value)} placeholder="—" style={{width:98,padding:7,textAlign:"right",border:"1px solid #bcc8d3",borderRadius:6}} /></td>
       <td style={{padding:"9px 10px",textAlign:"right",fontWeight:700}}>{total}</td>
       <td style={{padding:"8px 10px",color:state?.status==="conflict"?"#9d2929":"#526171"}}>{state?.status==="conflict"||state?.status==="error"?state.message:state?.status==="saving"?"Saving…":draft?"Saving automatically…":current?`Saved · ${current.updated_by}`:"Not entered"}</td>
-      <td style={{padding:6}}>{draft&&<button type="button" onClick={()=>discard(contract)} style={{border:"1px solid #bcc8d3",borderRadius:6,padding:"5px 9px",background:"white",cursor:"pointer"}}>Discard</button>}</td>
+      <td style={{padding:6}}>{draft?
+        <button type="button" onClick={()=>discard(contract)} disabled={savesInFlight.current.has(contract)||!!removing} style={{border:"1px solid #bcc8d3",borderRadius:6,padding:"5px 9px",background:"white",cursor:"pointer",whiteSpace:"nowrap"}}>Discard unsaved edit</button>
+       :current&&current.updated_by.toLowerCase()===currentEmail&&canEdit?
+        <button type="button" onClick={()=>void removeSavedEntry(contract)} disabled={!!removing||pending>0||savesInFlight.current.size>0} style={{border:"1px solid #b47a80",color:"#8d2734",borderRadius:6,padding:"5px 9px",background:"white",cursor:"pointer",whiteSpace:"nowrap"}}>{removing===contract?"Removing…":"Remove saved entry"}</button>:null}</td>
      </tr>;
     })}</tbody>
    </table>
