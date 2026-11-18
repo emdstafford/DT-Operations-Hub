@@ -68,8 +68,7 @@ begin
   ) into result;
   return result;
 end;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.dashboard_hub_filtered(p_start date, p_end date, p_grain text DEFAULT 'week'::text, p_contracts text[] DEFAULT NULL::text[], p_supervisors text[] DEFAULT NULL::text[], p_exclude_august_2026 boolean DEFAULT false, p_max_completion numeric DEFAULT NULL::numeric, p_min_missed_stops integer DEFAULT NULL::integer)
  RETURNS jsonb
