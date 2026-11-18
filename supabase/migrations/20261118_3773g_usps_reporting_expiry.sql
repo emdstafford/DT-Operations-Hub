@@ -165,4 +165,4 @@ begin
   ) into result;
   return result;
 end;
-$function$
+$function$;
