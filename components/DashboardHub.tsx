@@ -138,6 +138,14 @@ export default function DashboardHub() {
   const [operationalNotes, setOperationalNotes] = useState<OperationalNote[]>([]);
   const [dashboardView, setDashboardView] = useState<"overview" | "investigate">("overview");
   const [investigateTab, setInvestigateTab] = useState<"contracts" | "supervisors" | "geofences" | "comparison">("contracts");
+  const reportingContracts=contractOptions.filter(contract=>start<="2026-11-13"||normalizeTripContract(contract)!=="3773G");
+  useEffect(()=>{
+    if(start>"2026-11-13")setSelectedContracts(current=>{
+      const next=current.filter(contract=>normalizeTripContract(contract)!=="3773G");
+      return next.length===current.length?current:next;
+    });
+  },[start]);
+
   const [unassignedRows, setUnassignedRows] = useState<UnassignedTripRow[]>([]);
   const [unassignedReady, setUnassignedReady] = useState(false);
   const onUnassignedChange = useCallback((rows: UnassignedTripRow[], ready: boolean) => { setUnassignedRows(rows); setUnassignedReady(ready); }, []);
@@ -366,6 +374,10 @@ export default function DashboardHub() {
     printWindow.document.close();
   }
 
+  // Align drill-down and printed review with the USPS dashboard's contract expiry rule.
+  const isExpiredUspsLoad=(row:LoadDrillRow)=>
+    normalizeTripContract(row.contract_number??"")==="3773G" && row.operating_date>"2026-11-13";
+
   async function openDay(day: string) {
     if (grain !== "day") { setGrain("day"); return; }
     setSelectedDay(day); setDrillLoading(true); setDrillError(""); setTripBreakdown([]);
@@ -377,7 +389,7 @@ export default function DashboardHub() {
     const rows = ((result.data ?? []) as LoadDrillRow[]).filter((row) => {
       const contract = row.contract_number || "Unmapped";
       const supervisorMatch = selectedSupervisors.length === 0 || selectedSupervisors.some((name) => name === "Unassigned" ? row.supervisors.length === 0 : row.supervisors.includes(name));
-      return visibleContracts.has(contract) && supervisorMatch;
+      return !isExpiredUspsLoad(row) && visibleContracts.has(contract) && supervisorMatch;
     });
     const groups = new Map<string, TripDrillRow>();
     rows.forEach((row) => {
@@ -409,7 +421,7 @@ export default function DashboardHub() {
       const visibleContracts = new Set(data.contracts.map((row) => row.contract_number || "Unmapped"));
       const rows = allRows.filter((row) => {
         const supervisorMatch = selectedSupervisors.length === 0 || selectedSupervisors.some((name) => name === "Unassigned" ? row.supervisors.length === 0 : row.supervisors.includes(name));
-        return visibleContracts.has(row.contract_number || "Unmapped") && supervisorMatch;
+        return !isExpiredUspsLoad(row) && visibleContracts.has(row.contract_number || "Unmapped") && supervisorMatch;
       });
       const groups = new Map<string, TripDrillRow>();
       rows.forEach((row) => {
@@ -486,7 +498,7 @@ export default function DashboardHub() {
         <div className="hub-filters-clean">
           <label>Trend view<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Day</option><option value="week">Week (Sat–Fri)</option><option value="month">Month</option><option value="year">Year</option></select></label>
           <MultiSelect label="Supervisors" options={supervisorOptions} selected={selectedSupervisors} setSelected={setSelectedSupervisors} />
-          <MultiSelect label="Contracts" options={contractOptions} selected={selectedContracts} setSelected={setSelectedContracts} />
+          <MultiSelect label="Contracts" options={reportingContracts} selected={selectedContracts} setSelected={setSelectedContracts} />
           <label>Completion at or below (%)<input type="number" min="0" max="100" step="0.01" value={maxCompletion} onChange={(event) => setMaxCompletion(event.target.value)} placeholder="Example: 95" /></label>
           <label>Missed stops at least<input type="number" min="0" step="1" value={minMissedStops} onChange={(event) => setMinMissedStops(event.target.value)} placeholder="Example: 25" /></label>
           <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20, 2026</label>
@@ -520,7 +532,7 @@ export default function DashboardHub() {
         <div><strong>Why is a contract having trouble?</strong><span>Select one contract to focus every dashboard section and build a printable evidence report.</span></div>
         <select aria-label="Select contract for review" value={selectedContracts.length === 1 ? selectedContracts[0] : ""} onChange={(event) => setSelectedContracts(event.target.value ? [event.target.value] : [])}>
           <option value="">Choose a contract</option>
-          {contractOptions.map((contract) => <option value={contract} key={contract}>{contract}</option>)}
+          {reportingContracts.map((contract) => <option value={contract} key={contract}>{contract}</option>)}
         </select>
         {!dashboardFuelOnly && <button className="hub-secondary-link" disabled={selectedContracts.length !== 1 || loading || reviewLoading || !unassignedReady} onClick={() => void printPerformanceReview()}>{reviewLoading ? "Building…" : "Print contract review"}</button>}
       </section>
