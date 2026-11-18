@@ -366,6 +366,10 @@ export default function DashboardHub() {
     printWindow.document.close();
   }
 
+  // Align drill-down and printed review with the USPS dashboard's contract expiry rule.
+  const isExpiredUspsLoad=(row:LoadDrillRow)=>
+    normalizeTripContract(row.contract_number??"")==="3773G" && row.operating_date>"2026-11-13";
+
   async function openDay(day: string) {
     if (grain !== "day") { setGrain("day"); return; }
     setSelectedDay(day); setDrillLoading(true); setDrillError(""); setTripBreakdown([]);
@@ -377,7 +381,7 @@ export default function DashboardHub() {
     const rows = ((result.data ?? []) as LoadDrillRow[]).filter((row) => {
       const contract = row.contract_number || "Unmapped";
       const supervisorMatch = selectedSupervisors.length === 0 || selectedSupervisors.some((name) => name === "Unassigned" ? row.supervisors.length === 0 : row.supervisors.includes(name));
-      return visibleContracts.has(contract) && supervisorMatch;
+      return !isExpiredUspsLoad(row) && visibleContracts.has(contract) && supervisorMatch;
     });
     const groups = new Map<string, TripDrillRow>();
     rows.forEach((row) => {
@@ -409,7 +413,7 @@ export default function DashboardHub() {
       const visibleContracts = new Set(data.contracts.map((row) => row.contract_number || "Unmapped"));
       const rows = allRows.filter((row) => {
         const supervisorMatch = selectedSupervisors.length === 0 || selectedSupervisors.some((name) => name === "Unassigned" ? row.supervisors.length === 0 : row.supervisors.includes(name));
-        return visibleContracts.has(row.contract_number || "Unmapped") && supervisorMatch;
+        return !isExpiredUspsLoad(row) && visibleContracts.has(row.contract_number || "Unmapped") && supervisorMatch;
       });
       const groups = new Map<string, TripDrillRow>();
       rows.forEach((row) => {
