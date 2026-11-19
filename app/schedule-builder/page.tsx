@@ -1,7 +1,7 @@
 import ScheduleBuilder from "@/components/ScheduleBuilder";
 
 export default function ScheduleBuilderPage() {
-  return <main className="page-shell schedule-builder-page">
+  return <main className="page-shell schedule-builder-page operations-polish">
     <header className="hub-header">
       <div>
         <p className="eyebrow">DT Operations Workspace</p>
