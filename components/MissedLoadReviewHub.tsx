@@ -108,6 +108,7 @@ export default function MissedLoadReviewHub(){
  },[selected,draft,canEdit]);
  async function markReviewed(value:"needs_review"|"reviewed"|"follow_up"){
   if(!review||!canView)return;
+  if(canEdit&&current&&draft.explanation.trim()&&JSON.stringify(draft)!==lastSaved.current){const ok=await persist(current,review,draft);if(!ok)return;}
   setSaving(true);setError("");setNotice("");
   const res=await supabase.rpc("set_missed_load_review_status",{p_review_id:review.id,p_status:value});
   if(res.error)setError(res.error.message);
@@ -144,7 +145,7 @@ export default function MissedLoadReviewHub(){
         <td>{l.incomplete_stops}</td>
         <td>{r?labels[r.review_status]:"Awaiting explanation"}{r&&corrections.has(r.reason)?" · "+labels[r.ticket_status]:""}{notes.length>0&&<span className="ops-trip-note-tag" title="Existing explanation from contract and trip notes">Trip note on file</span>}</td>
        </tr>
-       {expanded&&<tr className="ops-inline-detail-row"><td colSpan={7}>{current&&<section className="ops-inline-editor" id="load-review"><div className="panel-heading"><div><h2>Load {current.load_number}</h2><span>{current.operating_date} · Contract {current.contract_number} · Trip {current.trip_number||"—"} · {current.incomplete_stops} missed stops</span></div><button className="hub-secondary-link" onClick={()=>setSelected("")}>Close</button></div>
+       {expanded&&<tr className="ops-inline-detail-row"><td colSpan={7}>{current&&<section className="ops-inline-editor" id="load-review"><div className="panel-heading"><div><h2>Load {current.load_number}</h2><span>{current.operating_date} · Contract {current.contract_number} · Trip {current.trip_number||"—"} · {current.incomplete_stops} missed stops</span></div><button className="hub-secondary-link" disabled={saving} onClick={()=>void choose(current)}>Close</button></div>
     {relatedNotes.length>0&&<div className="ops-existing-notes"><strong>Existing trip explanation{relatedNotes.length>1?"s":""}</strong>
       <p className="ops-inline-note">Saved for this trip and date. Check whether it explains this specific load.</p>
       {relatedNotes.map(note=><div className="ops-existing-note" key={note.id}>
