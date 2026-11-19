@@ -545,6 +545,7 @@ export default function DashboardHub() {
         title={contractListMode === "below95" ? "Contracts below 95%" : contractListMode === "incomplete" ? "Incomplete stops by contract" : "Contracts"}
         rows={(contractListMode === "below95" ? data.contracts.filter((row) => Number(row.completion_percent) < 0.95) : contractListMode === "incomplete" ? data.contracts.filter((row) => Number(row.incomplete_stops) > 0).sort((a, b) => Number(b.incomplete_stops) - Number(a.incomplete_stops)) : data.contracts)}
         kind="contract"
+        supervisorContracts={contractListMode === "below95" ? data.supervisor_contracts : undefined}
         start={start}
         end={end}
         highlightRankings={isEntireReport && contractListMode === "all"}
@@ -605,7 +606,18 @@ function OperationalContext({ notes }: { notes: OperationalNote[] }) {
   </div>;
 }
 
-function HubTable({ title, rows, kind, highlightRankings, onSupervisorSelect, start, end }: { title: string; rows: Row[]; kind: "contract" | "supervisor"; highlightRankings?: boolean; onSupervisorSelect?: (name: string) => void; start?: string; end?: string }) {
+function HubTable({ title, rows, kind, highlightRankings, onSupervisorSelect, supervisorContracts, start, end }: { title: string; rows: Row[]; kind: "contract" | "supervisor"; highlightRankings?: boolean; onSupervisorSelect?: (name: string) => void; supervisorContracts?: SupervisorContractRow[]; start?: string; end?: string }) {
   const dashboardFuelOnly = useAccessRole() === "dashboard_fuel_viewer";
-  return <section className="panel overflow-hidden"><div className="panel-heading"><h2>{title}</h2><span>{kind === "supervisor" ? "Click a name to filter" : `${rows.length} results`}</span></div><div className="table-scroll hub-table-scroll"><table className="data-table"><thead><tr><th>{title.slice(0,-1)}</th><th>Stops</th><th>Incomplete</th><th>Completion</th></tr></thead><tbody>{rows.map((row,index) => { const name = kind === "contract" ? row.contract_number : row.supervisor; return <tr key={name} className={name === "Unassigned" ? "attention-row" : highlightRankings && kind === "supervisor" && index < 5 ? "top-performer-row" : highlightRankings && kind === "contract" && index < 10 ? "bottom-contract-row" : ""}><td className="font-semibold text-navy">{kind === "contract" ? <span className="contract-name-health">{dashboardFuelOnly ? <span>{name}</span> : <Link className="day-button" href={`/contracts/${encodeURIComponent(name || "Unmapped")}${start && end ? `?start=${start}&end=${end}` : ""}`}>{name}</Link>}<b className={`contract-health ${contractHealth(row.completion_percent).className}`}>{contractHealth(row.completion_percent).label}</b></span> : <button className="day-button" onClick={() => name && onSupervisorSelect?.(name)}>{name}</button>}</td><td>{number(row.total_stops)}</td><td>{number(row.incomplete_stops)}</td><td>{percent(row.completion_percent)}</td></tr>; })}</tbody></table></div></section>;
+  // Supervisor-contract rows already reflect the selected date range and dashboard filters.
+  // Multiple names can appear when more than one supervisor worked the contract in that period.
+  const namesByContract = new Map<string, Set<string>>();
+  for (const assignment of supervisorContracts ?? []) {
+    const key = normalizeTripContract(assignment.contract_number || "");
+    const supervisor = assignment.supervisor?.trim();
+    if (!key || !supervisor) continue;
+    const names = namesByContract.get(key) ?? new Set<string>();
+    names.add(supervisor);
+    namesByContract.set(key, names);
+  }
+  return <section className="panel overflow-hidden"><div className="panel-heading"><h2>{title}</h2><span>{kind === "supervisor" ? "Click a name to filter" : `${rows.length} results`}</span></div><div className="table-scroll hub-table-scroll"><table className="data-table"><thead><tr><th>{title.slice(0,-1)}</th>{supervisorContracts && <th>Supervisor</th>}<th>Stops</th><th>Incomplete</th><th>Completion</th></tr></thead><tbody>{rows.map((row,index) => { const name = kind === "contract" ? row.contract_number : row.supervisor; const supervisors=supervisorContracts ? [...(namesByContract.get(normalizeTripContract(name || "")) ?? [])].sort((a,b)=>a.localeCompare(b)) : []; return <tr key={name} className={name === "Unassigned" ? "attention-row" : highlightRankings && kind === "supervisor" && index < 5 ? "top-performer-row" : highlightRankings && kind === "contract" && index < 10 ? "bottom-contract-row" : ""}><td className="font-semibold text-navy">{kind === "contract" ? <span className="contract-name-health">{dashboardFuelOnly ? <span>{name}</span> : <Link className="day-button" href={`/contracts/${encodeURIComponent(name || "Unmapped")}${start && end ? `?start=${start}&end=${end}` : ""}`}>{name}</Link>}<b className={`contract-health ${contractHealth(row.completion_percent).className}`}>{contractHealth(row.completion_percent).label}</b></span> : <button className="day-button" onClick={() => name && onSupervisorSelect?.(name)}>{name}</button>}</td>{supervisorContracts && <td>{supervisors.length ? supervisors.join(", ") : "Not assigned"}</td>}<td>{number(row.total_stops)}</td><td>{number(row.incomplete_stops)}</td><td>{percent(row.completion_percent)}</td></tr>; })}</tbody></table></div></section>;
 }
