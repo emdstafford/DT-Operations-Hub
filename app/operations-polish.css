@@ -242,3 +242,48 @@
      print layouts retain their own established dimensions. */
   .operations-polish{padding-top:0}
 }
+
+
+/* Inline missed-load explanations and private reviewer alerts */
+.operations-polish .ops-inline-open{
+  display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;
+  padding:5px 2px;color:#123b61;font:inherit;font-weight:700;cursor:pointer;
+  text-decoration:underline;text-decoration-color:#b9c9d8;text-underline-offset:3px;
+}
+.operations-polish .ops-inline-open:hover{color:#0b3158;text-decoration-color:#0b3158}
+.operations-polish .ops-inline-open:focus-visible{outline:2px solid #3b719e;outline-offset:2px}
+.operations-polish .ops-selected-row{background:#edf4fa}
+.operations-polish .ops-inline-detail-row>td{background:#f7fafc;padding:0!important;border-bottom:2px solid #b8cada}
+.operations-polish .ops-inline-editor{display:grid;gap:0;max-width:100%;background:white;margin:10px 12px;border:1px solid #d8e3ed;border-radius:10px;overflow:hidden}
+.operations-polish .ops-inline-editor .panel-heading{min-height:50px;background:#f5f8fb}
+.operations-polish .ops-inline-editor .ops-filter-grid{padding:12px 16px}
+.operations-polish .ops-inline-editor .ops-save-status{padding:0 16px;margin:4px 0 0;font-size:.75rem;font-weight:650;color:#526a81}
+.operations-polish .ops-inline-editor .ops-save-saved{color:#17663f}
+.operations-polish .ops-inline-editor .ops-save-error{color:#9a2d38}
+.operations-polish .ops-inline-editor .ops-inline-note,
+.operations-polish .ops-inline-editor .text-muted{margin:6px 16px;font-size:.76rem}
+.operations-polish .ops-inline-editor>div[style*="display: flex"]{padding:0 16px 12px}
+.operations-polish .ops-inline-editor details{padding:8px 16px 14px;border-top:1px solid #e3eaf0;font-size:.78rem}
+.operations-polish .ops-trip-note-tag{
+  display:inline-block;margin-left:7px;padding:2px 7px;border-radius:999px;
+  color:#315778;background:#e5eef6;font-size:.68rem;font-weight:700;white-space:nowrap
+}
+.operations-polish .ops-existing-notes{padding:12px 16px;border-bottom:1px solid #e0e8f0;background:#f6f9fc}
+.operations-polish .ops-existing-notes>strong{font-size:.8rem;color:#153e60}
+.operations-polish .ops-existing-notes>.ops-inline-note{margin:3px 0 8px}
+.operations-polish .ops-existing-note{padding:9px 11px;margin-top:7px;background:white;border:1px solid #dce5ee;border-radius:8px}
+.operations-polish .ops-existing-note p{margin:0 0 4px;font-size:.82rem}
+.operations-polish .ops-existing-note small{display:block;color:#65798b;font-size:.72rem}
+.operations-polish .ops-existing-note button{margin-top:8px}
+.ops-review-notice{
+  display:inline-block;margin-left:7px;padding:2px 7px;border-radius:999px;
+  background:#e6eff6;color:#143f62;font-size:.69rem;font-weight:700;white-space:nowrap;
+  vertical-align:middle
+}
+@media(max-width:700px){
+  .operations-polish .ops-inline-editor{margin:8px 5px}
+  .operations-polish .ops-inline-editor .ops-filter-grid{grid-template-columns:1fr}
+}
+@media print{
+  .operations-polish .ops-inline-editor,.ops-review-notice{display:none!important}
+}
