@@ -53,7 +53,7 @@ export default function HistoryPage() {
       .sort((a, b) => b.periods - a.periods || b.occurrences - a.occurrences);
   }, [missedHistory]);
 
-  return <main className="page-shell">
+  return <main className="page-shell operations-polish">
     <header className="page-intro"><div><p className="eyebrow">Shared DT history</p><h1>Report history</h1><p>Return to reporting periods securely stored for approved DT Express employees on any computer.</p></div><Link className="upload-button" href="/upload">Upload another report</Link></header>
     {!report && !missed && <section className="empty-state"><div className="empty-icon">H</div><h2>No saved reports yet</h2><p>Upload a USPS load-details or missed-stops file and its summary will remain available here.</p></section>}
     {report && <div className="report-stack">
