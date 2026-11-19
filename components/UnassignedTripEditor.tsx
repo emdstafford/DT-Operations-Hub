@@ -206,28 +206,28 @@ export default function UnassignedTripEditor(){
   if((pending||savesInFlight.current.size>0||!!removing)&&!window.confirm("Entries may still be saving. Switch reporting weeks and discard unfinished edits?"))return;
   setWeekStart(weekFor(value));
  }
- if(!hasAccess&&!loading)return <main className="page-shell"><p>You do not have access to this page.</p></main>;
- return <main className="page-shell">
-  <header className="page-intro"><div><p className="eyebrow">Davenport Transportation</p><h1>Unassigned Trips</h1><p>Shared weekly entry for regular and extra unassigned trips. You can work from the top while another editor works from the bottom.</p></div><Link className="hub-secondary-link" href="/">Back to Dashboard</Link></header>
+ if(!hasAccess&&!loading)return <main className="page-shell operations-polish"><p>You do not have access to this page.</p></main>;
+ return <main className="page-shell operations-polish">
+  <header className="page-intro"><div><p className="eyebrow">Davenport Transportation</p><h1>Unassigned Trips</h1><p>Weekly regular and extra unassigned trip counts.</p></div><Link className="hub-secondary-link" href="/">Back to Dashboard</Link></header>
   <section className="panel" style={{padding:20,marginBottom:16}}>
    <div style={{display:"flex",gap:18,alignItems:"end",flexWrap:"wrap",justifyContent:"space-between"}}>
-    <label style={{display:"grid",gap:5,fontWeight:700}}>Reporting week (Saturday–Friday)<input type="date" value={weekStart} onChange={e=>changeWeek(e.target.value)} style={{padding:10,border:"1px solid #bcc8d3",borderRadius:6}} /></label>
+    <label style={{display:"grid",gap:5,fontWeight:700}}>Reporting week (Saturday–Friday)<input type="date" value={weekStart} onChange={e=>changeWeek(e.target.value)}  /></label>
     <div style={{display:"flex",gap:20,flexWrap:"wrap"}}><div><small>Regular</small><strong style={{display:"block",fontSize:24}}>{totals.regular}</strong></div><div><small>Extra</small><strong style={{display:"block",fontSize:24}}>{totals.extra}</strong></div><div><small>Total</small><strong style={{display:"block",fontSize:24}}>{totals.regular+totals.extra}</strong></div><div><small>Contracts saved</small><strong style={{display:"block",fontSize:24}}>{readyCount} / {available.length}</strong></div></div>
    </div>
    <p style={{fontSize:13,color:"#526171",marginBottom:0}}>{weekStart?`${dateDisplay(weekStart)} – ${dateDisplay(end)}`:"Loading reporting week…"} · Both editors must select the same reporting week. Counts save automatically after you type; blanks remain unentered until edited.</p>
   </section>
   <section className="panel" style={{padding:"16px 20px",marginBottom:16,borderLeft:"4px solid #123b61"}} aria-label="LoadTrek search instructions">
    <h2 style={{margin:"0 0 8px",fontSize:18}}>LoadTrek search checklist</h2>
-   <p style={{margin:"0 0 10px",color:"#526171",fontSize:13}}>Before counting trips, use these search settings in LoadTrek for the reporting week selected above.</p>
+   <p style={{margin:"0 0 10px",color:"#526171",fontSize:13}}>Match these settings in LoadTrek.</p>
    <div style={{display:"flex",gap:22,flexWrap:"wrap",alignItems:"center"}}>
     <div><strong style={{display:"block",fontSize:12,color:"#526171"}}>Date range (inclusive)</strong><strong style={{display:"block",fontSize:16,color:"#123b61"}}>{weekStart?`${dateDisplay(weekStart)} – ${dateDisplay(end)}`:"Select a reporting week above"}</strong></div>
     <div><strong style={{display:"block",fontSize:12,color:"#526171"}}>Include all three search selections</strong><span style={{display:"block",fontSize:14,fontWeight:700}}>Unassigned · Assigned · USPS Remote Tenders</span></div>
    </div>
-   <p style={{fontSize:12,margin:"10px 0 0",color:"#526171"}}>Use the same Saturday–Friday dates in both LoadTrek and this page. Enter Regular and Extra unassigned counts in their separate columns below.</p>
+   <p style={{fontSize:12,margin:"10px 0 0",color:"#526171"}}>Enter Regular and Extra counts separately below.</p>
   </section>
   <section className="panel" style={{padding:20}}>
    <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",alignItems:"end",marginBottom:16}}>
-    <div><h2 style={{margin:"0 0 6px"}}>Contracts for this reporting week</h2><span style={{fontSize:13,color:"#667789"}}>Counts save individually per contract, preventing one editor from replacing the other editor&apos;s entries.</span></div>
+    <div><h2 style={{margin:"0 0 6px"}}>Contracts for this reporting week</h2><span style={{fontSize:13,color:"#667789"}}>Changes save automatically by contract.</span></div>
     <span role="status" style={{fontWeight:700,color:"#123b61"}}>{pending?`${pending} row(s) pending autosave`:"All changes saved"}</span>
    </div>
    <div style={{display:"flex",gap:16,alignItems:"end",flexWrap:"wrap",marginBottom:16}}>
