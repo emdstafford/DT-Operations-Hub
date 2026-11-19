@@ -505,9 +505,9 @@ export default function DashboardHub() {
     finally { setReviewLoading(false); }
   }
   return <div className="report-stack">
-    <section className="panel executive-period ops-dashboard-filter-panel">
+    <section className="panel executive-period ops-dashboard-filter-panel" aria-label="Dashboard filters">
       <div className="quick-period-heading">
-        <div><p className="eyebrow">Reporting period</p><h2>{displayDate(start)} – {displayDate(end)}</h2></div>
+        <div><p className="eyebrow">Dashboard filters</p><h2>USPS Performance</h2><p className="ops-dashboard-period-description">{displayDate(start)} – {displayDate(end)}</p></div>
         <span>Latest data: {displayDate(latestAvailableEnd)}</span>
       </div>
       <div className="ops-dashboard-shortcuts">
@@ -535,14 +535,14 @@ export default function DashboardHub() {
     {loading ? <section className="hub-loading">Loading your operations picture…</section> : <>
       {!dashboardFuelOnly && <label className="hub-secondary-link" style={{display:"inline-flex",alignItems:"center",gap:8,marginBottom:10}}><input type="checkbox" checked={includeAllExplanations} onChange={event=>setIncludeAllExplanations(event.target.checked)}/>Include all saved load explanations in print/email (default: unresolved only)</label>}
       {!dashboardFuelOnly && <section className="dashboard-email-bar"><div><strong>Report actions</strong><span>{displayDate(start)} – {displayDate(end)}{selectedSupervisors.length || selectedContracts.length ? " with selected filters" : " · Company-wide"}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => void printPerformanceReview()} disabled={reviewLoading||!unassignedReady}>{reviewLoading ? "Building review…" : "Print Performance Review"}</button><button className="hub-secondary-link" onClick={printSupervisorContractReport} disabled={!unassignedReady||!loadReviewsReady}>Print Supervisor &amp; Contract Report</button><button className="primary-link" onClick={copyEmail} disabled={!unassignedReady||!loadReviewsReady}>{copied ? "Email report copied!" : "Copy Email Report"}</button></div></section>}
-      <section className="metric-grid">
+      <section className="metric-grid ops-dashboard-metrics" aria-label="Performance summary">
         <article className="metric-card metric-primary"><span>Completion</span><strong>{percent(data.totals.completion_percent)}</strong></article>
         <article className="metric-card"><span>Total stops</span><strong>{number(data.totals.total_stops)}</strong></article>
         <button type="button" className="metric-card metric-card-action" onClick={() => { setContractListMode("incomplete"); setDashboardView("investigate"); setInvestigateTab("contracts"); }}><span>Incomplete stops</span><strong>{number(data.totals.incomplete_stops)}</strong><small>View by contract →</small></button>
         <button type="button" className="metric-card metric-card-action" onClick={() => { setContractListMode("below95"); setDashboardView("investigate"); setInvestigateTab("contracts"); }}><span>Contracts below 95%</span><strong>{number(data.contracts.filter((row) => Number(row.completion_percent) < 0.95).length)}</strong><small>View contracts →</small></button>
         <article className="metric-card"><span>Unique loads</span><strong>{number(data.totals.load_count)}</strong></article>
       </section>
-      <nav className="dashboard-view-switch panel" aria-label="Dashboard view">
+      <nav className="dashboard-view-switch panel ops-dashboard-view-switch" aria-label="Dashboard view">
         <button className={dashboardView === "overview" ? "active" : ""} onClick={() => setDashboardView("overview")}><strong>Overview</strong><span>Totals, trend, and urgent contracts</span></button>
         <button className={dashboardView === "investigate" ? "active" : ""} onClick={() => setDashboardView("investigate")}><strong>Investigate</strong><span>Contracts, supervisors, geofences, and comparisons</span></button>
       </nav>
