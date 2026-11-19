@@ -19,6 +19,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
   const [employee, setEmployee] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [reviewAlerts,setReviewAlerts] = useState(0);
+  const [billingAlerts,setBillingAlerts] = useState(0);
   const [reviewAlertsEnabled,setReviewAlertsEnabled] = useState(false);
   useEffect(() => setMenuOpen(false), [pathname]);
   useEffect(() => {
@@ -38,20 +39,36 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
       const allowed=operationsRole==="admin"&&privateReviewRecipients.has((user?.email||"").toLowerCase());
       if(!active)return;
       setReviewAlertsEnabled(allowed);
-      if(!allowed){setReviewAlerts(0);return;}
+      if(!allowed){setReviewAlerts(0);setBillingAlerts(0);return;}
       const {count,error}=await supabase.from("missed_load_reviews")
         .select("id",{count:"exact",head:true})
         .or("review_status.in.(needs_review,follow_up),ticket_status.eq.needs_ticket");
       if(active&&!error)setReviewAlerts(count||0);
+      // Reuse each invoice's own reminder period; no alerts for paid invoices.
+      // Only the two authorized administrative accounts receive this badge.
+      if(techInvoiceAccess){
+        const invoices=await supabase.from("tech_invoices")
+          .select("due_date,reminder_days_before,status")
+          .eq("status","open").not("due_date","is",null).limit(1000);
+        if(active&&!invoices.error){
+          const today=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+          const dueCount=(invoices.data||[]).filter(row=>{
+            if(!row.due_date)return false;
+            const days=Math.ceil((Date.parse(row.due_date+"T12:00:00Z")-Date.parse(today+"T12:00:00Z"))/86400000);
+            return days<=Number(row.reminder_days_before??14);
+          }).length;
+          setBillingAlerts(dueCount);
+        }
+      }else setBillingAlerts(0);
     }
     void refresh();
     interval=setInterval(()=>void refresh(),90000);
     const focus=()=>void refresh();
     window.addEventListener("focus",focus);
     return()=>{active=false;clearInterval(interval);window.removeEventListener("focus",focus)};
-  },[operationsRole,pathname]);
+  },[operationsRole,pathname,techInvoiceAccess]);
 
-  async function signOut() { await supabase.auth.signOut(); setEmployee(""); setReviewAlerts(0); }
+  async function signOut() { await supabase.auth.signOut(); setEmployee(""); setReviewAlerts(0); setBillingAlerts(0); }
   return (
     <header className="site-header">
       <div className="brand-row">
@@ -69,7 +86,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
         {(operationsAccess || fuelAccess || payrollAccess) && !isNoReportsRole && <Link className={pathname.startsWith("/reports") ? "active" : ""} href="/reports">Reports</Link>}
         {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel</Link>}
         {payrollAccess && !isContractsFuelViewer && <Link className={pathname.startsWith("/payroll") ? "active" : ""} href="/payroll">Payroll</Link>}
-        {techInvoiceAccess && !isContractsFuelViewer && <Link className={pathname.startsWith("/tech-invoices") ? "active" : ""} href="/tech-invoices">Tech invoices</Link>}
+        {techInvoiceAccess && !isContractsFuelViewer && <Link className={pathname.startsWith("/tech-invoices") ? "active" : ""} href="/tech-invoices">Tech invoices{reviewAlertsEnabled&&billingAlerts>0&&<span className="ops-review-notice" title="Invoices inside their configured reminder window">{billingAlerts} due</span>}</Link>}
         {operationsAccess && canManageReports && <Link className={pathname.startsWith("/schedule-builder") ? "active" : ""} href="/schedule-builder">Schedule</Link>}
         {operationsAccess && canManageReports && <Link className={pathname.startsWith("/history") ? "active" : ""} href="/history">History</Link>}
         {hasUserManagement && <Link className={pathname.startsWith("/admin/users") ? "active" : ""} href="/admin/users">User access</Link>}
