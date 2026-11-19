@@ -505,31 +505,29 @@ export default function DashboardHub() {
     finally { setReviewLoading(false); }
   }
   return <div className="report-stack">
-    <section className="panel executive-period">
-      <div className="quick-period-heading"><div><p className="eyebrow">Reporting period</p><h2>{displayDate(start)} – {displayDate(end)}</h2></div><span>Latest saved data through {displayDate(latestAvailableEnd)}</span></div>
-      <div className="quick-period-controls">
+    <section className="panel executive-period ops-dashboard-filter-panel">
+      <div className="quick-period-heading">
+        <div><p className="eyebrow">Reporting period</p><h2>{displayDate(start)} – {displayDate(end)}</h2></div>
+        <span>Latest data: {displayDate(latestAvailableEnd)}</span>
+      </div>
+      <div className="ops-dashboard-shortcuts">
         <div className="period-buttons" role="group" aria-label="Quick reporting period">
           <button className={rangeMode === "day" ? "active" : ""} onClick={() => chooseRange("day")}>Latest day</button>
           <button className={rangeMode === "week" ? "active" : ""} onClick={() => chooseRange("week")}>Latest week</button>
           <button className={rangeMode === "month" ? "active" : ""} onClick={() => chooseRange("month")}>Latest month</button>
         </div>
-        <div className="executive-date-fields">
-          <label>From<input type="date" value={start} onChange={(event) => { setStart(event.target.value); setRangeMode("custom"); }} /></label>
-          <label>To<input type="date" value={end} onChange={(event) => { setEnd(event.target.value); setRangeMode("custom"); }} /></label>
-        </div>
+        {(selectedContracts.length > 0 || selectedSupervisors.length > 0 || maxCompletion || minMissedStops) && <button className="clear-filters" onClick={() => { setSelectedContracts([]); setSelectedSupervisors([]); setMaxCompletion(""); setMinMissedStops(""); }}>Clear filters</button>}
       </div>
-      <details className="advanced-dashboard-filters">
-        <summary>Filter by supervisor, contract, or performance</summary>
-        <div className="hub-filters-clean">
-          <label>Trend view<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Day</option><option value="week">Week (Sat–Fri)</option><option value="month">Month</option><option value="year">Year</option></select></label>
-          <MultiSelect label="Supervisors" options={supervisorOptions} selected={selectedSupervisors} setSelected={setSelectedSupervisors} />
-          <MultiSelect label="Contracts" options={reportingContracts} selected={selectedContracts} setSelected={setSelectedContracts} />
-          <label>Completion at or below (%)<input type="number" min="0" max="100" step="0.01" value={maxCompletion} onChange={(event) => setMaxCompletion(event.target.value)} placeholder="Example: 95" /></label>
-          <label>Missed stops at least<input type="number" min="0" step="1" value={minMissedStops} onChange={(event) => setMinMissedStops(event.target.value)} placeholder="Example: 25" /></label>
-          <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20, 2026</label>
-          {(selectedContracts.length > 0 || selectedSupervisors.length > 0 || maxCompletion || minMissedStops) && <button className="clear-filters" onClick={() => { setSelectedContracts([]); setSelectedSupervisors([]); setMaxCompletion(""); setMinMissedStops(""); }}>Clear filters</button>}
-        </div>
-      </details>
+      <div className="ops-filter-grid ops-dashboard-filter-grid" aria-label="Dashboard filters">
+        <label>From<input type="date" value={start} onChange={(event) => { setStart(event.target.value); setRangeMode("custom"); }} /></label>
+        <label>Through<input type="date" value={end} onChange={(event) => { setEnd(event.target.value); setRangeMode("custom"); }} /></label>
+        <MultiSelect label="Supervisors" options={supervisorOptions} selected={selectedSupervisors} setSelected={setSelectedSupervisors} />
+        <MultiSelect label="Contracts" options={reportingContracts} selected={selectedContracts} setSelected={setSelectedContracts} />
+        <label>Trend view<select value={grain} onChange={(event) => setGrain(event.target.value)}><option value="day">Day</option><option value="week">Week (Sat–Fri)</option><option value="month">Month</option><option value="year">Year</option></select></label>
+        <label>Completion at or below (%)<input type="number" min="0" max="100" step="0.01" value={maxCompletion} onChange={(event) => setMaxCompletion(event.target.value)} placeholder="95" /></label>
+        <label>Missed stops at least<input type="number" min="0" step="1" value={minMissedStops} onChange={(event) => setMinMissedStops(event.target.value)} placeholder="25" /></label>
+        <label className="filter-checkbox"><input type="checkbox" checked={excludeAugust} onChange={(event) => setExcludeAugust(event.target.checked)} />Exclude Aug 13–20, 2026</label>
+      </div>
     </section>
     {!dashboardFuelOnly && <WeeklyUnassignedTrips start={start} end={end} contracts={contractOptions} onRowsChange={onUnassignedChange} summaryOnly />}
     <PeriodAnnotations start={start} end={end} />
