@@ -74,9 +74,9 @@ export default function MissedLoadReviewHub(){
  }
  if(!canView)return <main className="page-shell"><h1>Missed-load reviews</h1><p>Access is restricted to authorized operations reviewers.</p></main>;
  return <main className="page-shell dashboard-page operations-polish">
-  <header className="hub-header"><div><p className="eyebrow">DT Intelligence Hub</p><h1>Missed-load reviews</h1><p>Only loads with missed stops are shown. Explanations never change completion percentages.</p></div><Link href="/" className="hub-secondary-link">Dashboard</Link></header>
-  <section className="panel"><div className="panel-heading"><div><h2>Find missed loads</h2><span>Review by load number, not just by contract.</span></div><button className="hub-secondary-link" onClick={()=>void loadData()} disabled={loading}>{loading?"Loading…":"Refresh"}</button></div>
-   <div style={{display:"flex",flexWrap:"wrap",gap:12,marginBottom:12}}>
+  <header className="hub-header"><div><p className="eyebrow">DT Intelligence Hub</p><h1>Missed Load Reviews</h1><p>Review and document missed loads.</p></div><Link href="/" className="hub-secondary-link">Dashboard</Link></header>
+  <section className="panel"><div className="panel-heading"><div><h2>Missed Loads</h2></div><button className="hub-secondary-link" onClick={()=>void loadData()} disabled={loading}>{loading?"Loading…":"Refresh"}</button></div>
+   <div className="ops-filter-grid">
     <label>From <input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label>
     <label>Through <input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label>
     <label>Supervisor <select value={supervisor} onChange={e=>setSupervisor(e.target.value)}><option value="">All</option>{allSupervisors.map(s=><option key={s}>{s}</option>)}</select></label>
@@ -86,22 +86,22 @@ export default function MissedLoadReviewHub(){
     <label>Sort by <select value={sort} onChange={e=>setSort(e.target.value)}><option value="date">Newest</option><option value="contract">Contract</option><option value="missed">Most missed stops</option></select></label>
    </div>
    {error&&<div className="alert alert-error">{error}</div>}{notice&&<div className="alert">{notice}</div>}
-   <p><strong>{shown.length}</strong> affected loads · <strong>{shown.filter(l=>byKey.has(key(l))).length}</strong> explained · <strong>{shown.filter(l=>!byKey.has(key(l))).length}</strong> awaiting explanation</p>
+   <p className="ops-summary"><strong>{shown.length}</strong> missed loads · <strong>{shown.filter(l=>byKey.has(key(l))).length}</strong> explained · <strong>{shown.filter(l=>!byKey.has(key(l))).length}</strong> awaiting explanation</p>
    <div className="table-scroll"><table className="data-table"><thead><tr><th>Date</th><th>Contract</th><th>Supervisor</th><th>Trip</th><th>Load</th><th>Missed</th><th>Status</th></tr></thead><tbody>{shown.map(l=>{const r=byKey.get(key(l));return <tr key={key(l)}><td>{l.operating_date}</td><td>{l.contract_number}</td><td>{(l.supervisors||[]).join(", ")||"Unassigned"}</td><td>{l.trip_number||"—"}</td><td><button className="day-button" onClick={()=>choose(l)}>{l.load_number}</button></td><td>{l.incomplete_stops}</td><td>{r?labels[r.review_status]:"Awaiting explanation"}{r&&corrections.has(r.reason)?" · "+labels[r.ticket_status]:""}</td></tr>})}</tbody></table></div>{!loading&&!shown.length&&<p>No missed loads match these filters.</p>}
   </section>
   {current&&<section className="panel" id="load-review"><div className="panel-heading"><div><h2>Load {current.load_number}</h2><span>{current.operating_date} · Contract {current.contract_number} · Trip {current.trip_number||"—"} · {current.incomplete_stops} missed stops</span></div><button className="hub-secondary-link" onClick={()=>setSelected("")}>Close</button></div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:12}}>
+    <div className="ops-filter-grid">
      <label>Reason <select disabled={!canEdit} value={draft.reason} onChange={e=>{const reason=e.target.value;setDraft(d=>({...d,reason,ticket_status:corrections.has(reason)?d.ticket_status==="not_needed"?"needs_ticket":d.ticket_status:"not_needed"}))}}>{reasons.map(s=><option key={s}>{s}</option>)}</select></label>
      <label>Source <select disabled={!canEdit} value={draft.source} onChange={e=>setDraft(d=>({...d,source:e.target.value}))}>{Object.entries(sources).map(([id,text])=><option key={id} value={id}>{text}</option>)}</select></label>
      <label>Provided by <input disabled={!canEdit} value={draft.reported_by} onChange={e=>setDraft(d=>({...d,reported_by:e.target.value}))} placeholder="Supervisor name"/></label>
      <label>Gary's review <select disabled={!canEdit} value={draft.review_status} onChange={e=>setDraft(d=>({...d,review_status:e.target.value}))}>{["needs_review","reviewed","follow_up"].map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label>
      {corrections.has(draft.reason)&&<label>Ticket status <select disabled={!canEdit} value={draft.ticket_status} onChange={e=>setDraft(d=>({...d,ticket_status:e.target.value}))}>{["needs_ticket","ticket_sent","resolved"].map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label>}
     </div>
-    <label>Explanation<textarea rows={3} disabled={!canEdit} value={draft.explanation} onChange={e=>setDraft(d=>({...d,explanation:e.target.value}))} placeholder="Explain this individual missed load and any follow-up required."/></label>
+    <label className="ops-field" style={{display:"grid",gap:6,padding:"0 18px"}}>Explanation<textarea rows={3} disabled={!canEdit} value={draft.explanation} onChange={e=>setDraft(d=>({...d,explanation:e.target.value}))} placeholder="Explain this individual missed load and any follow-up required."/></label>
     {review&&<p className="text-muted">Entered by {review.recorded_by_email} · Last updated {new Date(review.updated_at).toLocaleString()}</p>}
     <div style={{display:"flex",flexWrap:"wrap",gap:10,marginTop:12}}>{canEdit&&<button className="primary-link" disabled={saving} onClick={()=>void save()}>{saving?"Saving…":review?"Update explanation":"Save explanation"}</button>}{corrections.has(draft.reason)&&<button className="hub-secondary-link" onClick={ticket}>Open Outlook support ticket</button>}</div>
     {review&&<div style={{display:"flex",gap:10,marginTop:12,flexWrap:"wrap"}}><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("reviewed")}>Mark reviewed</button><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("follow_up")}>Needs follow-up</button></div>}
-    {corrections.has(draft.reason)&&<p>Opening the Outlook draft does not mean it was sent. Update the ticket status after sending it to itsupport@dtexpress.net.</p>}
+    {corrections.has(draft.reason)&&<p className="ops-inline-note">Outlook opens a draft. Update ticket status after sending.</p>}
     {events.length>0&&<details><summary>Recorded change history ({events.length})</summary>{events.map((e,i)=><p key={i}>{new Date(e.changed_at).toLocaleString()} · {e.event_type} · {e.changed_by_email}</p>)}</details>}
   </section>}
  </main>;
