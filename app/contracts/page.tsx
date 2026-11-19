@@ -5,7 +5,7 @@ import ContractPayRateLink from "@/components/ContractPayRateLink";
 
 export default function Page() {
   const card = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, padding: "16px 18px", borderRadius: 12, background: "linear-gradient(135deg, #0f2747 0%, #173a67 100%)", color: "#fff", textDecoration: "none", boxShadow: "0 6px 18px rgba(15,39,71,.12)" } as const;
-  return <main className="page-shell">
+  return <main className="page-shell operations-polish">
     <header className="page-intro"><div>
       <p className="eyebrow">Contract intelligence</p>
       <h1>Contracts</h1>
