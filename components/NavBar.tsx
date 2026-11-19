@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 const noReportsRoles = new Set(["dashboard_fuel_viewer", "dashboard_contracts_fuel_viewer"]);
+const privateReviewRecipients = new Set(["estafford@dtexpress.net","ccochran@dtexpress.net"]);
 
 export default function NavBar({ operationsRole, payrollAccess, fuelAccess, techInvoiceAccess }: { operationsRole: string; payrollAccess: boolean; fuelAccess: boolean; techInvoiceAccess: boolean }) {
   const pathname = usePathname();
@@ -17,6 +18,8 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
   const hasUserManagement = operationsRole === "admin";
   const [employee, setEmployee] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [reviewAlerts,setReviewAlerts] = useState(0);
+  const [reviewAlertsEnabled,setReviewAlertsEnabled] = useState(false);
   useEffect(() => setMenuOpen(false), [pathname]);
   useEffect(() => {
     function updateEmployee(email?: string, name?: string) {
@@ -27,7 +30,28 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
     return () => data.subscription.unsubscribe();
   }, []);
 
-  async function signOut() { await supabase.auth.signOut(); setEmployee(""); }
+  useEffect(()=>{
+    let active=true;
+    let interval:ReturnType<typeof setInterval>|undefined;
+    async function refresh(){
+      const {data:{user}}=await supabase.auth.getUser();
+      const allowed=operationsRole==="admin"&&privateReviewRecipients.has((user?.email||"").toLowerCase());
+      if(!active)return;
+      setReviewAlertsEnabled(allowed);
+      if(!allowed){setReviewAlerts(0);return;}
+      const {count,error}=await supabase.from("missed_load_reviews")
+        .select("id",{count:"exact",head:true})
+        .or("review_status.in.(needs_review,follow_up),ticket_status.eq.needs_ticket");
+      if(active&&!error)setReviewAlerts(count||0);
+    }
+    void refresh();
+    interval=setInterval(()=>void refresh(),90000);
+    const focus=()=>void refresh();
+    window.addEventListener("focus",focus);
+    return()=>{active=false;clearInterval(interval);window.removeEventListener("focus",focus)};
+  },[operationsRole,pathname]);
+
+  async function signOut() { await supabase.auth.signOut(); setEmployee(""); setReviewAlerts(0); }
   return (
     <header className="site-header">
       <div className="brand-row">
@@ -41,7 +65,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
         {operationsAccess && <Link className={pathname === "/" ? "active" : ""} href="/">Dashboard</Link>}
         {operationsAccess && canManageReports && <Link className={pathname.startsWith("/unassigned-trips") ? "active" : ""} href="/unassigned-trips">Unassigned Trips</Link>}
         {operationsAccess && operationsRole !== "dashboard_fuel_viewer" && <Link className={pathname.startsWith("/contracts") ? "active" : ""} href="/contracts">Contracts</Link>}
-        {operationsAccess && ["admin","uploader","viewer"].includes(operationsRole) && <Link className={pathname.startsWith("/missed-load-reviews") ? "active" : ""} href="/missed-load-reviews">Missed Load Reviews</Link>}
+        {operationsAccess && ["admin","uploader","viewer"].includes(operationsRole) && <Link className={pathname.startsWith("/missed-load-reviews") ? "active" : ""} href="/missed-load-reviews">Missed Load Reviews{reviewAlertsEnabled&&reviewAlerts>0&&<span className="ops-review-notice" title="Saved explanations or corrections requiring review">{reviewAlerts} to check</span>}</Link>}
         {(operationsAccess || fuelAccess || payrollAccess) && !isNoReportsRole && <Link className={pathname.startsWith("/reports") ? "active" : ""} href="/reports">Reports</Link>}
         {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel</Link>}
         {payrollAccess && !isContractsFuelViewer && <Link className={pathname.startsWith("/payroll") ? "active" : ""} href="/payroll">Payroll</Link>}
