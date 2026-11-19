@@ -144,7 +144,7 @@ export default function MissedLoadReviewHub(){
         <td>{l.incomplete_stops}</td>
         <td>{r?labels[r.review_status]:"Awaiting explanation"}{r&&corrections.has(r.reason)?" · "+labels[r.ticket_status]:""}{notes.length>0&&<span className="ops-trip-note-tag" title="Existing explanation from contract and trip notes">Trip note on file</span>}</td>
        </tr>
-       {expanded&&<tr className="ops-inline-detail-row"><td colSpan={7}>  <section className="ops-inline-editor" id="load-review"><div className="panel-heading"><div><h2>Load {current.load_number}</h2><span>{current.operating_date} · Contract {current.contract_number} · Trip {current.trip_number||"—"} · {current.incomplete_stops} missed stops</span></div><button className="hub-secondary-link" onClick={()=>setSelected("")}>Close</button></div>
+       {expanded&&<tr className="ops-inline-detail-row"><td colSpan={7}>{current&&<section className="ops-inline-editor" id="load-review"><div className="panel-heading"><div><h2>Load {current.load_number}</h2><span>{current.operating_date} · Contract {current.contract_number} · Trip {current.trip_number||"—"} · {current.incomplete_stops} missed stops</span></div><button className="hub-secondary-link" onClick={()=>setSelected("")}>Close</button></div>
     {relatedNotes.length>0&&<div className="ops-existing-notes"><strong>Existing trip explanation{relatedNotes.length>1?"s":""}</strong>
       <p className="ops-inline-note">Saved for this trip and date. Check whether it explains this specific load.</p>
       {relatedNotes.map(note=><div className="ops-existing-note" key={note.id}>
@@ -167,7 +167,7 @@ export default function MissedLoadReviewHub(){
     {review&&<div style={{display:"flex",gap:10,marginTop:12,flexWrap:"wrap"}}><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("reviewed")}>Mark reviewed</button><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("follow_up")}>Needs follow-up</button></div>}
     {corrections.has(draft.reason)&&<p className="ops-inline-note">Outlook opens a draft. Update ticket status after sending.</p>}
     {events.length>0&&<details><summary>Recorded change history ({events.length})</summary>{events.map((e,i)=><p key={i}>{new Date(e.changed_at).toLocaleString()} · {e.event_type} · {e.changed_by_email}</p>)}</details>}
-  </section></td></tr>}
+  </section>}</td></tr>}
       </Fragment>;
     })}</tbody></table></div>{!loading&&!shown.length&&<p>No missed loads match these filters.</p>}
   </section>
