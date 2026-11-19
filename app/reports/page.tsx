@@ -45,7 +45,19 @@ export default function ReportsPage() {
     if (active) { setAccess({operations:Boolean(o.data),fuel:Boolean(f.data),payroll:Boolean(p.data)}); setChecking(false); }
   })(); return () => { active=false; }; }, []);
   const visible = sections.filter(s => !s.requires || access[s.requires]);
-  return <main className="page-shell"><header className="page-intro"><div><p className="eyebrow">DT Intelligence Hub</p><h1>Reports Center</h1><p>Click a report, choose the filters, generate it, and print.</p></div></header>
-    {checking ? <div style={{padding:18}}>Loading reports…</div> : <div style={{display:"grid",gap:22}}>{visible.map(section => <section key={section.title} style={{background:"#fff",border:"1px solid #d7e0ea",borderRadius:14,overflow:"hidden"}}><div style={{padding:"16px 18px",background:"#f4f7fa",borderBottom:"1px solid #d7e0ea"}}><h2 style={{margin:0,color:"#0f2747",fontSize:20}}>{section.title}</h2><p style={{margin:"4px 0 0",color:"#607286",fontSize:13}}>{section.description}</p></div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(270px,1fr))",gap:12,padding:14}}>{section.reports.map(report => <Link key={report.name} href={report.href} style={{display:"block",textDecoration:"none",color:"inherit",padding:16,border:"1px solid #d7e0ea",borderRadius:11,background:"#fff"}}><div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center"}}><strong style={{color:"#123b61",fontSize:16}}>{report.name}</strong><span style={{color:"#123b61",fontSize:20}}>→</span></div><div style={{color:"#607286",fontSize:13,lineHeight:1.45,marginTop:6}}>{report.description}</div></Link>)}</div></section>)}</div>}
+  return <main className="page-shell operations-polish">
+    <header className="page-intro"><div><p className="eyebrow">DT Intelligence Hub</p><h1>Reports</h1><p>Select a report to view or print.</p></div></header>
+    {checking ? <div className="panel" style={{padding:18}}>Loading reports…</div> :
+      <div className="ops-catalog">{visible.map(section =>
+        <section key={section.title} className="panel ops-catalog-section">
+          <div className="ops-catalog-head"><h2>{section.title}</h2><p>{section.description}</p></div>
+          <div className="ops-catalog-links">{section.reports.map(report =>
+            <Link key={report.name} href={report.href} className="ops-catalog-link">
+              <div><strong>{report.name}</strong><p>{report.description.replace(/^Choose (dates|effective date|month|two months|period),? ?/i,"Filters: ").replace(/,? then print\.?$/i,"").replace(/,? and print\.?$/i,"")}</p></div>
+              <span className="ops-catalog-arrow" aria-hidden="true">→</span>
+            </Link>
+          )}</div>
+        </section>
+      )}</div>}
   </main>;
 }

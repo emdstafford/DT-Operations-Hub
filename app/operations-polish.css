@@ -1,0 +1,244 @@
+/* Operations visual system, scoped to selected operational pages.
+   Payroll screens and print templates intentionally do not use this class. */
+.operations-polish{
+  --ops-border:#dfe6ed;
+  --ops-muted:#62758a;
+  --ops-navy:#123b61;
+  --ops-radius:12px;
+  color:#223347;
+  font-family:Inter,Arial,sans-serif;
+  font-size:14px;
+  line-height:1.45;
+  padding-top:22px;
+}
+.operations-polish :is(.hub-header,.page-intro){
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:20px;
+  margin-bottom:18px;
+}
+.operations-polish :is(.hub-header,.page-intro) h1{
+  margin:2px 0 4px;
+  font-size:clamp(1.55rem,2.2vw,1.9rem);
+  line-height:1.15;
+  letter-spacing:-.03em;
+  font-weight:700;
+  color:#102f4d;
+}
+.operations-polish :is(.hub-header,.page-intro) .eyebrow{
+  font-size:.66rem;
+  line-height:1.4;
+  font-weight:700;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+  color:#60778e;
+}
+.operations-polish :is(.hub-header,.page-intro) p:not(.eyebrow){
+  margin:4px 0 0;
+  max-width:720px;
+  font-size:.84rem;
+  line-height:1.4;
+  color:var(--ops-muted);
+}
+.operations-polish .panel{
+  border:1px solid var(--ops-border);
+  border-radius:var(--ops-radius);
+  box-shadow:0 2px 8px rgba(12,42,73,.035);
+  background:#fff;
+}
+.operations-polish .panel-heading{
+  min-height:56px;
+  padding:12px 18px;
+  gap:14px;
+}
+.operations-polish .panel-heading h2{
+  font-size:1.05rem;
+  line-height:1.25;
+  margin:0;
+  letter-spacing:-.015em;
+  font-weight:700;
+}
+.operations-polish .panel-heading span{
+  display:block;
+  margin-top:3px;
+  font-size:.76rem;
+  font-weight:400;
+  line-height:1.35;
+  color:var(--ops-muted);
+}
+.operations-polish .panel-heading p{
+  font-size:.79rem;
+  line-height:1.35;
+}
+.operations-polish :is(.primary-link,.upload-button,.hub-secondary-link,.secondary-button){
+  min-height:39px;
+  padding:8px 13px;
+  border-radius:8px;
+  font-size:.82rem;
+  line-height:1.2;
+  font-weight:650;
+  text-decoration:none;
+}
+.operations-polish :is(.primary-link,.upload-button):hover{transform:none}
+.operations-polish :is(input[type="date"],input[type="month"],input[type="search"],input[type="text"],input[type="number"],select,textarea){
+  min-height:39px;
+  border:1px solid #c7d3df;
+  border-radius:8px;
+  background:#fff;
+  padding:8px 10px;
+  color:#24384d;
+  font-family:Inter,Arial,sans-serif;
+  font-size:.83rem;
+  line-height:1.35;
+  accent-color:#123b61;
+}
+.operations-polish textarea{min-height:85px;resize:vertical}
+.operations-polish :is(input,select,textarea):focus-visible{
+  outline:2px solid #3b719e;
+  outline-offset:1px;
+}
+.operations-polish :is(input,select,textarea):disabled{
+  background:#f1f5f8;
+  color:#677789;
+}
+.operations-polish :is(.executive-date-fields,.contract-browser-dates,.fuel-date-fields,.fuel-filter-fields) label,
+.operations-polish :is(.hub-filters,.hub-filters-clean) > label,
+.operations-polish .ops-filter-grid > label,
+.operations-polish .ops-field{
+  display:grid;
+  gap:5px;
+  font-size:.74rem;
+  line-height:1.3;
+  font-weight:650;
+  color:#314f6b;
+}
+.operations-polish .ops-filter-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(145px,1fr));
+  gap:12px;
+  padding:15px 18px 17px;
+  margin:0;
+  align-items:end;
+}
+.operations-polish .ops-filter-grid > label{min-width:0}
+.operations-polish .ops-filter-grid :is(input,select){width:100%;min-width:0}
+.operations-polish .ops-metrics{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:24px;
+}
+.operations-polish .ops-metric{display:grid;gap:2px}
+.operations-polish .ops-metric small{
+  font-size:.69rem;
+  font-weight:600;
+  color:var(--ops-muted);
+}
+.operations-polish .ops-metric strong{
+  font-size:1.25rem;
+  color:#183b5d;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+.operations-polish .ops-inline-note{
+  font-size:.77rem;
+  color:var(--ops-muted);
+  line-height:1.45;
+  margin:8px 0 0;
+}
+.operations-polish .ops-form-section{
+  padding:16px 18px;
+  display:grid;
+  gap:12px;
+}
+.operations-polish .ops-form-section > label{
+  display:grid;
+  gap:6px;
+  font-size:.75rem;
+  font-weight:650;
+  color:#314f6b;
+}
+.operations-polish .ops-form-section textarea{width:100%}
+.operations-polish .ops-summary{
+  margin:0;
+  padding:11px 18px;
+  border-top:1px solid var(--ops-border);
+  background:#fafbfd;
+  font-size:.79rem;
+  color:#546b81;
+}
+.operations-polish .data-table{
+  font-size:.79rem;
+  line-height:1.4;
+}
+.operations-polish .data-table th{
+  padding:10px 12px;
+  font-size:.73rem;
+  font-weight:700;
+  letter-spacing:.01em;
+}
+.operations-polish .data-table td{padding:9px 12px}
+.operations-polish .ops-catalog{display:grid;gap:14px}
+.operations-polish .ops-catalog-section{overflow:hidden}
+.operations-polish .ops-catalog-head{
+  padding:14px 18px 12px;
+  border-bottom:1px solid var(--ops-border);
+  background:#f7f9fb;
+}
+.operations-polish .ops-catalog-head h2{
+  margin:0;
+  font-size:1.05rem;
+  font-weight:700;
+  letter-spacing:-.015em;
+  color:#102f4d;
+}
+.operations-polish .ops-catalog-head p{
+  margin:3px 0 0;
+  font-size:.77rem;
+  color:var(--ops-muted);
+}
+.operations-polish .ops-catalog-links{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(245px,1fr));
+  gap:10px;
+  padding:14px;
+}
+.operations-polish .ops-catalog-link{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  min-height:64px;
+  padding:12px 14px;
+  color:inherit;
+  background:#fff;
+  text-decoration:none;
+  border:1px solid var(--ops-border);
+  border-radius:9px;
+  transition:border-color .16s,background .16s;
+}
+.operations-polish .ops-catalog-link:hover{
+  border-color:#8aa8c3;
+  background:#f6f9fc;
+}
+.operations-polish .ops-catalog-link strong{font-size:.85rem;font-weight:650;color:#183b5d}
+.operations-polish .ops-catalog-link p{margin:3px 0 0;font-size:.73rem;color:var(--ops-muted);line-height:1.3}
+.operations-polish .ops-catalog-link .ops-catalog-arrow{font-size:1.15rem;color:#6985a0}
+.operations-polish .ops-action-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.operations-polish .ops-action-bar button{min-height:39px}
+@media(max-width:700px){
+  .operations-polish{padding-top:16px}
+  .operations-polish :is(.hub-header,.page-intro){align-items:stretch;flex-direction:column;gap:12px;margin-bottom:14px}
+  .operations-polish .panel-heading{padding:12px 14px;align-items:flex-start}
+  .operations-polish .ops-filter-grid{padding:13px 14px;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .operations-polish .ops-catalog-links{grid-template-columns:1fr}
+}
+@media(max-width:440px){
+  .operations-polish .ops-filter-grid{grid-template-columns:1fr}
+}
+@media print{
+  /* UI polishing is deliberately screen-only: existing report and payroll
+     print layouts retain their own established dimensions. */
+  .operations-polish{padding-top:0}
+}

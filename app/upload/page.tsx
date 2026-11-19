@@ -288,7 +288,7 @@ export default function UploadPage() {
   }
 
   return (
-    <main className="page-shell">
+    <main className="page-shell operations-polish">
       <header className="page-intro">
         <div>
           <p className="eyebrow">Upload center</p>
