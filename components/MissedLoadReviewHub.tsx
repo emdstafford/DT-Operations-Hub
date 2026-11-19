@@ -8,10 +8,10 @@ import type {OperationalNote} from "@/components/ContractOperationalNotes";
 
 type Load={operating_date:string;contract_number:string|null;trip_number:string|null;load_number:string;supervisors:string[]|null;incomplete_stops:number};
 export type MissedLoadReview={id:string;operating_date:string;contract_number:string;trip_number:string;load_number:string;reason:string;explanation:string;source:string;reported_by:string;recorded_by_email:string;review_status:string;ticket_status:string;updated_at:string};
-const reasons=["Driver late","Mechanical breakdown","USPS delay","Traffic or weather","Missed stop / route issue","Other","Driver Name Change","Incorrect Times","Incorrect Frequency","Incorrect NASS Code","Incorrect Contract/Trip Assignment"];
-const corrections=new Set(reasons.slice(6));
+const reasons=["Driver late","Mechanical breakdown","USPS delay","Waiting on USPS","Traffic or weather","Missed stop / route issue","Other","Driver Name Change","Incorrect Times","Incorrect Frequency","Incorrect NASS Code","Incorrect Contract/Trip Assignment"];
+const corrections=new Set(["Driver Name Change","Incorrect Times","Incorrect Frequency","Incorrect NASS Code","Incorrect Contract/Trip Assignment"]);
 const key=(x:Load|MissedLoadReview)=>[x.operating_date,normalizeTripContract(x.contract_number||""),(x.trip_number||"").trim(),x.load_number.trim()].join("|");
-const labels:Record<string,string>={needs_review:"Needs Gary's review",reviewed:"Reviewed",follow_up:"Follow-up needed",not_needed:"Not needed",needs_ticket:"Ticket needed",ticket_sent:"Ticket sent",resolved:"Correction resolved"};
+const labels:Record<string,string>={needs_review:"Not reviewed",reviewed:"IT Reviewed",follow_up:"Needs follow-up",not_needed:"Not needed",needs_ticket:"Ticket needed",ticket_sent:"Ticket sent",resolved:"Correction resolved"};
 const sources:Record<string,string>={phone:"Phone",text:"Text",email:"Email",in_person:"In person",other:"Other",supervisor_portal:"Supervisor portal"};
 type Draft={reason:string;explanation:string;source:string;reported_by:string;review_status:string;ticket_status:string};
 const fresh=(r?:MissedLoadReview):Draft=>({reason:r?.reason||"Driver late",explanation:r?.explanation||"",source:r?.source||"phone",reported_by:r?.reported_by||"",review_status:r?.review_status||"needs_review",ticket_status:r?.ticket_status||"not_needed"});
@@ -23,6 +23,7 @@ export default function MissedLoadReviewHub(){
  const [contract,setContract]=useState(""),[supervisor,setSupervisor]=useState(""),[reasonFilter,setReasonFilter]=useState(""),[status,setStatus]=useState(""),[sort,setSort]=useState("date");
  const [selected,setSelected]=useState(""),[draft,setDraft]=useState<Draft>(fresh()),[events,setEvents]=useState<{changed_at:string;changed_by_email:string;event_type:string}[]>([]);
  const [saveStatus,setSaveStatus]=useState<"idle"|"unsaved"|"saving"|"saved"|"error">("idle");
+ const [prefilledFromTrip,setPrefilledFromTrip]=useState(false);
  const lastSaved=useRef("");
  const saveTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const loadData=useCallback(async()=>{
@@ -69,16 +70,33 @@ export default function MissedLoadReviewHub(){
  const grouped=useMemo(()=>{const map=new Map<string,Load>();loads.forEach(l=>{const id=key(l),old=map.get(id);if(old)old.incomplete_stops+=Number(l.incomplete_stops||0);else map.set(id,{...l,contract_number:normalizeTripContract(l.contract_number||""),supervisors:l.supervisors||[]})});return [...map.values()]},[loads]);
  const allContracts=[...new Set(grouped.map(l=>l.contract_number||""))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
  const allSupervisors=[...new Set(grouped.flatMap(l=>l.supervisors||[]))].sort();
- const shown=grouped.filter(l=>{const r=byKey.get(key(l));return (!contract||l.contract_number===contract)&&(!supervisor||(l.supervisors||[]).includes(supervisor))&&(!reasonFilter||(reasonFilter==="unexplained"?!r:r?.reason===reasonFilter))&&(!status||(status==="unexplained"?!r:status==="existing_note"?matchingNotes(l).length>0:status.startsWith("ticket:")?r?.ticket_status===status.slice(7):r?.review_status===status))}).sort((a,b)=>sort==="missed"?b.incomplete_stops-a.incomplete_stops:sort==="contract"?(a.contract_number||"").localeCompare(b.contract_number||"",undefined,{numeric:true}):b.operating_date.localeCompare(a.operating_date));
+ const waitingOnUsps=(l:Load)=>{
+    const saved=byKey.get(key(l));
+    if(saved)return saved.reason==="Waiting on USPS";
+    return matchingNotes(l).some(n=>n.status==="waiting_on_usps");
+ };
+ const shown=grouped.filter(l=>{const r=byKey.get(key(l));return (!contract||l.contract_number===contract)&&(!supervisor||(l.supervisors||[]).includes(supervisor))&&(!reasonFilter||(reasonFilter==="unexplained"?!r:r?.reason===reasonFilter))&&(!status||(status==="unexplained"?!r:status==="existing_note"?matchingNotes(l).length>0:status==="waiting_usps"?waitingOnUsps(l):status.startsWith("ticket:")?r?.ticket_status===status.slice(7):r?.review_status===status))}).sort((a,b)=>sort==="missed"?b.incomplete_stops-a.incomplete_stops:sort==="contract"?(a.contract_number||"").localeCompare(b.contract_number||"",undefined,{numeric:true}):b.operating_date.localeCompare(a.operating_date));
+ const waitingCount=shown.filter(waitingOnUsps).length;
+ const waitingMissed=shown.filter(waitingOnUsps).reduce((sum,l)=>sum+l.incomplete_stops,0);
  const current=grouped.find(l=>key(l)===selected),review=current?byKey.get(key(current)):undefined;
  const relatedNotes=current?matchingNotes(current):[];
  async function choose(l:Load){
   if(saving)return;
   if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;}
-  if(current&&draft.explanation.trim()&&JSON.stringify(draft)!==lastSaved.current)await persist(current,review,draft);
-  if(selected===key(l)){setSelected("");setSaveStatus("idle");return;}
+  if(current&&draft.explanation.trim()&&JSON.stringify(draft)!==lastSaved.current){const ok=await persist(current,review,draft);if(!ok)return;}
+  if(selected===key(l)){setSelected("");setSaveStatus("idle");setPrefilledFromTrip(false);return;}
   const next=byKey.get(key(l)),initial=fresh(next);
+  const note=!next?matchingNotes(l).find(n=>n.status==="waiting_on_usps"&&n.note.trim()):undefined;
+  if(note){
+    initial.reason="Waiting on USPS";
+    initial.explanation=note.note.trim();
+    initial.source="other";
+    initial.reported_by="Existing contract/trip note";
+  }
+  // Show the existing explanation without claiming that a load-specific review
+  // has been submitted. Supervisors can confirm it or enter a different cause.
   lastSaved.current=JSON.stringify(initial);
+  setPrefilledFromTrip(Boolean(note));
   setSelected(key(l));setDraft(initial);setNotice("");setEvents([]);setSaveStatus("idle");
  }
  useEffect(()=>{if(!review)return;let alive=true;void supabase.from("missed_load_review_events").select("changed_at,changed_by_email,event_type").eq("review_id",review.id).order("changed_at",{ascending:false}).limit(30).then(res=>{if(alive&&!res.error)setEvents(res.data||[])});return()=>{alive=false}},[review?.id,review?.updated_at]);
@@ -91,6 +109,7 @@ export default function MissedLoadReviewHub(){
     :await supabase.from("missed_load_reviews").insert({...changes,operating_date:target.operating_date,contract_number:target.contract_number,trip_number:(target.trip_number||"").trim(),load_number:target.load_number.trim(),supervisors:target.supervisors||[]}).select("*").single();
    if(result.error){setError(result.error.message);setSaveStatus("error");setSaving(false);return false;}
    const saved=result.data as MissedLoadReview;
+   setPrefilledFromTrip(false);
    setReviews(prev=>[saved,...prev.filter(r=>r.id!==saved.id)]);
    lastSaved.current=JSON.stringify(fresh(saved));
    setSaveStatus("saved");setSaving(false);
@@ -130,11 +149,11 @@ export default function MissedLoadReviewHub(){
     <label>Supervisor <select value={supervisor} onChange={e=>setSupervisor(e.target.value)}><option value="">All</option>{allSupervisors.map(s=><option key={s}>{s}</option>)}</select></label>
     <label>Contract <select value={contract} onChange={e=>setContract(e.target.value)}><option value="">All</option>{allContracts.map(s=><option key={s}>{s}</option>)}</select></label>
     <label>Reason <select value={reasonFilter} onChange={e=>setReasonFilter(e.target.value)}><option value="">All</option><option value="unexplained">Awaiting explanation</option>{reasons.map(s=><option key={s}>{s}</option>)}</select></label>
-    <label>Status <select value={status} onChange={e=>setStatus(e.target.value)}><option value="">All</option><option value="unexplained">Awaiting explanation</option><option value="existing_note">Existing trip note</option>{Object.entries(labels).filter(([id])=>!["not_needed"].includes(id)).map(([id,text])=><option key={id} value={["needs_ticket","ticket_sent","resolved"].includes(id)?"ticket:"+id:id}>{text}</option>)}</select></label>
+    <label>Status <select value={status} onChange={e=>setStatus(e.target.value)}><option value="">All</option><option value="unexplained">Awaiting explanation</option><option value="existing_note">Existing trip note</option><option value="waiting_usps">Waiting on USPS</option>{Object.entries(labels).filter(([id])=>!["not_needed"].includes(id)).map(([id,text])=><option key={id} value={["needs_ticket","ticket_sent","resolved"].includes(id)?"ticket:"+id:id}>{text}</option>)}</select></label>
     <label>Sort by <select value={sort} onChange={e=>setSort(e.target.value)}><option value="date">Newest</option><option value="contract">Contract</option><option value="missed">Most missed stops</option></select></label>
    </div>
    {error&&<div className="alert alert-error">{error}</div>}{notice&&<div className="alert">{notice}</div>}
-   <p className="ops-summary"><strong>{shown.length}</strong> missed loads · <strong>{shown.filter(l=>byKey.has(key(l))).length}</strong> explained · <strong>{shown.filter(l=>!byKey.has(key(l))).length}</strong> awaiting explanation</p>
+   <p className="ops-summary"><strong>{shown.length}</strong> missed loads · <strong>{shown.filter(l=>byKey.has(key(l))).length}</strong> explained · <strong>{shown.filter(l=>!byKey.has(key(l))).length}</strong> awaiting explanation · <strong>{waitingCount}</strong> waiting on USPS ({waitingMissed.toLocaleString()} missed stops)</p>
    <div className="table-scroll"><table className="data-table"><thead><tr><th>Date</th><th>Contract</th><th>Supervisor</th><th>Trip</th><th>Load</th><th>Missed</th><th>Status</th></tr></thead><tbody>{shown.map(l=>{
       const r=byKey.get(key(l)),notes=matchingNotes(l),expanded=selected===key(l);
       return <Fragment key={key(l)}>
@@ -143,7 +162,7 @@ export default function MissedLoadReviewHub(){
         <td>{l.trip_number||"—"}</td>
         <td><button className="ops-inline-open" type="button" aria-expanded={expanded} onClick={()=>void choose(l)}>{l.load_number} <span aria-hidden="true">{expanded?"▴":"▾"}</span></button></td>
         <td>{l.incomplete_stops}</td>
-        <td>{r?labels[r.review_status]:"Awaiting explanation"}{r&&corrections.has(r.reason)?" · "+labels[r.ticket_status]:""}{notes.length>0&&<span className="ops-trip-note-tag" title="Existing explanation from contract and trip notes">Trip note on file</span>}</td>
+        <td>{r?labels[r.review_status]:"Awaiting explanation"}{r&&corrections.has(r.reason)?" · "+labels[r.ticket_status]:""}{waitingOnUsps(l)&&<span className="ops-trip-note-tag">Waiting on USPS</span>}{notes.length>0&&<span className="ops-trip-note-tag" title="Existing explanation from contract and trip notes">Trip note on file</span>}</td>
        </tr>
        {expanded&&<tr className="ops-inline-detail-row"><td colSpan={7}>{current&&<section className="ops-inline-editor" id="load-review"><div className="panel-heading"><div><h2>Load {current.load_number}</h2><span>{current.operating_date} · Contract {current.contract_number} · Trip {current.trip_number||"—"} · {current.incomplete_stops} missed stops</span></div><button className="hub-secondary-link" disabled={saving} onClick={()=>void choose(current)}>Close</button></div>
     {relatedNotes.length>0&&<div className="ops-existing-notes"><strong>Existing trip explanation{relatedNotes.length>1?"s":""}</strong>
@@ -151,21 +170,21 @@ export default function MissedLoadReviewHub(){
       {relatedNotes.map(note=><div className="ops-existing-note" key={note.id}>
         <p>{note.note}</p>
         <small>{note.status.replaceAll("_"," ")} · From {note.effective_start}{note.effective_end?" through "+note.effective_end:" onward"}</small>
-        {canEdit&&!review&&<button type="button" className="hub-secondary-link" onClick={()=>setDraft(d=>({...d,reason:"Other",explanation:note.note,source:"other",reported_by:"Existing contract/trip note"}))}>Use for this load</button>}
+        {canEdit&&!review&&<button type="button" className="hub-secondary-link" onClick={()=>setDraft(d=>({...d,reason:note.status==="waiting_on_usps"?"Waiting on USPS":"Other",explanation:note.note,source:"other",reported_by:"Existing contract/trip note"}))}>Use for this load</button>}
       </div>)}
     </div>}
     <div className="ops-filter-grid">
      <label>Reason <select disabled={!canEdit} value={draft.reason} onChange={e=>{const reason=e.target.value;setDraft(d=>({...d,reason,ticket_status:corrections.has(reason)?d.ticket_status==="not_needed"?"needs_ticket":d.ticket_status:"not_needed"}))}}>{reasons.map(s=><option key={s}>{s}</option>)}</select></label>
      <label>Source <select disabled={!canEdit} value={draft.source} onChange={e=>setDraft(d=>({...d,source:e.target.value}))}>{Object.entries(sources).map(([id,text])=><option key={id} value={id}>{text}</option>)}</select></label>
      <label>Provided by <input disabled={!canEdit} value={draft.reported_by} onChange={e=>setDraft(d=>({...d,reported_by:e.target.value}))} placeholder="Supervisor name"/></label>
-     <label>Gary's review <select disabled={!canEdit} value={draft.review_status} onChange={e=>setDraft(d=>({...d,review_status:e.target.value}))}>{["needs_review","reviewed","follow_up"].map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label>
      {corrections.has(draft.reason)&&<label>Ticket status <select disabled={!canEdit} value={draft.ticket_status} onChange={e=>setDraft(d=>({...d,ticket_status:e.target.value}))}>{["needs_ticket","ticket_sent","resolved"].map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label>}
     </div>
     <label className="ops-field" style={{display:"grid",gap:6,padding:"0 18px"}}>Explanation<textarea rows={3} disabled={!canEdit} value={draft.explanation} onChange={e=>setDraft(d=>({...d,explanation:e.target.value}))} placeholder="Explain this individual missed load and any follow-up required."/></label>
-    <p className={"ops-save-status ops-save-"+saveStatus} aria-live="polite">{saveStatus==="saving"?"Saving…":saveStatus==="saved"?"Saved automatically":saveStatus==="unsaved"?"Saving shortly…":saveStatus==="error"?"Save failed — check the error above":!draft.explanation.trim()?"Enter an explanation to start autosaving":""}</p>
+    {prefilledFromTrip&&!review&&<div className="ops-existing-notes"><p className="ops-inline-note">Waiting on USPS explanation populated from the existing trip note. Confirm it applies to this load.</p><button type="button" className="hub-secondary-link" disabled={saving||!canEdit} onClick={()=>void persist(current,undefined,draft)}>Confirm for this load</button></div>}
+    <p className={"ops-save-status ops-save-"+saveStatus} aria-live="polite">{saveStatus==="saving"?"Saving…":saveStatus==="saved"?"Saved automatically":saveStatus==="unsaved"?"Saving shortly…":saveStatus==="error"?"Save failed — check the error above":prefilledFromTrip?"Prefilled from trip note":!draft.explanation.trim()?"Enter an explanation to start autosaving":""}</p>
     {review&&<p className="text-muted">Entered by {review.recorded_by_email} · Last updated {new Date(review.updated_at).toLocaleString()}</p>}
     <div style={{display:"flex",flexWrap:"wrap",gap:10,marginTop:12}}>{corrections.has(draft.reason)&&<button className="hub-secondary-link" onClick={ticket}>Open Outlook support ticket</button>}</div>
-    {review&&<div style={{display:"flex",gap:10,marginTop:12,flexWrap:"wrap"}}><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("reviewed")}>Mark reviewed</button><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("follow_up")}>Needs follow-up</button></div>}
+    {review&&<div style={{display:"flex",gap:10,marginTop:12,flexWrap:"wrap"}}><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("reviewed")}>Mark IT Reviewed</button><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("follow_up")}>Needs Follow-up</button></div>}
     {corrections.has(draft.reason)&&<p className="ops-inline-note">Outlook opens a draft. Update ticket status after sending.</p>}
     {events.length>0&&<details><summary>Recorded change history ({events.length})</summary>{events.map((e,i)=><p key={i}>{new Date(e.changed_at).toLocaleString()} · {e.event_type} · {e.changed_by_email}</p>)}</details>}
   </section>}</td></tr>}
