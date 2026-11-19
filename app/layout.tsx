@@ -1,4 +1,5 @@
 import "./globals.css";
+import "./operations-polish.css";
 import type { Metadata } from "next";
 import AuthGate from "@/components/AuthGate";
 import { UploadHandoffProvider } from "@/components/UploadHandoff";
