@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import WeeklyUnassignedTrips, { includeUnassignedContract, normalizeTripContract, type UnassignedTripRow } from "@/components/WeeklyUnassignedTrips";
 import type { OperationalNote } from "@/components/ContractOperationalNotes";
+import type { MissedLoadReview } from "@/components/MissedLoadReviewHub";
 import DashboardFuelChecks from "@/components/DashboardFuelChecks";
 import { useAccessRole } from "@/components/AccessRole";
 import PeriodAnnotations from "@/components/PeriodAnnotations";
@@ -34,7 +35,7 @@ function unassignedWeekCoverage(rows:UnassignedTripRow[],start:string,end:string
  return `Saved Saturday–Friday weeks included in full: ${weeks.join("; ")}. Weekly totals may include days outside the selected report dates.`;
 }
 
-function filteredEmail(data: HubData, start: string, end: string, supervisors: string[], contracts: string[], showCompanyRankings: boolean, includeSupervisorDetail = false, includeCongratulations = true, operationalNotes: OperationalNote[] = [], unassignedTrips: UnassignedTripRow[] = []) {
+function filteredEmail(data: HubData, start: string, end: string, supervisors: string[], contracts: string[], showCompanyRankings: boolean, includeSupervisorDetail = false, includeCongratulations = true, operationalNotes: OperationalNote[] = [], unassignedTrips: UnassignedTripRow[] = [], missedLoadReviews: MissedLoadReview[] = [], includeAllExplanations = false) {
   const header = "background:#123b61!important;background-color:#123b61!important;color:#ffffff!important;padding:8px;border:1px solid #d6dde3;text-align:left";
   const cell = "padding:7px 9px;border:1px solid #d6dde3;text-align:right";
   const nameCell = `${cell};text-align:left;font-weight:600`;
@@ -64,9 +65,14 @@ function filteredEmail(data: HubData, start: string, end: string, supervisors: s
     const counts=supervisorCounts(supervisor);
     return `<td style="${cell}">${counts.hasData?number(counts.regular):"—"}</td><td style="${cell}">${counts.hasData?number(counts.extra):"—"}</td>`;
   };
+  const loadCommentRows=(contract:string,columns:number)=>missedLoadReviews
+    .filter(item=>normalizeTripContract(item.contract_number)===normalizeTripContract(contract))
+    .filter(item=>includeAllExplanations || item.review_status!=="reviewed" || (item.ticket_status!=="not_needed"&&item.ticket_status!=="resolved"))
+    .sort((a,b)=>a.operating_date.localeCompare(b.operating_date)||a.trip_number.localeCompare(b.trip_number)||a.load_number.localeCompare(b.load_number))
+    .map(item=>`<tr><td colspan="${columns}" style="padding:5px 10px 6px 22px;border:1px solid #d6dde3;border-top:0;background:#f6f8fa;color:#243746;font-size:10px;line-height:1.3"><strong style="color:#123b61">${escapeHtml(item.operating_date)} · Trip ${escapeHtml(item.trip_number||"—")} · Load ${escapeHtml(item.load_number)} · ${escapeHtml(item.reason)}</strong> — ${escapeHtml(item.explanation)}<br><span style="color:#667787">From ${escapeHtml(item.reported_by||item.recorded_by_email)} (${escapeHtml(item.source.replaceAll("_"," "))}) · ${escapeHtml(item.review_status.replaceAll("_"," "))}${item.ticket_status!=="not_needed"?" · "+escapeHtml(item.ticket_status.replaceAll("_"," ")):""}</span></td></tr>`).join("");
   const contractNoteRows = (contract: string, columns: number) => operationalNotes
     .filter((item) => item.contract_number === contract)
-    .map((item) => `<tr><td colspan="${columns}" style="padding:7px 10px 9px 22px;border:1px solid #d6dde3;border-top:0;background:#eef2f5;color:#243746;font-size:10px;line-height:1.4"><strong style="color:#123b61">${escapeHtml(operationalStatusLabel(item.status))}${item.trip_number ? ` · Trip ${escapeHtml(item.trip_number)}` : " · Entire contract"}</strong> — ${escapeHtml(item.note)}<br><span style="color:#667787">Applies ${item.effective_start}${item.effective_end ? ` through ${item.effective_end}` : " to current"}${item.requested_on ? ` · USPS change requested ${item.requested_on}` : ""}</span></td></tr>`).join("");
+    .map((item) => `<tr><td colspan="${columns}" style="padding:7px 10px 9px 22px;border:1px solid #d6dde3;border-top:0;background:#eef2f5;color:#243746;font-size:10px;line-height:1.4"><strong style="color:#123b61">${escapeHtml(operationalStatusLabel(item.status))}${item.trip_number ? ` · Trip ${escapeHtml(item.trip_number)}` : " · Entire contract"}</strong> — ${escapeHtml(item.note)}<br><span style="color:#667787">Applies ${item.effective_start}${item.effective_end ? ` through ${item.effective_end}` : " to current"}${item.requested_on ? ` · USPS change requested ${item.requested_on}` : ""}</span></td></tr>`).join("")+loadCommentRows(contract,columns);
   const supervisorRows = data.supervisors.map((row, index) => `<tr style="${showCompanyRankings && index < 5 ? "background:#c9e7cf;color:#174e27" : ""}"><td style="${nameCell}">${escapeHtml(row.supervisor || "Unassigned")}</td>${supervisorCountCells(row.supervisor??"")}<td style="${cell}">${number(row.total_stops)}</td><td style="${cell}">${number(row.incomplete_stops)}</td><td style="${cell}">${percent(row.completion_percent)}</td></tr>`).join("");
   const contractRows = data.contracts.map((row, index) => { const contract = row.contract_number || "Unmapped"; return `<tr style="${showCompanyRankings && index < 10 ? "background:#f0c8cd;color:#742430" : ""}"><td style="${nameCell}">${escapeHtml(contract)}</td>${countCells(contract)}<td style="${cell}">${number(row.total_stops)}</td><td style="${cell}">${number(row.completed_stops)}</td><td style="${cell}">${number(row.incomplete_stops)}</td><td style="${cell}">${percent(row.completion_percent)}</td></tr>${contractNoteRows(contract, 7)}`; }).join("");
   const highestSupervisor = data.supervisors.find((row) => row.supervisor && row.supervisor !== "Unassigned");
@@ -136,6 +142,9 @@ export default function DashboardHub() {
   const [comparisonError, setComparisonError] = useState("");
   const [previousPeriod, setPreviousPeriod] = useState<{ start: string; end: string } | null>(null);
   const [operationalNotes, setOperationalNotes] = useState<OperationalNote[]>([]);
+  const [missedLoadReviews,setMissedLoadReviews]=useState<MissedLoadReview[]>([]);
+  const [loadReviewsReady,setLoadReviewsReady]=useState(false);
+  const [includeAllExplanations,setIncludeAllExplanations]=useState(false);
   const [dashboardView, setDashboardView] = useState<"overview" | "investigate">("overview");
   const [investigateTab, setInvestigateTab] = useState<"contracts" | "supervisors" | "geofences" | "comparison">("contracts");
   const reportingContracts=contractOptions.filter(contract=>start<="2026-11-13"||normalizeTripContract(contract)!=="3773G");
@@ -212,6 +221,22 @@ export default function DashboardHub() {
       if (!result.error) setOperationalNotes((result.data ?? []) as OperationalNote[]);
     })();
   }, [initialized, start, end]);
+
+  useEffect(()=>{
+    if(!initialized)return;
+    let live=true;setLoadReviewsReady(false);
+    void (async()=>{
+      const results:MissedLoadReview[]=[];
+      for(let offset=0;offset<10000;offset+=1000){
+        const res=await supabase.from("missed_load_reviews").select("*").gte("operating_date",start).lte("operating_date",end).order("operating_date").range(offset,offset+999);
+        if(res.error){if(live){setError("Missed-load explanations could not load: "+res.error.message);setLoadReviewsReady(false);}return;}
+        results.push(...(res.data??[]) as MissedLoadReview[]);
+        if((res.data?.length??0)<1000)break;
+      }
+      if(live){setMissedLoadReviews(results);setLoadReviewsReady(true);}
+    })();
+    return()=>{live=false};
+  },[initialized,start,end]);
 
   useEffect(() => { void (async () => {
     const result = await supabase.from("report_history").select("data,period_start,period_end")
@@ -356,8 +381,8 @@ export default function DashboardHub() {
   }
 
   async function copyEmail() {
-    if (!unassignedReady) {setError("Weekly unassigned trip counts have not loaded. Please retry once the counts appear.");return;}
-    const email = filteredEmail(data, start, end, selectedSupervisors, selectedContracts, isEntireReport, false, true, [], unassignedRows);
+    if (!unassignedReady||!loadReviewsReady) {setError("Report details are still loading. Please retry once all counts and explanations are ready.");return;}
+    const email = filteredEmail(data, start, end, selectedSupervisors, selectedContracts, isEntireReport, false, true, operationalNotes, unassignedRows, missedLoadReviews, includeAllExplanations);
     if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
       await navigator.clipboard.write([new ClipboardItem({ "text/plain": new Blob([email.text], { type: "text/plain" }), "text/html": new Blob([email.html], { type: "text/html" }) })]);
     } else await navigator.clipboard.writeText(email.text);
@@ -366,8 +391,8 @@ export default function DashboardHub() {
   }
 
   function printSupervisorContractReport() {
-    if (!unassignedReady) {setError("Weekly unassigned trip counts have not loaded. Please retry once the counts appear.");return;}
-    const report = filteredEmail(data, start, end, selectedSupervisors, selectedContracts, isEntireReport, true, false, operationalNotes, unassignedRows);
+    if (!unassignedReady||!loadReviewsReady) {setError("Report details are still loading. Please retry once all counts and explanations are ready.");return;}
+    const report = filteredEmail(data, start, end, selectedSupervisors, selectedContracts, isEntireReport, true, false, operationalNotes, unassignedRows, missedLoadReviews, includeAllExplanations);
     const printWindow = window.open("", "_blank");
     if (!printWindow) { setError("Allow pop-ups for DT Intelligence Hub to print the report."); return; }
     printWindow.document.write(`<!doctype html><html><head><title>Supervisor and Contract Report ${start} to ${end}</title><style>@page{size:portrait;margin:.4in}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{margin:0;background:white}table{font-size:9px}th,td{padding:5px 6px!important}h2,h3{break-after:avoid}thead{display:table-header-group}section{break-inside:avoid;page-break-inside:avoid}</style></head><body>${report.html}<script>window.onload=()=>{window.print()}<\/script></body></html>`);
@@ -510,7 +535,8 @@ export default function DashboardHub() {
     <PeriodAnnotations start={start} end={end} />
     {error && <div className="alert alert-error">{error.includes("dashboard_hub_filtered") ? "The dashboard database update still needs to be installed in Supabase." : error}</div>}
     {loading ? <section className="hub-loading">Loading your operations picture…</section> : <>
-      {!dashboardFuelOnly && <section className="dashboard-email-bar"><div><strong>Report actions</strong><span>{displayDate(start)} – {displayDate(end)}{selectedSupervisors.length || selectedContracts.length ? " with selected filters" : " · Company-wide"}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => void printPerformanceReview()} disabled={reviewLoading||!unassignedReady}>{reviewLoading ? "Building review…" : "Print Performance Review"}</button><button className="hub-secondary-link" onClick={printSupervisorContractReport} disabled={!unassignedReady}>Print Supervisor &amp; Contract Report</button><button className="primary-link" onClick={copyEmail} disabled={!unassignedReady}>{copied ? "Email report copied!" : "Copy Email Report"}</button></div></section>}
+      {!dashboardFuelOnly && <label className="hub-secondary-link" style={{display:"inline-flex",alignItems:"center",gap:8,marginBottom:10}}><input type="checkbox" checked={includeAllExplanations} onChange={event=>setIncludeAllExplanations(event.target.checked)}/>Include all saved load explanations in print/email (default: unresolved only)</label>}
+      {!dashboardFuelOnly && <section className="dashboard-email-bar"><div><strong>Report actions</strong><span>{displayDate(start)} – {displayDate(end)}{selectedSupervisors.length || selectedContracts.length ? " with selected filters" : " · Company-wide"}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => void printPerformanceReview()} disabled={reviewLoading||!unassignedReady}>{reviewLoading ? "Building review…" : "Print Performance Review"}</button><button className="hub-secondary-link" onClick={printSupervisorContractReport} disabled={!unassignedReady||!loadReviewsReady}>Print Supervisor &amp; Contract Report</button><button className="primary-link" onClick={copyEmail} disabled={!unassignedReady||!loadReviewsReady}>{copied ? "Email report copied!" : "Copy Email Report"}</button></div></section>}
       <section className="metric-grid">
         <article className="metric-card metric-primary"><span>Completion</span><strong>{percent(data.totals.completion_percent)}</strong></article>
         <article className="metric-card"><span>Total stops</span><strong>{number(data.totals.total_stops)}</strong></article>
