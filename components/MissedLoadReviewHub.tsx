@@ -48,7 +48,7 @@ export default function MissedLoadReviewHub(){
  const allSupervisors=[...new Set(grouped.flatMap(l=>l.supervisors||[]))].sort();
  const shown=grouped.filter(l=>{const r=byKey.get(key(l));return (!contract||l.contract_number===contract)&&(!supervisor||(l.supervisors||[]).includes(supervisor))&&(!reasonFilter||(reasonFilter==="unexplained"?!r:r?.reason===reasonFilter))&&(!status||(status==="unexplained"?!r:status.startsWith("ticket:")?r?.ticket_status===status.slice(7):r?.review_status===status))}).sort((a,b)=>sort==="missed"?b.incomplete_stops-a.incomplete_stops:sort==="contract"?(a.contract_number||"").localeCompare(b.contract_number||"",undefined,{numeric:true}):b.operating_date.localeCompare(a.operating_date));
  const current=grouped.find(l=>key(l)===selected),review=current?byKey.get(key(current)):undefined;
- function choose(l:Load){setSelected(key(l));setDraft(fresh(byKey.get(key(l))));setNotice("");setEvents([])}
+ function choose(l:Load){setSelected(key(l));setDraft(fresh(byKey.get(key(l))));setNotice("");setEvents([]);window.setTimeout(()=>document.getElementById("load-review")?.scrollIntoView({behavior:"smooth",block:"start"}),0)}
  useEffect(()=>{if(!review)return;let alive=true;void supabase.from("missed_load_review_events").select("changed_at,changed_by_email,event_type").eq("review_id",review.id).order("changed_at",{ascending:false}).limit(30).then(res=>{if(alive&&!res.error)setEvents(res.data||[])});return()=>{alive=false}},[review?.id,review?.updated_at]);
  async function save(){
   if(!canEdit||!current)return;
@@ -57,6 +57,14 @@ export default function MissedLoadReviewHub(){
   const changes={...draft,reported_by:draft.reported_by.trim(),explanation:draft.explanation.trim(),ticket_status:corrections.has(draft.reason)?draft.ticket_status==="not_needed"?"needs_ticket":draft.ticket_status:"not_needed"};
   const result=review?await supabase.from("missed_load_reviews").update(changes).eq("id",review.id).select("*").single():await supabase.from("missed_load_reviews").insert({...changes,operating_date:current.operating_date,contract_number:current.contract_number,trip_number:(current.trip_number||"").trim(),load_number:current.load_number.trim(),supervisors:current.supervisors||[]}).select("*").single();
   if(result.error)setError(result.error.message);else{const saved=result.data as MissedLoadReview;setReviews(prev=>[saved,...prev.filter(r=>r.id!==saved.id)]);setDraft(fresh(saved));setNotice("Explanation saved without changing USPS data.")}
+  setSaving(false);
+ }
+ async function markReviewed(value:"needs_review"|"reviewed"|"follow_up"){
+  if(!review||!canView)return;
+  setSaving(true);setError("");setNotice("");
+  const res=await supabase.rpc("set_missed_load_review_status",{p_review_id:review.id,p_status:value});
+  if(res.error)setError(res.error.message);
+  else{setReviews(prev=>prev.map(r=>r.id===review.id?{...r,review_status:value,updated_at:new Date().toISOString()}:r));setDraft(d=>({...d,review_status:value}));setNotice("Management review status saved.");}
   setSaving(false);
  }
  function ticket(){
@@ -92,6 +100,7 @@ export default function MissedLoadReviewHub(){
     <label>Explanation<textarea rows={3} disabled={!canEdit} value={draft.explanation} onChange={e=>setDraft(d=>({...d,explanation:e.target.value}))} placeholder="Explain this individual missed load and any follow-up required."/></label>
     {review&&<p className="text-muted">Entered by {review.recorded_by_email} · Last updated {new Date(review.updated_at).toLocaleString()}</p>}
     <div style={{display:"flex",flexWrap:"wrap",gap:10,marginTop:12}}>{canEdit&&<button className="primary-link" disabled={saving} onClick={()=>void save()}>{saving?"Saving…":review?"Update explanation":"Save explanation"}</button>}{corrections.has(draft.reason)&&<button className="hub-secondary-link" onClick={ticket}>Open Outlook support ticket</button>}</div>
+    {review&&<div style={{display:"flex",gap:10,marginTop:12,flexWrap:"wrap"}}><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("reviewed")}>Mark reviewed</button><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("follow_up")}>Needs follow-up</button></div>}
     {corrections.has(draft.reason)&&<p>Opening the Outlook draft does not mean it was sent. Update the ticket status after sending it to itsupport@dtexpress.net.</p>}
     {events.length>0&&<details><summary>Recorded change history ({events.length})</summary>{events.map((e,i)=><p key={i}>{new Date(e.changed_at).toLocaleString()} · {e.event_type} · {e.changed_by_email}</p>)}</details>}
   </section>}
