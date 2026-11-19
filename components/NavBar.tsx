@@ -41,6 +41,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
         {operationsAccess && <Link className={pathname === "/" ? "active" : ""} href="/">Dashboard</Link>}
         {operationsAccess && canManageReports && <Link className={pathname.startsWith("/unassigned-trips") ? "active" : ""} href="/unassigned-trips">Unassigned Trips</Link>}
         {operationsAccess && operationsRole !== "dashboard_fuel_viewer" && <Link className={pathname.startsWith("/contracts") ? "active" : ""} href="/contracts">Contracts</Link>}
+        {operationsAccess && ["admin","uploader","viewer"].includes(operationsRole) && <Link className={pathname.startsWith("/missed-load-reviews") ? "active" : ""} href="/missed-load-reviews">Missed Load Reviews</Link>}
         {(operationsAccess || fuelAccess || payrollAccess) && !isNoReportsRole && <Link className={pathname.startsWith("/reports") ? "active" : ""} href="/reports">Reports</Link>}
         {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel</Link>}
         {payrollAccess && !isContractsFuelViewer && <Link className={pathname.startsWith("/payroll") ? "active" : ""} href="/payroll">Payroll</Link>}
