@@ -73,7 +73,7 @@ export default function MissedLoadReviewHub(){
   window.location.href="mailto:itsupport@dtexpress.net?subject="+encodeURIComponent("DT Hub correction | "+draft.reason+" | "+current.contract_number)+"&body="+encodeURIComponent(lines.join("\n"));
  }
  if(!canView)return <main className="page-shell"><h1>Missed-load reviews</h1><p>Access is restricted to authorized operations reviewers.</p></main>;
- return <main className="page-shell dashboard-page">
+ return <main className="page-shell dashboard-page operations-polish">
   <header className="hub-header"><div><p className="eyebrow">DT Intelligence Hub</p><h1>Missed-load reviews</h1><p>Only loads with missed stops are shown. Explanations never change completion percentages.</p></div><Link href="/" className="hub-secondary-link">Dashboard</Link></header>
   <section className="panel"><div className="panel-heading"><div><h2>Find missed loads</h2><span>Review by load number, not just by contract.</span></div><button className="hub-secondary-link" onClick={()=>void loadData()} disabled={loading}>{loading?"Loading…":"Refresh"}</button></div>
    <div style={{display:"flex",flexWrap:"wrap",gap:12,marginBottom:12}}>
