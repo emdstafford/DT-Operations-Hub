@@ -75,7 +75,8 @@ export default function MissedLoadReviewHub(){
     if(saved)return saved.reason==="Waiting on USPS";
     return matchingNotes(l).some(n=>n.status==="waiting_on_usps");
  };
- const shown=grouped.filter(l=>{const r=byKey.get(key(l));return (!contract||l.contract_number===contract)&&(!supervisor||(l.supervisors||[]).includes(supervisor))&&(!reasonFilter||(reasonFilter==="unexplained"?!r:r?.reason===reasonFilter))&&(!status||(status==="unexplained"?!r:status==="existing_note"?matchingNotes(l).length>0:status==="waiting_usps"?waitingOnUsps(l):status.startsWith("ticket:")?r?.ticket_status===status.slice(7):r?.review_status===status))}).sort((a,b)=>sort==="missed"?b.incomplete_stops-a.incomplete_stops:sort==="contract"?(a.contract_number||"").localeCompare(b.contract_number||"",undefined,{numeric:true}):b.operating_date.localeCompare(a.operating_date));
+ const needsExplanation=(l:Load)=>!byKey.has(key(l))&&!waitingOnUsps(l);
+ const shown=grouped.filter(l=>{const r=byKey.get(key(l));return (!contract||l.contract_number===contract)&&(!supervisor||(l.supervisors||[]).includes(supervisor))&&(!reasonFilter||(reasonFilter==="unexplained"?needsExplanation(l):r?.reason===reasonFilter))&&(!status||(status==="unexplained"?needsExplanation(l):status==="existing_note"?matchingNotes(l).length>0:status==="waiting_usps"?waitingOnUsps(l):status.startsWith("ticket:")?r?.ticket_status===status.slice(7):r?.review_status===status))}).sort((a,b)=>sort==="missed"?b.incomplete_stops-a.incomplete_stops:sort==="contract"?(a.contract_number||"").localeCompare(b.contract_number||"",undefined,{numeric:true}):b.operating_date.localeCompare(a.operating_date));
  const waitingCount=shown.filter(waitingOnUsps).length;
  const waitingMissed=shown.filter(waitingOnUsps).reduce((sum,l)=>sum+l.incomplete_stops,0);
  const current=grouped.find(l=>key(l)===selected),review=current?byKey.get(key(current)):undefined;
@@ -153,7 +154,7 @@ export default function MissedLoadReviewHub(){
     <label>Sort by <select value={sort} onChange={e=>setSort(e.target.value)}><option value="date">Newest</option><option value="contract">Contract</option><option value="missed">Most missed stops</option></select></label>
    </div>
    {error&&<div className="alert alert-error">{error}</div>}{notice&&<div className="alert">{notice}</div>}
-   <p className="ops-summary"><strong>{shown.length}</strong> missed loads · <strong>{shown.filter(l=>byKey.has(key(l))).length}</strong> explained · <strong>{shown.filter(l=>!byKey.has(key(l))).length}</strong> awaiting explanation · <strong>{waitingCount}</strong> waiting on USPS ({waitingMissed.toLocaleString()} missed stops)</p>
+   <p className="ops-summary"><strong>{shown.length}</strong> missed loads · <strong>{shown.filter(l=>!needsExplanation(l)).length}</strong> explained · <strong>{shown.filter(needsExplanation).length}</strong> awaiting explanation · <strong>{waitingCount}</strong> waiting on USPS ({waitingMissed.toLocaleString()} missed stops)</p>
    <div className="table-scroll"><table className="data-table"><thead><tr><th>Date</th><th>Contract</th><th>Supervisor</th><th>Trip</th><th>Load</th><th>Missed</th><th>Status</th></tr></thead><tbody>{shown.map(l=>{
       const r=byKey.get(key(l)),notes=matchingNotes(l),expanded=selected===key(l);
       return <Fragment key={key(l)}>
@@ -162,7 +163,7 @@ export default function MissedLoadReviewHub(){
         <td>{l.trip_number||"—"}</td>
         <td><button className="ops-inline-open" type="button" aria-expanded={expanded} onClick={()=>void choose(l)}>{l.load_number} <span aria-hidden="true">{expanded?"▴":"▾"}</span></button></td>
         <td>{l.incomplete_stops}</td>
-        <td>{r?labels[r.review_status]:"Awaiting explanation"}{r&&corrections.has(r.reason)?" · "+labels[r.ticket_status]:""}{waitingOnUsps(l)&&<span className="ops-trip-note-tag">Waiting on USPS</span>}{notes.length>0&&<span className="ops-trip-note-tag" title="Existing explanation from contract and trip notes">Trip note on file</span>}</td>
+        <td>{r?labels[r.review_status]:waitingOnUsps(l)?"Waiting on USPS":"Awaiting explanation"}{r&&corrections.has(r.reason)?" · "+labels[r.ticket_status]:""}{r&&waitingOnUsps(l)&&<span className="ops-trip-note-tag">Waiting on USPS</span>}{notes.length>0&&<span className="ops-trip-note-tag" title="Existing explanation from contract and trip notes">Trip note on file</span>}</td>
        </tr>
        {expanded&&<tr className="ops-inline-detail-row"><td colSpan={7}>{current&&<section className="ops-inline-editor" id="load-review"><div className="panel-heading"><div><h2>Load {current.load_number}</h2><span>{current.operating_date} · Contract {current.contract_number} · Trip {current.trip_number||"—"} · {current.incomplete_stops} missed stops</span></div><button className="hub-secondary-link" disabled={saving} onClick={()=>void choose(current)}>Close</button></div>
     {relatedNotes.length>0&&<div className="ops-existing-notes"><strong>Existing trip explanation{relatedNotes.length>1?"s":""}</strong>
