@@ -8,8 +8,8 @@ import type {OperationalNote} from "@/components/ContractOperationalNotes";
 
 type Load={operating_date:string;contract_number:string|null;trip_number:string|null;load_number:string;supervisors:string[]|null;incomplete_stops:number};
 export type MissedLoadReview={id:string;operating_date:string;contract_number:string;trip_number:string;load_number:string;reason:string;explanation:string;source:string;reported_by:string;recorded_by_email:string;review_status:string;ticket_status:string;updated_at:string};
-const reasons=["Driver late","Mechanical breakdown","USPS delay","Traffic or weather","Missed stop / route issue","Other","Driver Name Change","Incorrect Times","Incorrect Frequency","Incorrect NASS Code","Incorrect Contract/Trip Assignment"];
-const corrections=new Set(reasons.slice(6));
+const reasons=["Driver late","Mechanical breakdown","USPS delay","Waiting on USPS","Traffic or weather","Missed stop / route issue","Other","Driver Name Change","Incorrect Times","Incorrect Frequency","Incorrect NASS Code","Incorrect Contract/Trip Assignment"];
+const corrections=new Set(["Driver Name Change","Incorrect Times","Incorrect Frequency","Incorrect NASS Code","Incorrect Contract/Trip Assignment"]);
 const key=(x:Load|MissedLoadReview)=>[x.operating_date,normalizeTripContract(x.contract_number||""),(x.trip_number||"").trim(),x.load_number.trim()].join("|");
 const labels:Record<string,string>={needs_review:"Not reviewed",reviewed:"IT Reviewed",follow_up:"Needs follow-up",not_needed:"Not needed",needs_ticket:"Ticket needed",ticket_sent:"Ticket sent",resolved:"Correction resolved"};
 const sources:Record<string,string>={phone:"Phone",text:"Text",email:"Email",in_person:"In person",other:"Other",supervisor_portal:"Supervisor portal"};
@@ -151,7 +151,7 @@ export default function MissedLoadReviewHub(){
       {relatedNotes.map(note=><div className="ops-existing-note" key={note.id}>
         <p>{note.note}</p>
         <small>{note.status.replaceAll("_"," ")} · From {note.effective_start}{note.effective_end?" through "+note.effective_end:" onward"}</small>
-        {canEdit&&!review&&<button type="button" className="hub-secondary-link" onClick={()=>setDraft(d=>({...d,reason:"Other",explanation:note.note,source:"other",reported_by:"Existing contract/trip note"}))}>Use for this load</button>}
+        {canEdit&&!review&&<button type="button" className="hub-secondary-link" onClick={()=>setDraft(d=>({...d,reason:note.status==="waiting_on_usps"?"Waiting on USPS":"Other",explanation:note.note,source:"other",reported_by:"Existing contract/trip note"}))}>Use for this load</button>}
       </div>)}
     </div>}
     <div className="ops-filter-grid">
