@@ -11,7 +11,7 @@ export type MissedLoadReview={id:string;operating_date:string;contract_number:st
 const reasons=["Driver late","Mechanical breakdown","USPS delay","Traffic or weather","Missed stop / route issue","Other","Driver Name Change","Incorrect Times","Incorrect Frequency","Incorrect NASS Code","Incorrect Contract/Trip Assignment"];
 const corrections=new Set(reasons.slice(6));
 const key=(x:Load|MissedLoadReview)=>[x.operating_date,normalizeTripContract(x.contract_number||""),(x.trip_number||"").trim(),x.load_number.trim()].join("|");
-const labels:Record<string,string>={needs_review:"Needs Gary's review",reviewed:"Reviewed",follow_up:"Follow-up needed",not_needed:"Not needed",needs_ticket:"Ticket needed",ticket_sent:"Ticket sent",resolved:"Correction resolved"};
+const labels:Record<string,string>={needs_review:"Not reviewed",reviewed:"IT Reviewed",follow_up:"Needs follow-up",not_needed:"Not needed",needs_ticket:"Ticket needed",ticket_sent:"Ticket sent",resolved:"Correction resolved"};
 const sources:Record<string,string>={phone:"Phone",text:"Text",email:"Email",in_person:"In person",other:"Other",supervisor_portal:"Supervisor portal"};
 type Draft={reason:string;explanation:string;source:string;reported_by:string;review_status:string;ticket_status:string};
 const fresh=(r?:MissedLoadReview):Draft=>({reason:r?.reason||"Driver late",explanation:r?.explanation||"",source:r?.source||"phone",reported_by:r?.reported_by||"",review_status:r?.review_status||"needs_review",ticket_status:r?.ticket_status||"not_needed"});
@@ -158,14 +158,13 @@ export default function MissedLoadReviewHub(){
      <label>Reason <select disabled={!canEdit} value={draft.reason} onChange={e=>{const reason=e.target.value;setDraft(d=>({...d,reason,ticket_status:corrections.has(reason)?d.ticket_status==="not_needed"?"needs_ticket":d.ticket_status:"not_needed"}))}}>{reasons.map(s=><option key={s}>{s}</option>)}</select></label>
      <label>Source <select disabled={!canEdit} value={draft.source} onChange={e=>setDraft(d=>({...d,source:e.target.value}))}>{Object.entries(sources).map(([id,text])=><option key={id} value={id}>{text}</option>)}</select></label>
      <label>Provided by <input disabled={!canEdit} value={draft.reported_by} onChange={e=>setDraft(d=>({...d,reported_by:e.target.value}))} placeholder="Supervisor name"/></label>
-     <label>Gary's review <select disabled={!canEdit} value={draft.review_status} onChange={e=>setDraft(d=>({...d,review_status:e.target.value}))}>{["needs_review","reviewed","follow_up"].map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label>
      {corrections.has(draft.reason)&&<label>Ticket status <select disabled={!canEdit} value={draft.ticket_status} onChange={e=>setDraft(d=>({...d,ticket_status:e.target.value}))}>{["needs_ticket","ticket_sent","resolved"].map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label>}
     </div>
     <label className="ops-field" style={{display:"grid",gap:6,padding:"0 18px"}}>Explanation<textarea rows={3} disabled={!canEdit} value={draft.explanation} onChange={e=>setDraft(d=>({...d,explanation:e.target.value}))} placeholder="Explain this individual missed load and any follow-up required."/></label>
     <p className={"ops-save-status ops-save-"+saveStatus} aria-live="polite">{saveStatus==="saving"?"Saving…":saveStatus==="saved"?"Saved automatically":saveStatus==="unsaved"?"Saving shortly…":saveStatus==="error"?"Save failed — check the error above":!draft.explanation.trim()?"Enter an explanation to start autosaving":""}</p>
     {review&&<p className="text-muted">Entered by {review.recorded_by_email} · Last updated {new Date(review.updated_at).toLocaleString()}</p>}
     <div style={{display:"flex",flexWrap:"wrap",gap:10,marginTop:12}}>{corrections.has(draft.reason)&&<button className="hub-secondary-link" onClick={ticket}>Open Outlook support ticket</button>}</div>
-    {review&&<div style={{display:"flex",gap:10,marginTop:12,flexWrap:"wrap"}}><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("reviewed")}>Mark reviewed</button><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("follow_up")}>Needs follow-up</button></div>}
+    {review&&<div style={{display:"flex",gap:10,marginTop:12,flexWrap:"wrap"}}><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("reviewed")}>Mark IT Reviewed</button><button className="hub-secondary-link" disabled={saving} onClick={()=>void markReviewed("follow_up")}>Needs Follow-up</button></div>}
     {corrections.has(draft.reason)&&<p className="ops-inline-note">Outlook opens a draft. Update ticket status after sending.</p>}
     {events.length>0&&<details><summary>Recorded change history ({events.length})</summary>{events.map((e,i)=><p key={i}>{new Date(e.changed_at).toLocaleString()} · {e.event_type} · {e.changed_by_email}</p>)}</details>}
   </section>}</td></tr>}
