@@ -534,3 +534,27 @@
     font-size:.8rem;
   }
 }
+
+
+/* Readable period-specific supervisors beneath each contract in the attention list */
+@media screen{
+  .ops-dashboard-unified .dashboard-attention-summary .ops-attention-contract{
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap:2px;
+    min-width:0;
+    line-height:1.3;
+  }
+  .ops-dashboard-unified .dashboard-attention-summary .ops-attention-supervisor{
+    display:block;
+    font-size:.71rem;
+    font-weight:550;
+    color:#61758a;
+    overflow-wrap:anywhere;
+  }
+  .ops-dashboard-unified .dashboard-attention-summary .attention-list a{
+    min-height:63px;
+    align-items:center;
+  }
+}
