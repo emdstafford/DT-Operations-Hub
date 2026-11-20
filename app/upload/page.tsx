@@ -198,6 +198,19 @@ export default function UploadPage() {
     })();
     return () => { active = false; };
   }, []);
+  const affectedOperatingDays = useMemo(() => {
+    if (!report) return [];
+    const byDay = new Map<string, { loads: number; stops: number; incomplete: number }>();
+    for (const load of report.historicalLoads) {
+      if (!load.operatingDate) continue;
+      const current = byDay.get(load.operatingDate) ?? { loads: 0, stops: 0, incomplete: 0 };
+      current.loads += 1;
+      current.stops += load.totalStops;
+      current.incomplete += load.incompleteStops;
+      byDay.set(load.operatingDate, current);
+    }
+    return [...byDay.entries()].sort(([a],[b]) => a.localeCompare(b)).map(([date, totals]) => ({ date, ...totals }));
+  }, [report]);
   const email = useMemo(() => report ? buildEmail(report) : "", [report]);
   const emailHtml = useMemo(() => report ? buildEmailHtml(report) : "", [report]);
   const selectedDayContracts = useMemo(() => {
@@ -353,9 +366,9 @@ export default function UploadPage() {
         <div className="report-stack">
           <section className="report-banner">
             <div>
-              <p className="eyebrow eyebrow-light">Weekly report ready</p>
+              <p className="eyebrow eyebrow-light">FourKites report saved</p>
               <h2>{displayDate(report.periodStart)} - {displayDate(report.periodEnd)}</h2>
-              <p>{number(report.reportLoads.length)} unique loads included. This period is saved in History.</p>{loadMasterStatus && <p role="status">{loadMasterStatus}</p>}
+              <p>{number(report.reportLoads.length)} unique loads in the report period. All {number(report.historicalLoads.length)} dated loads were saved under their actual operating dates. Other previously saved loads remain in history.</p>{loadMasterStatus && <p role="status">{loadMasterStatus}</p>}
             </div>
             <button className="secondary-button" onClick={copyEmail}>{copied ? "Copied" : "Copy email report"}</button>
           </section>
@@ -375,7 +388,12 @@ export default function UploadPage() {
           </section>
 
           <section className="panel overflow-hidden">
-            <div className="panel-heading"><h2>Daily performance</h2><span>Click a day to view its contracts</span></div>
+            <div className="panel-heading"><div><h2>Operating dates updated from this workbook</h2><span>Includes previous-night loads outside the report's headline date range</span></div><strong>{affectedOperatingDays.length} dates</strong></div>
+             <div className="table-scroll"><table className="data-table"><thead><tr><th>Operating date</th><th>Loads saved</th><th>Total stops</th><th>Incomplete stops</th></tr></thead><tbody>{affectedOperatingDays.map(day => <tr key={day.date}><td className="font-semibold">{displayDate(day.date)}</td><td>{number(day.loads)}</td><td>{number(day.stops)}</td><td>{number(day.incomplete)}</td></tr>)}</tbody></table></div>
+             <p className="comparison-note">Matching load numbers are updated. Loads previously saved for these days but absent from this workbook are retained.</p>
+           </section>
+           <section className="panel overflow-hidden">
+             <div className="panel-heading"><h2>Daily performance</h2><span>Click a day to view its contracts</span></div>
             <div className="table-scroll"><table className="data-table"><thead><tr><th>Operating day</th><th>Loads</th><th>Total stops</th><th>Completed</th><th>Incomplete</th><th>Completion</th></tr></thead><tbody>{report.daily.map((row) => <tr key={row.key} className={selectedDay === row.key ? "selected-day-row" : ""}><td><button className="day-button" onClick={() => setSelectedDay(selectedDay === row.key ? "" : row.key)}>{row.label}</button></td><td>{number(row.loadCount)}</td><td>{number(row.totalStops)}</td><td>{number(row.completedStops)}</td><td>{number(row.incompleteStops)}</td><td className="font-semibold">{percent(row.percentComplete)}</td></tr>)}</tbody></table></div>
           </section>
           {selectedDay && <SummaryTable title={`Contracts for ${displayDate(selectedDay)}`} rows={selectedDayContracts} />}
