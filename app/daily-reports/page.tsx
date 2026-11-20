@@ -6,6 +6,7 @@ import {supabase} from "@/lib/supabase";
 import {useAccessRole} from "@/components/AccessRole";
 
 type Recipient={name:string;email:string;recipient_type:"supervisor"|"distribution"|"bcc";enabled:boolean};
+type Delivery={id:number;report_type:"company"|"individual";supervisor:string;recipient_email:string;status:"pending"|"sent"|"failed"|"skipped";attempted_at:string;sent_at:string|null;error_message:string|null};
 type Performance={supervisor?:string;contract_number?:string;total_stops:number;completed_stops:number;incomplete_stops:number;completion_percent:number;load_count:number};
 type DashboardData={totals:Performance;supervisors:Performance[];supervisor_contracts:Performance[];contracts:Performance[]};
 const empty:DashboardData={totals:{total_stops:0,completed_stops:0,incomplete_stops:0,completion_percent:0,load_count:0},supervisors:[],supervisor_contracts:[],contracts:[]};
@@ -25,6 +26,7 @@ export default function DailyReportsPage(){
  const [directory,setDirectory]=useState<Recipient[]>([]);
  const [drafts,setDrafts]=useState<Record<string,string>>({});
  const [data,setData]=useState<DashboardData>(empty);
+ const [deliveries,setDeliveries]=useState<Delivery[]>([]);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const [saving,setSaving]=useState("");
@@ -34,13 +36,15 @@ export default function DailyReportsPage(){
  const refresh=useCallback(async()=>{
   if(!allowed)return;
   setLoading(true);setError("");setMessage("");
-  const [recipients,report]=await Promise.all([
+  const [recipients,report,deliveryAudit]=await Promise.all([
    supabase.from("daily_report_recipients").select("name,email,recipient_type,enabled").order("recipient_type").order("name"),
-   supabase.rpc("dashboard_hub_filtered",{p_start:day,p_end:day,p_grain:"day",p_contracts:null,p_supervisors:null,p_exclude_august_2026:false,p_max_completion:null,p_min_missed_stops:null})
+   supabase.rpc("dashboard_hub_filtered",{p_start:day,p_end:day,p_grain:"day",p_contracts:null,p_supervisors:null,p_exclude_august_2026:false,p_max_completion:null,p_min_missed_stops:null}),
+   supabase.from("daily_report_deliveries").select("id,report_type,supervisor,recipient_email,status,attempted_at,sent_at,error_message").eq("operating_date",day).order("attempted_at",{ascending:false}).limit(500)
   ]);
-  if(recipients.error||report.error){setError(recipients.error?.message||report.error?.message||"Unable to load reports");setLoading(false);return;}
+  if(recipients.error||report.error||deliveryAudit.error){setError(recipients.error?.message||report.error?.message||deliveryAudit.error?.message||"Unable to load reports");setLoading(false);return;}
   const saved=recipients.data as Recipient[];
   setDirectory(saved);setDrafts(Object.fromEntries(saved.map(r=>[r.name,r.email])));
+  setDeliveries((deliveryAudit.data||[]) as Delivery[]);
   setData((report.data as unknown as DashboardData)||empty);setLoading(false);
  },[allowed,day]);
  useEffect(()=>{void refresh()},[refresh]);
@@ -133,6 +137,11 @@ export default function DailyReportsPage(){
        return <details className="ops-daily-individual" key={r.supervisor}><summary><strong>{r.supervisor}</strong><span>{pct(r.completion_percent)} · {fmt(r.incomplete_stops)} missed · {recipient?recipient.email:"ADDRESS MISSING"}</span></summary>
         <div className="ops-daily-individual-content"><p><strong>To:</strong> {to.join("; ")}</p><pre className="ops-daily-preview">{individualBody(r)}</pre><button className="hub-secondary-link" onClick={()=>void copy(individualBody(r))}>Copy individual preview</button></div></details>;
      })}
+    </section>
+    <section className="panel">
+     <div className="panel-heading"><div><h2>Actual email delivery history</h2><span>Microsoft 365 send results only · operating day {formatDate(day)}</span></div><span>{deliveries.length} recorded recipient(s)</span></div>
+     {!deliveries.length?<p className="ops-summary"><strong>No emails recorded as sent.</strong> The Microsoft 365 dispatch connection has not been activated. Previewing or copying reports does not count as sending.</p>:
+      <div className="table-scroll"><table className="data-table"><thead><tr><th>Report</th><th>Supervisor</th><th>Recipient</th><th>Status</th><th>Recorded</th></tr></thead><tbody>{deliveries.map(item=><tr key={item.id}><td>{item.report_type==="company"?"Company-wide":"Individual"}</td><td>{item.supervisor||"—"}</td><td>{item.recipient_email}</td><td><strong>{item.status.toUpperCase()}</strong>{item.error_message&&<small style={{display:"block"}}>{item.error_message}</small>}</td><td>{new Date(item.sent_at||item.attempted_at).toLocaleString("en-US",{timeZone:"America/New_York"})}</td></tr>)}</tbody></table></div>}
     </section>
     <section className="panel">
      <div className="panel-heading"><div><h2>Recipient directory</h2><span>Admin-only · saved centrally · names must match Dashboard supervisor names</span></div></div>
