@@ -558,3 +558,31 @@
     align-items:center;
   }
 }
+
+
+/* Private daily report preparation, scoped away from Payroll and print layouts */
+@media screen{
+ .ops-daily-reports .ops-automation-off{display:inline-flex;align-items:center;justify-content:center;padding:5px 9px;background:#f6e7e8;color:#8f3440;border-radius:8px;font-size:.75rem;font-weight:700}
+ .ops-daily-reports .ops-daily-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:14px 18px}
+ .ops-daily-reports .ops-daily-stats>div{padding:13px 14px;border:1px solid #e0e8ef;border-radius:9px;background:#f8fafc;display:grid;gap:4px}
+ .ops-daily-reports .ops-daily-stats small{color:#62758a;font-size:.74rem;font-weight:650}
+ .ops-daily-reports .ops-daily-stats strong{font-size:1.4rem;font-weight:700;color:#183b5d;font-variant-numeric:tabular-nums}
+ .ops-daily-reports .ops-daily-actions{display:flex;gap:9px;align-items:flex-end;flex-wrap:wrap}
+ .ops-daily-reports .ops-daily-preview{margin:0;padding:15px 18px;background:#fbfcfe;color:#203a51;font-size:.76rem;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;max-height:420px;overflow:auto}
+ .ops-daily-reports .ops-daily-individual{border-top:1px solid #e5ecf3}
+ .ops-daily-reports .ops-daily-individual>summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:13px 18px;color:#183b5d;font-size:.84rem}
+ .ops-daily-reports .ops-daily-individual>summary:hover{background:#f7fafc}
+ .ops-daily-reports .ops-daily-individual>summary span{font-size:.76rem;color:#62758a;text-align:right}
+ .ops-daily-reports .ops-daily-individual-content{padding:0 18px 16px}
+ .ops-daily-reports .ops-daily-individual-content>p{font-size:.78rem;color:#49677f}
+ .ops-daily-reports .ops-daily-individual-content>.hub-secondary-link{margin-top:10px}
+ .ops-daily-reports .data-table input[type=email]{min-width:210px;width:100%;max-width:340px}
+ .ops-daily-reports .data-table input[type=checkbox]{width:17px;height:17px}
+ .ops-daily-reports .data-table .hub-secondary-link:disabled{opacity:.45;cursor:default}
+}
+@media screen and (max-width:800px){
+ .ops-daily-reports .ops-daily-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .ops-daily-reports .ops-daily-individual>summary{align-items:flex-start;flex-direction:column;gap:5px}
+ .ops-daily-reports .ops-daily-individual>summary span{text-align:left}
+}
+@media screen and (max-width:460px){.ops-daily-reports .ops-daily-stats{grid-template-columns:1fr}}
