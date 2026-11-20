@@ -50,7 +50,8 @@ export default function DailyReportsPage(){
  useEffect(()=>{void refresh()},[refresh]);
 
  const listed=useMemo(()=>data.supervisors.filter(r=>r.supervisor&&r.supervisor!=="Unassigned"&&Number(r.total_stops)>0),[data]);
- const below=listed.filter(r=>Number(r.completion_percent)<0.95);
+ const belowContracts=data.supervisor_contracts.filter(r=>r.supervisor&&r.supervisor!=="Unassigned"&&Number(r.total_stops)>0&&Number(r.completion_percent)<0.95);
+ const below=listed.filter(r=>Number(r.completion_percent)<0.95||belowContracts.some(c=>clean(c.supervisor||"")===clean(r.supervisor||"")));
  const active=directory.filter(r=>r.enabled);
  const lookup=(name:string)=>active.find(r=>r.recipient_type==="supervisor"&&clean(r.name)===clean(name));
  const supervisors=active.filter(r=>r.recipient_type==="supervisor");
@@ -72,14 +73,17 @@ export default function DailyReportsPage(){
   "DT Hub: https://dt-intelligence-hub.vercel.app/"
  ].join("\n");
  const individualBody=(r:Performance)=>{
-  const contracts=data.supervisor_contracts.filter(c=>c.supervisor===r.supervisor);
+  const contracts=data.supervisor_contracts.filter(c=>clean(c.supervisor||"")===clean(r.supervisor||""));
+  const flagged=contracts.filter(c=>Number(c.total_stops)>0&&Number(c.completion_percent)<0.95);
+  const overallBelow=Number(r.completion_percent)<0.95;
   return [
    "Davenport Transportation — Daily Supervisor Performance Review",
    "Operating day: "+formatDate(day),
    "Supervisor: "+r.supervisor,
-   "Completion: "+pct(r.completion_percent)+" (below the 95% expectation)",
+   "Overall completion: "+pct(r.completion_percent)+(overallBelow?" (below 95%)":" (meets 95%)"),
    "Total stops: "+fmt(r.total_stops)+" | Completed: "+fmt(r.completed_stops)+" | Missed: "+fmt(r.incomplete_stops),
-   "", "Contract Breakdown",header,...contracts.map(line),
+   "", "Contracts below 95% ("+flagged.length+")",header,...flagged.map(c=>[c.contract_number||"Unknown contract",pct(c.completion_percent),fmt(c.total_stops),fmt(c.completed_stops),fmt(c.incomplete_stops)].join(" | ")),
+   "", "Full Contract Breakdown",header,...contracts.map(c=>[c.contract_number||"Unknown contract",pct(c.completion_percent),fmt(c.total_stops),fmt(c.completed_stops),fmt(c.incomplete_stops)].join(" | ")),
    "", "Please review the missed stops and document the relevant explanations in DT Hub.",
    "https://dt-intelligence-hub.vercel.app/missed-load-reviews"
   ].join("\n");
@@ -116,11 +120,12 @@ export default function DailyReportsPage(){
    {message&&<p role="status" className="ops-inline-note">{message}</p>}
    {loading?<section className="panel ops-form-section">Loading daily performance…</section>:<>
     <section className="panel">
-     <div className="panel-heading"><div><h2>Previous-day performance</h2><span>{formatDate(day)}</span></div><span>{dayReady?below.length+" supervisor(s) below 95%":"No saved stops for this day"}</span></div>
+     <div className="panel-heading"><div><h2>Previous-day performance</h2><span>{formatDate(day)}</span></div><span>{dayReady?below.length+" supervisor(s) requiring an alert":"No saved stops for this day"}</span></div>
      <div className="ops-daily-stats">
       <div><small>Completion</small><strong>{dayReady?pct(data.totals.completion_percent):"—"}</strong></div>
       <div><small>Missed stops</small><strong>{fmt(data.totals.incomplete_stops)}</strong></div>
-      <div><small>Supervisors below 95%</small><strong>{below.length}</strong></div>
+      <div><small>Supervisors needing alerts</small><strong>{below.length}</strong></div>
+      <div><small>Contracts below 95%</small><strong>{belowContracts.length}</strong></div>
       <div><small>Supervisor emails missing</small><strong>{missing.length}</strong></div>
      </div>
      {!dayReady?<p className="ops-summary">No saved loads exist for this operating day. Do not send the daily report until the FourKites file has been fully imported and verified.</p>:missing.length>0?<p className="ops-summary">Recipient check: {missing.map(r=>r.supervisor).join(", ")} {missing.length===1?"does":"do"} not have an active matching address in the directory. Confirm before turning on distribution.</p>:<p className="ops-summary">Supervisor addresses matched for the selected day. Verify report completeness before any automatic sending.</p>}
@@ -130,11 +135,11 @@ export default function DailyReportsPage(){
      <pre className="ops-daily-preview">{companyBody}</pre>
     </section>}
     <section className="panel">
-     <div className="panel-heading"><div><h2>Individual reports below 95%</h2><span>Each includes the supervisor, Gary, Chasity, and Emily</span></div></div>
-     {!below.length?<p className="ops-summary">{dayReady?"No supervisor is below 95% for this day.":"No completed daily report to evaluate yet."}</p>:below.map(r=>{
+     <div className="panel-heading"><div><h2>Individual performance alerts</h2><span>Each includes the supervisor, Gary, Chasity, and Emily</span></div></div>
+     {!below.length?<p className="ops-summary">{dayReady?"No supervisor or assigned contract is below 95% for this day.":"No completed daily report to evaluate yet."}</p>:below.map(r=>{
        const recipient=lookup(r.supervisor||"");
        const to=distinct([...(recipient?[recipient.email]:[]),...oversight]);
-       return <details className="ops-daily-individual" key={r.supervisor}><summary><strong>{r.supervisor}</strong><span>{pct(r.completion_percent)} · {fmt(r.incomplete_stops)} missed · {recipient?recipient.email:"ADDRESS MISSING"}</span></summary>
+       return <details className="ops-daily-individual" key={r.supervisor}><summary><strong>{r.supervisor}</strong><span>{pct(r.completion_percent)} overall · {belowContracts.filter(c=>clean(c.supervisor||"")===clean(r.supervisor||"")).length} contract(s) below 95% · {fmt(r.incomplete_stops)} missed · {recipient?recipient.email:"ADDRESS MISSING"}</span></summary>
         <div className="ops-daily-individual-content"><p><strong>To:</strong> {to.join("; ")}</p><pre className="ops-daily-preview">{individualBody(r)}</pre><button className="hub-secondary-link" onClick={()=>void copy(individualBody(r))}>Copy individual preview</button></div></details>;
      })}
     </section>
@@ -145,7 +150,7 @@ export default function DailyReportsPage(){
     </section>
     <section className="panel">
      <div className="panel-heading"><div><h2>Recipient directory</h2><span>Admin-only · saved centrally · names must match Dashboard supervisor names</span></div></div>
-     <p className="ops-summary">Supervisors get the company-wide report. Gary, Emily, Chasity and Sabrina are included in the main distribution; Rachelle and Cindy receive the company-wide report as BCC. Individual under-95% reports go only to the affected supervisor plus Gary, Emily and Chasity.</p>
+     <p className="ops-summary">Supervisors get the company-wide report. Gary, Emily, Chasity and Sabrina are included in the main distribution; Rachelle and Cindy receive the company-wide report as BCC. Individual alerts are prepared when a supervisor OR any assigned contract is below 95%; each alert goes to the affected supervisor plus Gary, Emily and Chasity.</p>
      <div className="table-scroll"><table className="data-table"><thead><tr><th>Name</th><th>Group</th><th>Email</th><th>Active</th><th></th></tr></thead><tbody>{directory.map(r=><tr key={r.name}><td><strong>{r.name}</strong></td><td>{r.recipient_type==="bcc"?"BCC":r.recipient_type==="distribution"?"Distribution":"Supervisor"}</td><td><input aria-label={"Email for "+r.name} type="email" value={drafts[r.name]??r.email} onChange={e=>setDrafts(current=>({...current,[r.name]:e.target.value}))}/></td><td><input type="checkbox" aria-label={"Include "+r.name} checked={r.enabled} disabled={saving===r.name} onChange={()=>void toggleRecipient(r)}/></td><td><button type="button" className="hub-secondary-link" disabled={saving===r.name||clean(drafts[r.name]??r.email)===clean(r.email)} onClick={()=>void saveRecipient(r)}>{saving===r.name?"Saving…":"Save"}</button></td></tr>)}</tbody></table></div>
     </section>
    </>}
