@@ -494,3 +494,43 @@
 @media screen and (max-width:440px){
   .ops-dashboard-unified .ops-dashboard-metrics{grid-template-columns:1fr}
 }
+
+
+/* Dashboard multi-select menus: prevent the generic full-width field rule
+   from stretching each checkbox away from its supervisor/contract name. */
+@media screen {
+  .ops-dashboard-unified .ops-dashboard-filter-grid .multi-menu {
+    width:max(100%,270px);
+    max-width:min(360px,calc(100vw - 32px));
+    padding:7px;
+  }
+  .ops-dashboard-unified .ops-dashboard-filter-grid .multi-menu label{
+    display:flex;
+    flex-direction:row;
+    justify-content:flex-start;
+    align-items:center;
+    gap:10px;
+    width:100%;
+    padding:9px 10px;
+    text-align:left;
+    font-size:.81rem;
+    font-weight:550;
+    line-height:1.3;
+    white-space:normal;
+  }
+  .ops-dashboard-unified .ops-dashboard-filter-grid .multi-menu input[type="checkbox"]{
+    display:block;
+    flex:0 0 16px;
+    width:16px;
+    min-width:16px;
+    max-width:16px;
+    height:16px;
+    min-height:16px;
+    margin:0;
+    padding:0;
+  }
+  .ops-dashboard-unified .ops-dashboard-filter-grid .multi-menu button{
+    padding:9px 10px;
+    font-size:.8rem;
+  }
+}
