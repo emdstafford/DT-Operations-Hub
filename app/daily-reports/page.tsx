@@ -11,7 +11,7 @@ type DashboardData={totals:Performance;supervisors:Performance[];supervisor_cont
 const empty:DashboardData={totals:{total_stops:0,completed_stops:0,incomplete_stops:0,completion_percent:0,load_count:0},supervisors:[],supervisor_contracts:[],contracts:[]};
 const fmt=(n:number)=>Number(n||0).toLocaleString("en-US");
 const pct=(n:number)=>((Number(n)||0)*100).toFixed(2)+"%";
-const dateInNewYork=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+const dateInNewYork=()=>{const parts=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const part=(name:string)=>parts.find(p=>p.type===name)?.value||"";return [part("year"),part("month"),part("day")].join("-")};
 const yesterday=()=>new Date(Date.parse(dateInNewYork()+"T12:00:00Z")-86400000).toISOString().slice(0,10);
 const formatDate=(value:string)=>new Intl.DateTimeFormat("en-US",{timeZone:"UTC",year:"numeric",month:"long",day:"numeric"}).format(new Date(value+"T12:00:00Z"));
 const clean=(value:string)=>value.trim().toLowerCase();
@@ -41,7 +41,7 @@ export default function DailyReportsPage(){
   if(recipients.error||report.error){setError(recipients.error?.message||report.error?.message||"Unable to load reports");setLoading(false);return;}
   const saved=recipients.data as Recipient[];
   setDirectory(saved);setDrafts(Object.fromEntries(saved.map(r=>[r.name,r.email])));
-  setData((report.data as DashboardData)||empty);setLoading(false);
+  setData((report.data as unknown as DashboardData)||empty);setLoading(false);
  },[allowed,day]);
  useEffect(()=>{void refresh()},[refresh]);
 
