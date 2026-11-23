@@ -146,7 +146,7 @@ export async function POST(request: Request) {
       if (!String(row["Load Number"] ?? "").trim()) continue;
       validLoads++;
       const tags = String(row.Tags ?? "");
-      const day = tags.match(/(?:^|,)(\\d{4}-\\d{2}-\\d{2})(?:,|$)/)?.[1];
+      const day = tags.match(/(?:^|,)(\d{4}-\d{2}-\d{2})(?:,|$)/)?.[1];
       if (day) dates.set(day, (dates.get(day) ?? 0) + 1);
     }
     if (validLoads === 0 || dates.size === 0) {
