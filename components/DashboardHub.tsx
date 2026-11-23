@@ -375,9 +375,11 @@ export default function DashboardHub() {
     let rangeStart = new Date(anchor);
     let rangeEnd = new Date(anchor);
     if (mode === "week") {
-      rangeStart.setUTCDate(anchor.getUTCDate() - ((anchor.getUTCDay() + 1) % 7));
-      rangeEnd = new Date(rangeStart);
-      rangeEnd.setUTCDate(rangeStart.getUTCDate() + 6);
+      // Use the most recently completed Saturday–Friday period as of the latest saved USPS day.
+      // Saturday through Thursday select the preceding Friday; Friday selects the week just ended.
+      rangeEnd.setUTCDate(anchor.getUTCDate() - ((anchor.getUTCDay() + 2) % 7));
+      rangeStart = new Date(rangeEnd);
+      rangeStart.setUTCDate(rangeEnd.getUTCDate() - 6);
     } else if (mode === "month") {
       rangeStart = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1, 12));
       rangeEnd = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 0, 12));
