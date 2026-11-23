@@ -217,10 +217,10 @@ function filteredEmail(data: HubData, start: string, end: string, supervisors: s
     "","COMPLETION BY TRIP TYPE",
     "Regular Trips: "+tripRate(tripRates?.overall.regular)+" | Extra Trips: "+tripRate(tripRates?.overall.extra)+" | Overall Completion: "+percent(data.totals.completion_percent),
     "Overall completion remains the official metric for rankings and thresholds.",
-    "Supervisor\\tRegular Trips %\\tExtra Trips %\\tOverall Completion %",
-    ...supervisorPerformanceRows.map(row=>[row.label,row.regular,row.extra,row.overall].join("\\t")),
-    "","Contract\\tRegular Trips %\\tExtra Trips %\\tOverall Completion %",
-    ...contractPerformanceRows.map(row=>[row.label,row.regular,row.extra,row.overall].join("\\t"))
+    "Supervisor\tRegular Trips %\tExtra Trips %\tOverall Completion %",
+    ...supervisorPerformanceRows.map(row=>[row.label,row.regular,row.extra,row.overall].join("\t")),
+    "","Contract\tRegular Trips %\tExtra Trips %\tOverall Completion %",
+    ...contractPerformanceRows.map(row=>[row.label,row.regular,row.extra,row.overall].join("\t"))
   ];
   const filterNote = [supervisors.length ? `Supervisors: ${supervisors.join(", ")}` : "All supervisors", contracts.length ? `Contracts: ${contracts.join(", ")}` : "All contracts"].join(" &nbsp;•&nbsp; ");
   const detailSection = includeSupervisorDetail ? `<h2 style="margin:30px 0 8px;color:#123b61">Supervisors and Their Contracts</h2>${supervisorDetail}` : "";
