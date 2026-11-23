@@ -71,6 +71,13 @@ function filterUnassignedReportHtml(html:string, showRegular:boolean, showExtra:
       }
     }
   }
+  for(const p of Array.from(doc.querySelectorAll("p"))){
+    const value=(p.textContent||"").trim();
+    if(!value.startsWith("Regular Trips Unassigned:"))continue;
+    if(!showRegular&&!showExtra){p.remove();continue;}
+    const m=value.match(/Regular Trips Unassigned:\\s*([\\d,]+)\\s*Extra Trips Unassigned:\\s*([\\d,]+)/i);
+    if(m)p.textContent=showRegular?"Regular Trips Unassigned: "+m[1]:"Extra Trips Unassigned: "+m[2];
+  }
   return doc.body.innerHTML;
 }
 function filterUnassignedReportText(value:string,showRegular:boolean,showExtra:boolean){
