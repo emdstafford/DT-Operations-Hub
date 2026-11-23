@@ -93,6 +93,8 @@ export async function GET(request: Request) {
     const supervisors = new Map<string, Stats>();
     const contracts = new Map<string, Stats>();
     const supervisorContracts = new Map<string, Stats>();
+    const supervisorTripStats = new Map<string, { regular: Stats; extra: Stats; unclassified: Stats }>();
+    const contractTripStats = new Map<string, { regular: Stats; extra: Stats; unclassified: Stats }>();
     const supervisorContractsByTrip = new Map<string, { regular: Stats; extra: Stats; unclassified: Stats }>();
     for (const load of loads) {
       add(overall, load);
@@ -100,9 +102,15 @@ export async function GET(request: Request) {
       add(type === "regular" ? regular : type === "extra" ? extra : unclassified, load);
       const contract = load.contract_number || "Unassigned contract";
       group(contracts, contract, load);
+      const contractBuckets = contractTripStats.get(contract) ?? { regular: zero(), extra: zero(), unclassified: zero() };
+      add(contractBuckets[type], load);
+      contractTripStats.set(contract, contractBuckets);
       const names = [...new Set((load.supervisors ?? []).filter(Boolean))];
       for (const name of names.length ? names : ["Unassigned"]) {
         group(supervisors, name, load);
+        const supervisorBuckets = supervisorTripStats.get(name) ?? { regular: zero(), extra: zero(), unclassified: zero() };
+        add(supervisorBuckets[type], load);
+        supervisorTripStats.set(name, supervisorBuckets);
         const key = name + " | " + contract;
         group(supervisorContracts, key, load);
         const buckets = supervisorContractsByTrip.get(key) ?? { regular: zero(), extra: zero(), unclassified: zero() };
@@ -149,6 +157,61 @@ export async function GET(request: Request) {
         s.totalStops > 0 && s.completionPercent < 95 ? "BELOW 95%" : ""].join(" | ")),
       "", "DT Hub: https://dt-intelligence-hub.vercel.app/daily-reports",
     ].join("\n");
+
+    // Outlook-compatible HTML, modeled on the dashboard Copy Email Report's
+    // navy headers / green rankings / red needs-attention rows.
+    // Both unassigned-trip sections and columns are deliberately omitted.
+    const esc = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    const prettyDate = new Intl.DateTimeFormat("en-US", {
+      month: "long", day: "numeric", year: "numeric", timeZone: "UTC",
+    }).format(new Date(day + "T12:00:00Z"));
+    const htmlHeader = "background-color:#123b61;color:#ffffff;padding:9px;border:1px solid #d6dde3;text-align:left;font-family:Arial,sans-serif";
+    const htmlCell = "padding:8px;border:1px solid #d6dde3;font-family:Arial,sans-serif;font-size:12px";
+    const head = (headers: string[]) => "<thead><tr>" + headers.map(h => '<th bgcolor="#123b61" style="' + htmlHeader + '">' + esc(h) + "</th>").join("") + "</tr></thead>";
+    const tr = (cells: string[], background = "") => "<tr" + (background ? ' bgcolor="' + background + '"' : "") + ">" +
+      cells.map((value, i) => '<td style="' + htmlCell + (i === 0 ? ";font-weight:600" : ";text-align:right") + '">' + esc(value) + "</td>").join("") + "</tr>";
+    const table = (headers: string[], rows: string) => '<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-bottom:16px">' +
+      head(headers) + "<tbody>" + rows + "</tbody></table>";
+    const shell = (heading: string, body: string) => '<div style="max-width:900px;margin:0 auto;background:#fff;color:#243746;font-family:Arial,sans-serif">' +
+      '<div style="background:#123b61;color:#fff;padding:24px 28px"><div style="font-size:12px;font-weight:bold;letter-spacing:1px;color:#d7e2ec">DAVENPORT TRANSPORTATION</div>' +
+      '<h2 style="margin:8px 0;color:#fff">' + esc(heading) + '</h2><div>' + esc(prettyDate) + ' - ' + esc(prettyDate) + '</div></div>' +
+      '<div style="padding:24px 28px">' + body + '<p style="color:#6b7c8c;font-size:12px">Prepared in DT Intelligence Hub</p></div></div>';
+    const h3 = (value: string) => '<h3 style="margin:26px 0 8px;color:#123b61">' + esc(value) + "</h3>";
+    const summary = (value: number) => '<div style="display:inline-block;background:#eef2f5;border-left:5px solid #123b61;padding:12px 18px">' +
+      '<span style="font-size:13px">Total Overall</span><br><strong style="font-size:26px;color:#123b61">' + pct(value) + '</strong></div>';
+    const tripPair = (buckets: { regular: Stats; extra: Stats; unclassified: Stats } | undefined) =>
+      [buckets?.regular.totalStops ? pct(result(buckets.regular).completionPercent) : "N/A",
+       buckets?.extra.totalStops ? pct(result(buckets.extra).completionPercent) : "N/A"];
+    const completionTable = (rows: Array<{ name: string; regular: string; extra: string; overall: string }>) =>
+      table(["Supervisor / Contract", "Regular Trips %", "Extra Trips %", "Overall Completion %"],
+        rows.map(row => tr([row.name, row.regular, row.extra, row.overall])).join(""));
+    const supervisorPerformance = supervisorRows.map((s, i) => tr(
+      [s.supervisor, fmt(s.totalStops), fmt(s.incompleteStops), pct(s.completionPercent)],
+      i < 5 ? "#c9e7cf" : "")).join("");
+    const contractPerformance = contractRows.map((s) => tr(
+      [s.contract, fmt(s.totalStops), fmt(s.completedStops), fmt(s.incompleteStops), pct(s.completionPercent)],
+      s.totalStops > 0 && s.completionPercent < 95 ? "#f0c8cd" : "")).join("");
+    const companyHtml = shell("USPS Completion Report",
+      summary(result(overall).completionPercent) +
+      h3("Supervisor Performance") +
+      table(["Supervisor", "Total Stops", "Missed Stops", "% Complete"], supervisorPerformance) +
+      h3("All Contract Performance") +
+      table(["Contract", "Total Stops", "Completed", "Missed Stops", "% Complete"], contractPerformance) +
+      h3("Completion by Trip Type") +
+      '<p style="font-size:12px">Regular and extra rates are based on completed stops divided by total stops for each category. Overall remains the official metric for rankings and thresholds.</p>' +
+      '<p style="background:#eef2f5;padding:12px"><strong>Regular Trips: ' +
+        (regular.totalStops ? pct(result(regular).completionPercent) : "N/A") + ' &nbsp; Extra Trips: ' +
+        (extra.totalStops ? pct(result(extra).completionPercent) : "N/A") + ' &nbsp; Overall Completion: ' +
+        pct(result(overall).completionPercent) + '</strong></p>' +
+      '<h4>Supervisors</h4>' + completionTable(supervisorRows.map(s => {
+        const pair = tripPair(supervisorTripStats.get(s.supervisor));
+        return { name: s.supervisor, regular: pair[0], extra: pair[1], overall: pct(s.completionPercent) };
+      })) +
+      '<h4>Contracts</h4>' + completionTable(contractRows.map(s => {
+        const pair = tripPair(contractTripStats.get(s.contract));
+        return { name: s.contract, regular: pair[0], extra: pair[1], overall: pct(s.completionPercent) };
+      })));
     const individualReviews = supervisorRows
       .filter(s => s.supervisor !== "Unassigned" && s.totalStops > 0)
       .map(s => {
@@ -165,7 +228,17 @@ export async function GET(request: Request) {
           failingContracts: failing.map(c => c.contract),
           // The complete contract list is intentional, even for passing contracts.
           contracts: assigned,
-          subject: "Performance Review — " + s.supervisor + " — " + day,
+          subject: "Performance Review — " + s.supervisor + " — " + prettyDate,
+          html: shell("Supervisor Performance Review — " + s.supervisor,
+            summary(s.completionPercent) +
+            '<p style="color:#742430;font-weight:bold">' + esc(overallBelow95 ? "Overall below 95%." : "At least one assigned contract below 95%.") + "</p>" +
+            h3("All Assigned Contracts") +
+            table(["Contract", "Total Stops", "Completed", "Missed Stops", "Regular Trips %", "Extra Trips %", "% Complete"],
+              assigned.map(x => tr([x.contract, fmt(x.totalStops), fmt(x.completedStops), fmt(x.incompleteStops),
+                x.regularTrips.totalStops ? pct(x.regularTrips.completionPercent) : "N/A",
+                x.extraTrips.totalStops ? pct(x.extraTrips.completionPercent) : "N/A", pct(x.completionPercent)],
+                x.below95 ? "#f0c8cd" : "")).join("")),
+          ),
           body: [
             "Davenport Transportation — Daily Supervisor Performance Review",
             "Operating date: " + day,
@@ -199,7 +272,7 @@ export async function GET(request: Request) {
       contracts: contractRows,
       supervisorContracts: supervisorContractsRows,
       below95Supervisors: under95.map(row => row.supervisor),
-      companyEmail: { subject: "Davenport Transportation — Daily USPS Performance — " + day, body: companyBody },
+      companyEmail: { subject: "USPS Completion Report " + prettyDate + " - " + prettyDate, body: companyBody, html: companyHtml },
       individualReviews,
       individualReviewCount: individualReviews.length,
       // The reporting endpoint never authorizes delivery. Use a separate gated send workflow.
