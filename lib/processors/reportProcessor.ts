@@ -199,22 +199,27 @@ function buildSupervisorSummary(rows: ProcessedLoad[], assignments: ContractAssi
   );
 }
 
-export async function processReport(file: File): Promise<ProcessedReport> {
+export async function processReport(
+  file: File,
+  provided?: { assignments: ContractAssignment[]; assignmentPeriods: ContractAssignmentPeriod[] },
+): Promise<ProcessedReport> {
   const workbook = XLSX.read(await file.arrayBuffer());
   const loadDetails = workbook.Sheets["Load Details"];
   if (!loadDetails) throw new Error('This workbook does not contain a "Load Details" sheet.');
 
-  let assignments: ContractAssignment[] = [];
-  let assignmentPeriods: ContractAssignmentPeriod[] = [];
-  try {
-    assignments = await getContracts();
-  } catch {
-    assignments = [];
-  }
-  try {
-    assignmentPeriods = await getContractAssignmentPeriods();
-  } catch {
-    assignmentPeriods = [];
+  let assignments: ContractAssignment[] = provided?.assignments ?? [];
+  let assignmentPeriods: ContractAssignmentPeriod[] = provided?.assignmentPeriods ?? [];
+  if (!provided) {
+    try {
+      assignments = await getContracts();
+    } catch {
+      assignments = [];
+    }
+    try {
+      assignmentPeriods = await getContractAssignmentPeriods();
+    } catch {
+      assignmentPeriods = [];
+    }
   }
 
   const { periodStart, periodEnd } = getReportPeriod(file.name, workbook);
