@@ -14,6 +14,7 @@ const sections: Section[] = [
     { name: "Load Reconciliation", description: "Choose dates, contracts and reconciliation status, then print.", href: "/reports/load-reconciliation" },
     { name: "Completion Totals", description: "Choose dates, supervisors and contracts, then print.", href: "/reports/completion-totals" },
     { name: "Geofence / Missed Stops", description: "Choose dates, supervisors and contracts, then print.", href: "/reports/geofence" },
+    { name: "Unassigned Trips Report", description: "Toggle regular and extra unassigned trips from saved weekly entries, then print or export.", href: "/reports/unassigned-trips" },
   ]},
   { title: "Contract Financials", description: "Contract revenue, CLEAR reconciliation, rates, and monthly review.", requires: "operations", reports: [
     { name: "Monthly Reconciliation", description: "Choose month and contracts, then print.", href: "/reports/monthly-reconciliation" },
