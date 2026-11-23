@@ -536,7 +536,7 @@ export default function DashboardHub() {
       const splitOverall={regular:emptyStops(),extra:emptyStops(),unknown:emptyStops()};
       for(const row of rows){
         const code=(row.trip_number??"").trim();
-        const type: "regular"|"extra"|"unknown" = /[a-z]/i.test(code)?"extra":/^\\d+$/.test(code)?"regular":"unknown";
+        const type: "regular"|"extra"|"unknown" = /[a-z]/i.test(code)?"extra":code?"regular":"unknown";
         addStops(splitOverall[type],row);
         const key=normalizeTripContract(row.contract_number??"Unmapped");
         const existing=splitByContract.get(key)??{regular:emptyStops(),extra:emptyStops(),unknown:emptyStops()};
