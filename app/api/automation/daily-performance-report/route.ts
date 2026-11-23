@@ -148,7 +148,7 @@ export async function GET(request: Request) {
       ...contractRows.map(s => [s.contract,pct(s.completionPercent),fmt(s.totalStops),fmt(s.completedStops),fmt(s.incompleteStops),
         s.totalStops > 0 && s.completionPercent < 95 ? "BELOW 95%" : ""].join(" | ")),
       "", "DT Hub: https://dt-intelligence-hub.vercel.app/daily-reports",
-    ].join("\\n");
+    ].join("\n");
     const individualReviews = supervisorRows
       .filter(s => s.supervisor !== "Unassigned" && s.totalStops > 0)
       .map(s => {
@@ -181,7 +181,7 @@ export async function GET(request: Request) {
             ...assigned.map(contractLine),
             "", "See DT Hub for detailed stop explanations and missing-load reviews.",
             "https://dt-intelligence-hub.vercel.app/missed-load-reviews",
-          ].join("\\n"),
+          ].join("\n"),
         };
       }).filter((review): review is NonNullable<typeof review> => review !== null);
     return NextResponse.json({
