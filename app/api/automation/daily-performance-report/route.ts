@@ -316,19 +316,26 @@ export async function GET(request: Request) {
     const oversight = ["Gary", "Chasity Cochran", "Emily Stafford", "Amber Smith"];
     const emailByName = new Map((recipientRows ?? []).map(row => [String(row.name).trim().toLowerCase(), String(row.email).trim().toLowerCase()]));
     const missingOversightRecipients = oversight.filter(name => !emailByName.has(name.toLowerCase()));
-    const reviewDeliveryPreview = individualReviews.map(review => ({
+    // STRICT DENYLIST: Tonya receives no daily, company-wide, or standard
+    // supervisor emails. Her separately approved Monday-only report must use
+    // a different, explicitly allowlisted workflow.
+    const isTonya = (name: string, email?: string) => {
+      const normalized = name.trim().toLowerCase().replace(/[^a-z]/g, "");
+      const blockedNames = new Set(["tonyacappsowen", "tonyacappsowens", "tonyaowen", "tonyaowens", "tonyacapps"]);
+      return blockedNames.has(normalized) || String(email ?? "").trim().toLowerCase() === "tocapps@bellsouth.net";
+    };
+    const reviewDeliveryPreview = individualReviews.filter(review => !isTonya(review.supervisor, supervisorEmails[review.supervisor])).map(review => ({
       supervisor: review.supervisor,
       to: [...new Set([supervisorEmails[review.supervisor], ...oversight.map(name => emailByName.get(name.toLowerCase()))].filter((address): address is string => Boolean(address)))],
       subject: review.subject,
       html: review.html,
       failingContracts: review.failingContracts,
     }));
-    const isTonya = (name: string) => name.trim().toLowerCase() === "tonya capps owen";
-    const distributionRecipients = (recipientRows ?? []).filter(row => !isTonya(String(row.name)) && ["supervisor", "distribution"].includes(row.recipient_type))
+    const distributionRecipients = (recipientRows ?? []).filter(row => !isTonya(String(row.name), String(row.email)) && ["supervisor", "distribution"].includes(row.recipient_type))
       .map(row => String(row.email).trim().toLowerCase());
-    const companyCcRecipients = (recipientRows ?? []).filter(row => !isTonya(String(row.name)) && row.recipient_type === "cc")
+    const companyCcRecipients = (recipientRows ?? []).filter(row => !isTonya(String(row.name), String(row.email)) && row.recipient_type === "cc")
       .map(row => String(row.email).trim().toLowerCase());
-    const companyBccRecipients = (recipientRows ?? []).filter(row => !isTonya(String(row.name)) && row.recipient_type === "bcc")
+    const companyBccRecipients = (recipientRows ?? []).filter(row => !isTonya(String(row.name), String(row.email)) && row.recipient_type === "bcc")
       .map(row => String(row.email).trim().toLowerCase());
     // Read-only preparation. These diagnostics must all be zero and upstream
     // completeness must be separately certified before future unattended sends.
