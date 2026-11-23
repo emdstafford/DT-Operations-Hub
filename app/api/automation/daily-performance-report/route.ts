@@ -93,6 +93,7 @@ export async function GET(request: Request) {
     const supervisors = new Map<string, Stats>();
     const contracts = new Map<string, Stats>();
     const supervisorContracts = new Map<string, Stats>();
+    const supervisorContractsByTrip = new Map<string, { regular: Stats; extra: Stats; unclassified: Stats }>();
     for (const load of loads) {
       add(overall, load);
       const type = tripType(load.trip_number);
@@ -102,12 +103,87 @@ export async function GET(request: Request) {
       const names = [...new Set((load.supervisors ?? []).filter(Boolean))];
       for (const name of names.length ? names : ["Unassigned"]) {
         group(supervisors, name, load);
-        group(supervisorContracts, name + " | " + contract, load);
+        const key = name + " | " + contract;
+        group(supervisorContracts, key, load);
+        const buckets = supervisorContractsByTrip.get(key) ?? { regular: zero(), extra: zero(), unclassified: zero() };
+        add(buckets[type], load);
+        supervisorContractsByTrip.set(key, buckets);
       }
     }
     const supervisorRows = ranked(supervisors, "supervisor");
     const contractRows = ranked(contracts, "contract");
+    // A single consolidated review per supervisor is generated when either
+    // their overall score OR any assigned contract falls below 95%.
+    const supervisorContractsRows = ranked(supervisorContracts, "supervisorContract");
+    const detailedContracts = supervisorContractsRows.map(({ supervisorContract, ...stats }) => {
+      const separator = supervisorContract.indexOf(" | ");
+      const supervisor = supervisorContract.slice(0, separator);
+      const contract = supervisorContract.slice(separator + 3);
+      const buckets = supervisorContractsByTrip.get(supervisorContract)!;
+      return {
+        supervisor, contract, ...stats,
+        regularTrips: result(buckets.regular),
+        extraTrips: result(buckets.extra),
+        unclassifiedTrips: result(buckets.unclassified),
+        below95: stats.totalStops > 0 && stats.completionPercent < 95,
+      };
+    });
     const under95 = supervisorRows.filter(row => row.supervisor !== "Unassigned" && row.totalStops > 0 && row.completionPercent < 95);
+    const fmt = (value: number) => value.toLocaleString("en-US");
+    const pct = (value: number) => value.toFixed(2) + "%";
+    const contractLine = (c: typeof detailedContracts[number]) =>
+      [c.contract, pct(c.completionPercent), fmt(c.totalStops), fmt(c.completedStops), fmt(c.incompleteStops),
+       pct(c.regularTrips.completionPercent), pct(c.extraTrips.completionPercent), c.below95 ? "BELOW 95%" : ""].join(" | ");
+    const companyBody = [
+      "Davenport Transportation — USPS Daily Performance Report",
+      "Operating date: " + day,
+      "Official overall completion: " + pct(result(overall).completionPercent),
+      "Regular Trips: " + pct(result(regular).completionPercent),
+      "Extra Trips: " + pct(result(extra).completionPercent),
+      "",
+      "Supervisor | Overall | Total stops | Completed | Incomplete",
+      ...supervisorRows.map(s => [s.supervisor,pct(s.completionPercent),fmt(s.totalStops),fmt(s.completedStops),fmt(s.incompleteStops)].join(" | ")),
+      "",
+      "Contract | Overall | Total stops | Completed | Incomplete",
+      ...contractRows.map(s => [s.contract,pct(s.completionPercent),fmt(s.totalStops),fmt(s.completedStops),fmt(s.incompleteStops),
+        s.totalStops > 0 && s.completionPercent < 95 ? "BELOW 95%" : ""].join(" | ")),
+      "", "DT Hub: https://dt-intelligence-hub.vercel.app/daily-reports",
+    ].join("\n");
+    const individualReviews = supervisorRows
+      .filter(s => s.supervisor !== "Unassigned" && s.totalStops > 0)
+      .map(s => {
+        const assigned = detailedContracts.filter(c => c.supervisor === s.supervisor)
+          .sort((a,b) => a.completionPercent - b.completionPercent || a.contract.localeCompare(b.contract));
+        const failing = assigned.filter(c => c.below95);
+        const overallBelow95 = s.completionPercent < 95;
+        if (!overallBelow95 && failing.length === 0) return null;
+        return {
+          supervisor: s.supervisor,
+          overallCompletionPercent: s.completionPercent,
+          overallBelow95,
+          failingContractCount: failing.length,
+          failingContracts: failing.map(c => c.contract),
+          // The complete contract list is intentional, even for passing contracts.
+          contracts: assigned,
+          subject: "Performance Review — " + s.supervisor + " — " + day,
+          body: [
+            "Davenport Transportation — Daily Supervisor Performance Review",
+            "Operating date: " + day,
+            "Supervisor: " + s.supervisor,
+            "Official overall completion: " + pct(s.completionPercent),
+            "Reasons for review: " + [
+              ...(overallBelow95 ? ["overall supervisor below 95%"] : []),
+              ...(failing.length ? ["contract(s) below 95%: " + failing.map(c => c.contract).join(", ")] : []),
+            ].join("; "),
+            "",
+            "ALL ASSIGNED CONTRACTS (including those at or above 95%)",
+            "Contract | Overall | Total stops | Completed | Incomplete | Regular Trips | Extra Trips | Review",
+            ...assigned.map(contractLine),
+            "", "See DT Hub for detailed stop explanations and missing-load reviews.",
+            "https://dt-intelligence-hub.vercel.app/missed-load-reviews",
+          ].join("\n"),
+        };
+      }).filter((review): review is NonNullable<typeof review> => review !== null);
     return NextResponse.json({
       ok: true, ready: true, date: day,
       importVerified: true,
@@ -121,8 +197,13 @@ export async function GET(request: Request) {
       unclassifiedTrips: result(unclassified),
       supervisors: supervisorRows,
       contracts: contractRows,
-      supervisorContracts: ranked(supervisorContracts, "supervisorContract"),
+      supervisorContracts: supervisorContractsRows,
       below95Supervisors: under95.map(row => row.supervisor),
+      companyEmail: { subject: "Davenport Transportation — Daily USPS Performance — " + day, body: companyBody },
+      individualReviews,
+      individualReviewCount: individualReviews.length,
+      // The reporting endpoint never authorizes delivery. Use a separate gated send workflow.
+      recipientsValidated: false,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ ok: false, ready: false, error: "Could not produce verified daily report" }, { status: 503, headers: { "Cache-Control": "no-store" } });
