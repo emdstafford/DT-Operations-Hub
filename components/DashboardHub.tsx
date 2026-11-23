@@ -35,7 +35,76 @@ function unassignedWeekCoverage(rows:UnassignedTripRow[],start:string,end:string
  return `Saved Saturday–Friday weeks included in full: ${weeks.join("; ")}. Weekly totals may include days outside the selected report dates.`;
 }
 
-function filteredEmail(data: HubData, start: string, end: string, supervisors: string[], contracts: string[], showCompanyRankings: boolean, includeSupervisorDetail = false, includeCongratulations = true, operationalNotes: OperationalNote[] = [], unassignedTrips: UnassignedTripRow[] = [], missedLoadReviews: MissedLoadReview[] = [], includeAllExplanations = false) {
+
+function filterUnassignedReportHtml(html:string, showRegular:boolean, showExtra:boolean){
+  if(showRegular&&showExtra)return html;
+  const doc=new DOMParser().parseFromString(html,"text/html");
+  for(const table of Array.from(doc.querySelectorAll("table"))){
+    const first=table.querySelector("thead tr");
+    if(!first)continue;
+    const headers=Array.from(first.children).map(cell=>(cell.textContent||"").toLowerCase().trim());
+    const remove=headers.flatMap((h,index)=>((!showRegular&&/regular( trips)?( unassigned)?/.test(h))||(!showExtra&&/extra( trips)?( unassigned)?/.test(h)))?[index]:[]);
+    if(!remove.length)continue;
+    for(const row of Array.from(table.querySelectorAll("tr"))){
+      if(row.querySelector("td[colspan]")&&row.children.length===1){
+        const cell=row.children[0] as HTMLTableCellElement;
+        cell.colSpan=Math.max(1,cell.colSpan-remove.length);
+        continue;
+      }
+      const cells=Array.from(row.children);
+      for(const index of [...remove].sort((a,b)=>b-a))cells[index]?.remove();
+    }
+  }
+  const headings=Array.from(doc.querySelectorAll("h3,h2"));
+  for(const heading of headings){
+    if((heading.textContent||"").trim()!=="Unassigned Trips")continue;
+    if(!showRegular&&!showExtra){
+      let node=heading.nextElementSibling;
+      while(node&&!/^H[23]$/.test(node.tagName)){
+        const next=node.nextElementSibling;node.remove();node=next;
+      }
+      heading.remove();
+    }else{
+      const summary=heading.nextElementSibling?.nextElementSibling;
+      if(summary?.tagName==="P"){
+        const labels=showRegular?["Regular"]:["Extra"];
+        const content=summary.textContent||"";
+        const match=content.match(new RegExp(labels[0]+":\\s*([\\d,]+)","i"));
+        summary.textContent=labels[0]+": "+(match?.[1]??"—");
+      }
+    }
+  }
+  if(!showRegular&&!showExtra){
+    for(const p of Array.from(doc.querySelectorAll("p"))){
+      if(/saved Saturday.F Friday weeks included|No saved unassigned trip weeks overlap/.test(p.textContent||"")&&p.previousElementSibling?.tagName!=="H3")p.remove();
+    }
+  }
+  return doc.body.innerHTML;
+}
+function filterUnassignedReportText(value:string,showRegular:boolean,showExtra:boolean){
+  if(showRegular&&showExtra)return value;
+  const lines=value.split("\\n");let insideUnassigned=false;
+  return lines.filter(line=>{
+    if(line.startsWith("Unassigned trips:")){insideUnassigned=true;return showRegular||showExtra;}
+    if(!showRegular&&!showExtra&&insideUnassigned)return false;
+    if(!showRegular&&!showExtra&&(/saved Saturday.F Friday weeks included|No saved unassigned trip weeks overlap/.test(line)))return false;
+    return true;
+  }).map(line=>{
+    if(line.startsWith("Unassigned trips:")){
+      const m=line.match(/Regular (\\d+), Extra (\\d+)/);
+      return m?(showRegular?"Regular: "+m[1]:"")+(showRegular&&showExtra?", ":"")+(showExtra?"Extra: "+m[2]:"") :line;
+    }
+    if(!line.includes("\\t"))return line;
+    const cells=line.split("\\t");
+    const isHeader=cells.some(x=>/Regular Trips Unassigned|Extra Trips Unassigned/.test(x));
+    if(isHeader){
+      return cells.filter(x=>(showRegular||!/Regular Trips Unassigned|^Regular$/.test(x))&&(showExtra||!/Extra Trips Unassigned|^Extra$/.test(x))).join("\\t");
+    }
+    return line;
+  }).join("\\n");
+}
+
+function filteredEmail(data: HubData, start: string, end: string, supervisors: string[], contracts: string[], showCompanyRankings: boolean, includeSupervisorDetail = false, includeCongratulations = true, operationalNotes: OperationalNote[] = [], unassignedTrips: UnassignedTripRow[] = [], missedLoadReviews: MissedLoadReview[] = [], includeAllExplanations = false, showRegularUnassigned = true, showExtraUnassigned = true) {
   const header = "background:#123b61!important;background-color:#123b61!important;color:#ffffff!important;padding:8px;border:1px solid #d6dde3;text-align:left";
   const cell = "padding:7px 9px;border:1px solid #d6dde3;text-align:right";
   const nameCell = `${cell};text-align:left;font-weight:600`;
@@ -106,7 +175,7 @@ function filteredEmail(data: HubData, start: string, end: string, supervisors: s
     "Contract\tRegular\tExtra\tTotal",
     ...filteredTrips.map(([contract,r])=>`${contract}\t${r.regular}\t${r.extra}\t${r.regular+r.extra}`)
    ].filter((line,index,values)=>line||values[index-1]).join("\n");
-  return { html, text };
+  return { html:filterUnassignedReportHtml(html,showRegularUnassigned,showExtraUnassigned), text:filterUnassignedReportText(text,showRegularUnassigned,showExtraUnassigned) };
 }
 
 export default function DashboardHub() {
@@ -145,6 +214,8 @@ export default function DashboardHub() {
   const [missedLoadReviews,setMissedLoadReviews]=useState<MissedLoadReview[]>([]);
   const [loadReviewsReady,setLoadReviewsReady]=useState(false);
   const [includeAllExplanations,setIncludeAllExplanations]=useState(false);
+  const [showRegularUnassigned,setShowRegularUnassigned]=useState(true);
+  const [showExtraUnassigned,setShowExtraUnassigned]=useState(true);
   const [dashboardView, setDashboardView] = useState<"overview" | "investigate">("overview");
   const [investigateTab, setInvestigateTab] = useState<"contracts" | "supervisors" | "geofences" | "comparison">("contracts");
   const reportingContracts=contractOptions.filter(contract=>start<="2026-11-13"||normalizeTripContract(contract)!=="3773G");
@@ -382,7 +453,7 @@ export default function DashboardHub() {
 
   async function copyEmail() {
     if (!unassignedReady||!loadReviewsReady) {setError("Report details are still loading. Please retry once all counts and explanations are ready.");return;}
-    const email = filteredEmail(data, start, end, selectedSupervisors, selectedContracts, isEntireReport, false, true, operationalNotes, unassignedRows, missedLoadReviews, includeAllExplanations);
+    const email = filteredEmail(data, start, end, selectedSupervisors, selectedContracts, isEntireReport, false, true, operationalNotes, unassignedRows, missedLoadReviews, includeAllExplanations, showRegularUnassigned, showExtraUnassigned);
     if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
       await navigator.clipboard.write([new ClipboardItem({ "text/plain": new Blob([email.text], { type: "text/plain" }), "text/html": new Blob([email.html], { type: "text/html" }) })]);
     } else await navigator.clipboard.writeText(email.text);
@@ -392,7 +463,7 @@ export default function DashboardHub() {
 
   function printSupervisorContractReport() {
     if (!unassignedReady||!loadReviewsReady) {setError("Report details are still loading. Please retry once all counts and explanations are ready.");return;}
-    const report = filteredEmail(data, start, end, selectedSupervisors, selectedContracts, isEntireReport, true, false, operationalNotes, unassignedRows, missedLoadReviews, includeAllExplanations);
+    const report = filteredEmail(data, start, end, selectedSupervisors, selectedContracts, isEntireReport, true, false, operationalNotes, unassignedRows, missedLoadReviews, includeAllExplanations, showRegularUnassigned, showExtraUnassigned);
     const printWindow = window.open("", "_blank");
     if (!printWindow) { setError("Allow pop-ups for DT Intelligence Hub to print the report."); return; }
     printWindow.document.write(`<!doctype html><html><head><title>Supervisor and Contract Report ${start} to ${end}</title><style>@page{size:portrait;margin:.4in}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{margin:0;background:white}table{font-size:9px}th,td{padding:5px 6px!important}h2,h3{break-after:avoid}thead{display:table-header-group}section{break-inside:avoid;page-break-inside:avoid}</style></head><body>${report.html}<script>window.onload=()=>{window.print()}<\/script></body></html>`);
@@ -499,7 +570,7 @@ export default function DashboardHub() {
       const html = `<div style="font-family:Arial,sans-serif;color:#243746"><header style="background:#123b61;color:white;padding:20px 24px"><small style="letter-spacing:1px">DT INTELLIGENCE HUB</small><h1 style="margin:5px 0">Performance Review Report</h1><div>${displayDate(start)} – ${displayDate(end)}</div></header><main style="padding:18px 24px"><p><strong>${escapeHtml(context)}</strong></p><div style="display:flex;gap:10px;flex-wrap:wrap"><div style="background:#eef2f5;padding:10px 14px"><small>COMPLETION</small><br><strong style="font-size:22px">${percent(data.totals.completion_percent)}</strong></div><div style="background:#eef2f5;padding:10px 14px"><small>TQ INCOMPLETE</small><br><strong style="font-size:22px">${number(data.totals.incomplete_stops)}</strong></div><div style="background:#eef2f5;padding:10px 14px"><small>MISSED GEOFENCE STOPS</small><br><strong style="font-size:22px">${number(sundayMissing)}</strong></div></div><h2>What the data confirms</h2><ul>${verified.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}<li>TQ incomplete stops and missed geofence stops are separate measures and may not match.</li></ul>${noteRows || operationalRows ? `<h2>Saved operational context</h2>${noteRows}${operationalRows}` : ""}<h2>Contract performance</h2><p style="color:#526171;font-size:11px">${escapeHtml(reviewWeeks)}</p><p style="color:#123b61;font-weight:bold">Regular Trips Unassigned: ${number(reviewTotals.regular)} &nbsp; Extra Trips Unassigned: ${number(reviewTotals.extra)}</p><table style="width:100%;border-collapse:collapse"><thead><tr><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Contract</span></th><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Regular Trips Unassigned</span></th><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Extra Trips Unassigned</span></th><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Stops</span></th><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Incomplete</span></th><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Completion</span></th></tr></thead><tbody>${contractRows}</tbody></table><h2 style="break-before:page">Incomplete stops by trip</h2><p style="color:#526171;font-size:10px">Trips marked Waiting on USPS already have documented operational context. Trips marked Supervisor review do not have a saved USPS explanation.</p><table style="width:100%;border-collapse:collapse"><thead><tr><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Operating Date</span></th><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Contract</span></th><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Trip</span></th><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Loads</span></th><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Incomplete</span></th><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Focus</span></th><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Load Numbers</span></th></tr></thead><tbody>${tripRows}</tbody></table>${locationRows ? `<h2>Missed Geofence Locations</h2><table style="width:100%;border-collapse:collapse"><thead><tr><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Location</span></th><th bgcolor="#123b61" style="${header}"><span style="color:#ffffff!important;font-weight:bold">Occurrences</span></th></tr></thead><tbody>${locationRows}</tbody></table>` : ""}<p style="color:#677887;font-size:10px">Facts are drawn from saved TQ and missed-stops reports. A cause is shown only when documented in an operational note.</p></main></div>`;
       const printWindow = window.open("", "_blank");
       if (!printWindow) throw new Error("Allow pop-ups for DT Intelligence Hub to print the report.");
-      printWindow.document.write(`<!doctype html><html><head><title>Performance Review ${start} to ${end}</title><style>@page{size:portrait;margin:.4in}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{margin:0}h2{color:#123b61;break-after:avoid}thead{display:table-header-group}tr{break-inside:avoid}</style></head><body>${html}<script>window.onload=()=>window.print()<\/script></body></html>`);
+      printWindow.document.write(`<!doctype html><html><head><title>Performance Review ${start} to ${end}</title><style>@page{size:portrait;margin:.4in}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{margin:0}h2{color:#123b61;break-after:avoid}thead{display:table-header-group}tr{break-inside:avoid}</style></head><body>${filterUnassignedReportHtml(html,showRegularUnassigned,showExtraUnassigned)}<script>window.onload=()=>window.print()<\/script></body></html>`);
       printWindow.document.close();
     } catch (error) { setError(error instanceof Error ? error.message : "The Performance Review Report could not be created."); }
     finally { setReviewLoading(false); }
@@ -534,6 +605,7 @@ export default function DashboardHub() {
     {error && <div className="alert alert-error">{error.includes("dashboard_hub_filtered") ? "The dashboard database update still needs to be installed in Supabase." : error}</div>}
     {loading ? <section className="hub-loading">Loading your operations picture…</section> : <>
       {!dashboardFuelOnly && <label className="hub-secondary-link" style={{display:"inline-flex",alignItems:"center",gap:8,marginBottom:10}}><input type="checkbox" checked={includeAllExplanations} onChange={event=>setIncludeAllExplanations(event.target.checked)}/>Include all saved load explanations in print/email (default: unresolved only)</label>}
+      {!dashboardFuelOnly && <div className="panel no-print" style={{padding:"10px 16px",display:"flex",gap:22,flexWrap:"wrap",marginBottom:12}}><strong>Include in print, email &amp; performance reports:</strong><label><input type="checkbox" checked={showRegularUnassigned} onChange={e=>setShowRegularUnassigned(e.target.checked)}/> Regular unassigned</label><label><input type="checkbox" checked={showExtraUnassigned} onChange={e=>setShowExtraUnassigned(e.target.checked)}/> Extra-trip unassigned</label></div>}
       {!dashboardFuelOnly && <section className="dashboard-email-bar"><div><strong>Report actions</strong><span>{displayDate(start)} – {displayDate(end)}{selectedSupervisors.length || selectedContracts.length ? " with selected filters" : " · Company-wide"}</span></div><div className="dashboard-report-buttons"><button className="hub-secondary-link" onClick={() => void printPerformanceReview()} disabled={reviewLoading||!unassignedReady}>{reviewLoading ? "Building review…" : "Print Performance Review"}</button><button className="hub-secondary-link" onClick={printSupervisorContractReport} disabled={!unassignedReady||!loadReviewsReady}>Print Supervisor &amp; Contract Report</button><button className="primary-link" onClick={copyEmail} disabled={!unassignedReady||!loadReviewsReady}>{copied ? "Email report copied!" : "Copy Email Report"}</button></div></section>}
       <section className="metric-grid ops-dashboard-metrics" aria-label="Performance summary">
         <article className="metric-card metric-primary"><span>Completion</span><strong>{percent(data.totals.completion_percent)}</strong></article>
