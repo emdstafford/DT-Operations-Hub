@@ -270,6 +270,7 @@ export async function GET(request: Request) {
     const individualReviews = supervisorRows
       .filter(s => s.supervisor !== "Unassigned" && s.totalStops > 0)
       .map(s => {
+        if (s.supervisor.trim().toLowerCase() === "tonya capps owen") return null;
         const assigned = detailedContracts.filter(c => c.supervisor === s.supervisor)
           .sort((a,b) => a.completionPercent - b.completionPercent || a.contract.localeCompare(b.contract));
         const failing = assigned.filter(c => c.below95);
@@ -322,9 +323,12 @@ export async function GET(request: Request) {
       html: review.html,
       failingContracts: review.failingContracts,
     }));
-    const distributionRecipients = (recipientRows ?? []).filter(row => ["supervisor", "distribution"].includes(row.recipient_type))
+    const isTonya = (name: string) => name.trim().toLowerCase() === "tonya capps owen";
+    const distributionRecipients = (recipientRows ?? []).filter(row => !isTonya(String(row.name)) && ["supervisor", "distribution"].includes(row.recipient_type))
       .map(row => String(row.email).trim().toLowerCase());
-    const companyBccRecipients = (recipientRows ?? []).filter(row => row.recipient_type === "bcc")
+    const companyCcRecipients = (recipientRows ?? []).filter(row => !isTonya(String(row.name)) && row.recipient_type === "cc")
+      .map(row => String(row.email).trim().toLowerCase());
+    const companyBccRecipients = (recipientRows ?? []).filter(row => !isTonya(String(row.name)) && row.recipient_type === "bcc")
       .map(row => String(row.email).trim().toLowerCase());
     // Read-only preparation. These diagnostics must all be zero and upstream
     // completeness must be separately certified before future unattended sends.
@@ -355,7 +359,7 @@ export async function GET(request: Request) {
         missingSupervisorEmails: [...unmatchedSupervisorNames].sort(),
         missingOversightRecipients,
       },
-      companyDeliveryPreview: { to: [...new Set(distributionRecipients)], bcc: [...new Set(companyBccRecipients)] },
+      companyDeliveryPreview: { to: [...new Set(distributionRecipients)], cc: [...new Set(companyCcRecipients)], bcc: [...new Set(companyBccRecipients)] },
       reviewDeliveryPreview,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch {
