@@ -31,9 +31,11 @@ function group(map: Map<string, Stats>, key: string, load: Load) {
   add(item, load);
   map.set(key, item);
 }
-function ranked(map: Map<string, Stats>, key: string) {
-  return [...map.entries()].map(([name, stats]) => ({ [key]: name, ...result(stats) }))
-    .sort((a, b) => b.totalStops - a.totalStops || String(a[key]).localeCompare(String(b[key])));
+function ranked<K extends string>(map: Map<string, Stats>, key: K): Array<ReturnType<typeof result> & Record<K, string>> {
+  return [...map.entries()].map(([name, stats]) => ({
+    ...result(stats), [key]: name,
+  } as ReturnType<typeof result> & Record<K, string>))
+    .sort((a, b) => b.totalStops - a.totalStops || a[key].localeCompare(b[key]));
 }
 function authorized(request: Request) {
   const expected = process.env.AUTOMATION_INGEST_SECRET;
