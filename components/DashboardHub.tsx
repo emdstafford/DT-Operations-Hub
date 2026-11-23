@@ -43,10 +43,10 @@ function filterUnassignedReportHtml(html:string, showRegular:boolean, showExtra:
     const first=table.querySelector("thead tr");
     if(!first)continue;
     const headers=Array.from(first.children).map(cell=>(cell.textContent||"").toLowerCase().trim());
-    const remove=headers.flatMap((h,index)=>((!showRegular&&/regular( trips)?( unassigned)?/.test(h))||(!showExtra&&/extra( trips)?( unassigned)?/.test(h)))?[index]:[]);
+    const remove=headers.flatMap((h,index)=>((!showRegular&&/^regular( trips)?( unassigned)?$/.test(h))||(!showExtra&&/^extra( trips)?( unassigned)?$/.test(h)))?[index]:[]);
     if(!remove.length)continue;
     for(const row of Array.from(table.querySelectorAll("tr"))){
-      if(row.querySelector("td[colspan]")&&row.children.length===1){
+      if(row.children.length===1&&row.querySelector("td[colspan]")){
         const cell=row.children[0] as HTMLTableCellElement;
         cell.colSpan=Math.max(1,cell.colSpan-remove.length);
         continue;
@@ -55,8 +55,7 @@ function filterUnassignedReportHtml(html:string, showRegular:boolean, showExtra:
       for(const index of [...remove].sort((a,b)=>b-a))cells[index]?.remove();
     }
   }
-  const headings=Array.from(doc.querySelectorAll("h3,h2"));
-  for(const heading of headings){
+  for(const heading of Array.from(doc.querySelectorAll("h3"))){
     if((heading.textContent||"").trim()!=="Unassigned Trips")continue;
     if(!showRegular&&!showExtra){
       let node=heading.nextElementSibling;
@@ -67,41 +66,37 @@ function filterUnassignedReportHtml(html:string, showRegular:boolean, showExtra:
     }else{
       const summary=heading.nextElementSibling?.nextElementSibling;
       if(summary?.tagName==="P"){
-        const labels=showRegular?["Regular"]:["Extra"];
-        const content=summary.textContent||"";
-        const match=content.match(new RegExp(labels[0]+":\\s*([\\d,]+)","i"));
-        summary.textContent=labels[0]+": "+(match?.[1]??"—");
+        const m=(summary.textContent||"").match(/Regular:\s*([\d,]+)\s*Extra:\s*([\d,]+)/i);
+        if(m)summary.textContent=showRegular?"Regular: "+m[1]:"Extra: "+m[2];
       }
-    }
-  }
-  if(!showRegular&&!showExtra){
-    for(const p of Array.from(doc.querySelectorAll("p"))){
-      if(/saved Saturday.F Friday weeks included|No saved unassigned trip weeks overlap/.test(p.textContent||"")&&p.previousElementSibling?.tagName!=="H3")p.remove();
     }
   }
   return doc.body.innerHTML;
 }
 function filterUnassignedReportText(value:string,showRegular:boolean,showExtra:boolean){
   if(showRegular&&showExtra)return value;
-  const lines=value.split("\\n");let insideUnassigned=false;
-  return lines.filter(line=>{
-    if(line.startsWith("Unassigned trips:")){insideUnassigned=true;return showRegular||showExtra;}
-    if(!showRegular&&!showExtra&&insideUnassigned)return false;
-    if(!showRegular&&!showExtra&&(/saved Saturday.F Friday weeks included|No saved unassigned trip weeks overlap/.test(line)))return false;
-    return true;
-  }).map(line=>{
+  const lines=value.split("\n");
+  let columnsToRemove:number[]=[];
+  let inUnassignedSection=false;
+  const result:string[]=[];
+  for(const line of lines){
     if(line.startsWith("Unassigned trips:")){
-      const m=line.match(/Regular (\\d+), Extra (\\d+)/);
-      return m?(showRegular?"Regular: "+m[1]:"")+(showRegular&&showExtra?", ":"")+(showExtra?"Extra: "+m[2]:"") :line;
+      inUnassignedSection=true;
+      if(!showRegular&&!showExtra)continue;
+      const m=line.match(/Regular (\d+), Extra (\d+)/);
+      result.push(m?(showRegular?"Regular: "+m[1]:"Extra: "+m[2]):line);
+      continue;
     }
-    if(!line.includes("\\t"))return line;
-    const cells=line.split("\\t");
-    const isHeader=cells.some(x=>/Regular Trips Unassigned|Extra Trips Unassigned/.test(x));
-    if(isHeader){
-      return cells.filter(x=>(showRegular||!/Regular Trips Unassigned|^Regular$/.test(x))&&(showExtra||!/Extra Trips Unassigned|^Extra$/.test(x))).join("\\t");
+    if(!showRegular&&!showExtra&&inUnassignedSection)continue;
+    if(!showRegular&&!showExtra&&(/saved Saturday.F Friday weeks included|No saved unassigned trip weeks overlap/.test(line)))continue;
+    if(!line.includes("\t")){columnsToRemove=[];result.push(line);continue;}
+    const cells=line.split("\t");
+    if(cells.some(x=>/^(Regular Trips Unassigned|Extra Trips Unassigned|Regular|Extra)$/.test(x))){
+      columnsToRemove=cells.flatMap((x,i)=>((!showRegular&&/^(Regular Trips Unassigned|Regular)$/.test(x))||(!showExtra&&/^(Extra Trips Unassigned|Extra)$/.test(x)))?[i]:[]);
     }
-    return line;
-  }).join("\\n");
+    result.push(cells.filter((_,i)=>!columnsToRemove.includes(i)).join("\t"));
+  }
+  return result.join("\n");
 }
 
 function filteredEmail(data: HubData, start: string, end: string, supervisors: string[], contracts: string[], showCompanyRankings: boolean, includeSupervisorDetail = false, includeCongratulations = true, operationalNotes: OperationalNote[] = [], unassignedTrips: UnassignedTripRow[] = [], missedLoadReviews: MissedLoadReview[] = [], includeAllExplanations = false, showRegularUnassigned = true, showExtraUnassigned = true) {
