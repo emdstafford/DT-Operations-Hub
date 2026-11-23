@@ -34,3 +34,15 @@ This confirms download and parsing only. **It does not add loads to DT Hub, chan
 ## Next stage
 
 After a verified dry run, build server-side import reusing the existing operating-date parser and preserve manual upload upsert semantics; add idempotency and upload audit before enabling mail delivery. The scheduled 7 AM flow must check import completion, not assume it.
+
+## Second-stage import endpoint (review-gated)
+
+The branch also contains `POST /api/automation/fourkites-import` with the **same** `x-dt-ingest-secret` authentication and restricted download validation. The JSON can include `"mode":"import"`. The endpoint will **not** write any records until all of these server-side environment variables are set:
+
+- `SUPABASE_SERVICE_ROLE_KEY` — Supabase secret/service-role key, on the server only; never use `NEXT_PUBLIC_`, and never share the value.
+- `AUTOMATION_USER_ID` — UUID of an approved existing `@dtexpress.net` Supabase Auth user. Used to attribute imports.
+- `AUTOMATION_IMPORT_ENABLED=true` — intentional go-live switch. Leave **unset** until a download-only test, a review of this PR, and dry-run report comparison have succeeded.
+
+Unlike the download test, import mode can update `usps_loads` and `report_history` via the same upsert keys as the manual uploader. It preserves older tag dates and checks for later source periods before overwriting a load. It does not update `load_master`, dispatch emails, or certify that every source file for a reporting date has arrived. Those are outstanding milestones.
+
+For now, **do not set the go-live switch, change the Power Automate JSON body to import mode, or enable daily outgoing emails.** Test in Preview and compare reported operating-day counts to an existing manual upload first.
