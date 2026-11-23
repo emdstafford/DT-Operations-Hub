@@ -5,6 +5,7 @@ import Link from "next/link";
 import {supabase} from "@/lib/supabase";
 import {useAccessRole} from "@/components/AccessRole";
 
+type Assignment={contract_number:string;supervisor:string;start_date?:string|null;end_date?:string|null;active?:boolean|null};
 type Recipient={name:string;email:string;recipient_type:"supervisor"|"distribution"|"bcc";enabled:boolean};
 type Delivery={id:number;report_type:"company"|"individual";supervisor:string;recipient_email:string;status:"pending"|"sent"|"failed"|"skipped";attempted_at:string;sent_at:string|null;error_message:string|null};
 type Performance={supervisor?:string;contract_number?:string;total_stops:number;completed_stops:number;incomplete_stops:number;completion_percent:number;load_count:number};
@@ -24,6 +25,9 @@ export default function DailyReportsPage(){
  const role=useAccessRole();
  const [day,setDay]=useState(yesterday);
  const [directory,setDirectory]=useState<Recipient[]>([]);
+ const [assignmentPeriods,setAssignmentPeriods]=useState<Assignment[]>([]);
+ const [currentAssignments,setCurrentAssignments]=useState<Assignment[]>([]);
+ const [directorySearch,setDirectorySearch]=useState("");
  const [drafts,setDrafts]=useState<Record<string,string>>({});
  const [data,setData]=useState<DashboardData>(empty);
  const [deliveries,setDeliveries]=useState<Delivery[]>([]);
@@ -36,19 +40,70 @@ export default function DailyReportsPage(){
  const refresh=useCallback(async()=>{
   if(!allowed)return;
   setLoading(true);setError("");setMessage("");
-  const [recipients,report,deliveryAudit]=await Promise.all([
+  const [recipients,report,deliveryAudit,periods,assignments]=await Promise.all([
    supabase.from("daily_report_recipients").select("name,email,recipient_type,enabled").order("recipient_type").order("name"),
    supabase.rpc("dashboard_hub_filtered",{p_start:day,p_end:day,p_grain:"day",p_contracts:null,p_supervisors:null,p_exclude_august_2026:false,p_max_completion:null,p_min_missed_stops:null}),
-   supabase.from("daily_report_deliveries").select("id,report_type,supervisor,recipient_email,status,attempted_at,sent_at,error_message").eq("operating_date",day).order("attempted_at",{ascending:false}).limit(500)
+   supabase.from("daily_report_deliveries").select("id,report_type,supervisor,recipient_email,status,attempted_at,sent_at,error_message").eq("operating_date",day).order("attempted_at",{ascending:false}).limit(500),
+   supabase.from("contract_assignment_periods").select("contract_number,supervisor,start_date,end_date"),
+   supabase.from("contract_supervisors").select("contract_number,supervisor,active").eq("active",true)
   ]);
-  if(recipients.error||report.error||deliveryAudit.error){setError(recipients.error?.message||report.error?.message||deliveryAudit.error?.message||"Unable to load reports");setLoading(false);return;}
+  if(recipients.error||report.error||deliveryAudit.error||periods.error||assignments.error){setError(recipients.error?.message||report.error?.message||deliveryAudit.error?.message||periods.error?.message||assignments.error?.message||"Unable to load reports");setLoading(false);return;}
   const saved=recipients.data as Recipient[];
   setDirectory(saved);setDrafts(Object.fromEntries(saved.map(r=>[r.name,r.email])));
+  setAssignmentPeriods((periods.data||[]) as Assignment[]);
+  setCurrentAssignments((assignments.data||[]) as Assignment[]);
   setDeliveries((deliveryAudit.data||[]) as Delivery[]);
   setData((report.data as unknown as DashboardData)||empty);setLoading(false);
  },[allowed,day]);
  useEffect(()=>{void refresh()},[refresh]);
 
+ const today=dateInNewYork();
+ const normContract=(value:string)=>value.trim().toUpperCase().replace(/^0+(?=[0-9])/,"");
+ const assignmentNames=(value:string)=>value.split("/").map(v=>v.trim()).filter(Boolean);
+ const directoryRows=useMemo(()=>{
+  const dated=new Map<string,Set<string>>();
+  const current=new Map<string,Set<string>>();
+  for(const entry of assignmentPeriods){
+   if(entry.start_date&&entry.start_date>today)continue;
+   if(entry.end_date&&entry.end_date<today)continue;
+   const key=normContract(entry.contract_number);
+   const names=dated.get(key)||new Set<string>();
+   assignmentNames(entry.supervisor).forEach(name=>names.add(name));
+   dated.set(key,names);
+  }
+  for(const entry of currentAssignments){
+   const key=normContract(entry.contract_number);
+   const names=current.get(key)||new Set<string>();
+   assignmentNames(entry.supervisor).forEach(name=>names.add(name));
+   current.set(key,names);
+  }
+  const map=new Map<string,{contracts:Set<string>;provisional:Set<string>}>();
+  for(const [contract,names] of current){
+   const effective=dated.get(contract);
+   for(const name of effective?.size?effective:names){
+    const key=clean(name);
+    const row=map.get(key)||{contracts:new Set<string>(),provisional:new Set<string>()};
+    row.contracts.add(contract);
+    if(!effective?.size)row.provisional.add(contract);
+    map.set(key,row);
+   }
+  }
+  for(const [contract,names] of dated){
+   if(current.has(contract))continue;
+   for(const name of names){
+    const key=clean(name);
+    const row=map.get(key)||{contracts:new Set<string>(),provisional:new Set<string>()};
+    row.contracts.add(contract);
+    map.set(key,row);
+   }
+  }
+  return directory.filter(r=>r.recipient_type==="supervisor").map(r=>{
+   const matches=map.get(clean(r.name));
+   return {...r,contracts:[...(matches?.contracts||[])].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})),
+    provisional:[...(matches?.provisional||[])],};
+  }).sort((a,b)=>a.name.localeCompare(b.name));
+ },[directory,assignmentPeriods,currentAssignments,today]);
+ const visibleDirectoryRows=directoryRows.filter(r=>[r.name,r.email,...r.contracts].some(value=>value.toLowerCase().includes(directorySearch.trim().toLowerCase())));
  const listed=useMemo(()=>data.supervisors.filter(r=>r.supervisor&&r.supervisor!=="Unassigned"&&Number(r.total_stops)>0),[data]);
  const below=listed.filter(r=>Number(r.completion_percent)<0.95);
  const active=directory.filter(r=>r.enabled);
@@ -142,6 +197,18 @@ export default function DailyReportsPage(){
      <div className="panel-heading"><div><h2>Actual email delivery history</h2><span>Microsoft 365 send results only · operating day {formatDate(day)}</span></div><span>{deliveries.length} recorded recipient(s)</span></div>
      {!deliveries.length?<p className="ops-summary"><strong>No emails recorded as sent.</strong> The Microsoft 365 dispatch connection has not been activated. Previewing or copying reports does not count as sending.</p>:
       <div className="table-scroll"><table className="data-table"><thead><tr><th>Report</th><th>Supervisor</th><th>Recipient</th><th>Status</th><th>Recorded</th></tr></thead><tbody>{deliveries.map(item=><tr key={item.id}><td>{item.report_type==="company"?"Company-wide":"Individual"}</td><td>{item.supervisor||"—"}</td><td>{item.recipient_email}</td><td><strong>{item.status.toUpperCase()}</strong>{item.error_message&&<small style={{display:"block"}}>{item.error_message}</small>}</td><td>{new Date(item.sent_at||item.attempted_at).toLocaleString("en-US",{timeZone:"America/New_York"})}</td></tr>)}</tbody></table></div>}
+    </section>
+    <section className="panel" id="supervisor-contract-directory">
+     <div className="panel-heading"><div><h2>Supervisor &amp; Email Directory</h2><span>Current assignments as of {formatDate(today)} · Read directly from DT Hub</span></div><strong>{directoryRows.length} supervisor contacts</strong></div>
+     <p className="ops-summary">Verify each supervisor’s email and assigned contracts here. Contracts with multiple supervisors appear under each person. Contracts marked * use the current assignment because a dated assignment was not found; verify these before enabling automatic delivery. Historical reports still need date-specific validation.</p>
+     <label style={{display:"block",marginBottom:12}}>Search supervisor, email or contract
+      <input type="search" placeholder="Search name, email, or contract number" value={directorySearch} onChange={e=>setDirectorySearch(e.target.value)} style={{display:"block",width:"100%",maxWidth:520,marginTop:6}}/>
+     </label>
+     <div className="table-scroll"><table className="data-table"><thead><tr><th>Supervisor</th><th>Email</th><th>Enabled</th><th>Assigned Contracts</th><th>Count</th></tr></thead><tbody>
+     {visibleDirectoryRows.map(r=><tr key={r.name}><td><strong>{r.name}</strong></td><td>{r.email}</td><td>{r.enabled?"Yes":"No"}</td><td>{r.contracts.length?r.contracts.map((contract,i)=><span key={contract}>{i?", ":""}<Link href={`/contracts/${encodeURIComponent(contract)}`}>{contract}</Link>{r.provisional.includes(contract)?" *":""}</span>):<strong style={{color:"#a24444"}}>No current assignment found — review</strong>}</td><td>{r.contracts.length}</td></tr>)}
+     {!visibleDirectoryRows.length&&<tr><td colSpan={5}>No matching supervisors.</td></tr>}
+     </tbody></table></div>
+     <p className="ops-summary">Email changes can be made in the Recipient directory below. Contract changes should be made in DT Hub’s existing contract management workflow, not in this directory.</p>
     </section>
     <section className="panel">
      <div className="panel-heading"><div><h2>Recipient directory</h2><span>Admin-only · saved centrally · names must match Dashboard supervisor names</span></div></div>
