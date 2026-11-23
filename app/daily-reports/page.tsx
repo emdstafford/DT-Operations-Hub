@@ -6,7 +6,7 @@ import {supabase} from "@/lib/supabase";
 import {useAccessRole} from "@/components/AccessRole";
 
 type Assignment={contract_number:string;supervisor:string;start_date?:string|null;end_date?:string|null;active?:boolean|null};
-type Recipient={name:string;email:string;recipient_type:"supervisor"|"distribution"|"bcc";enabled:boolean};
+type Recipient={name:string;email:string;recipient_type:"supervisor"|"distribution"|"cc"|"bcc";enabled:boolean};
 type Delivery={id:number;report_type:"company"|"individual";supervisor:string;recipient_email:string;status:"pending"|"sent"|"failed"|"skipped";attempted_at:string;sent_at:string|null;error_message:string|null};
 type Performance={supervisor?:string;contract_number?:string;total_stops:number;completed_stops:number;incomplete_stops:number;completion_percent:number;load_count:number};
 type DashboardData={totals:Performance;supervisors:Performance[];supervisor_contracts:Performance[];contracts:Performance[]};
@@ -110,12 +110,14 @@ export default function DailyReportsPage(){
  const lookup=(name:string)=>active.find(r=>r.recipient_type==="supervisor"&&clean(r.name)===clean(name));
  const supervisors=active.filter(r=>r.recipient_type==="supervisor");
  const distribution=active.filter(r=>r.recipient_type==="distribution");
+ const cc=active.filter(r=>r.recipient_type==="cc");
  const bcc=active.filter(r=>r.recipient_type==="bcc");
  const missing=listed.filter(r=>!lookup(r.supervisor||""));
  const dayReady=Number(data.totals.total_stops)>0;
  const generalTo=distinct([...supervisors.map(r=>r.email),...distribution.map(r=>r.email)]);
+ const generalCc=distinct(cc.map(r=>r.email));
  const generalBcc=distinct(bcc.map(r=>r.email));
- const oversight=distinct(distribution.filter(r=>["Emily Stafford","Chasity Cochran","Gary"].includes(r.name)).map(r=>r.email));
+ const oversight=distinct(active.filter(r=>["Emily Stafford","Chasity Cochran","Gary","Amber Smith"].includes(r.name)).map(r=>r.email));
  const companyBody=[
   "Davenport Transportation — USPS Daily Completion Report",
   "Operating day: "+formatDate(day),
@@ -152,6 +154,14 @@ export default function DailyReportsPage(){
   else{setDirectory(current=>current.map(c=>c.name===r.name?{...c,email}:c));setMessage("Saved "+r.name+"'s email.");}
   setSaving("");
  }
+ async function changeGroup(r:Recipient,recipient_type:Recipient["recipient_type"]){
+  if(r.recipient_type===recipient_type)return;
+  setSaving(r.name);setError("");setMessage("");
+  const response=await supabase.from("daily_report_recipients").update({recipient_type,updated_at:new Date().toISOString()}).eq("name",r.name);
+  if(response.error)setError(response.error.message);
+  else{setDirectory(current=>current.map(item=>item.name===r.name?{...item,recipient_type}:item));setMessage("Updated "+r.name+" to "+recipient_type+".");}
+  setSaving("");
+ }
  async function toggleRecipient(r:Recipient){
   setSaving(r.name);setError("");setMessage("");
   const response=await supabase.from("daily_report_recipients").update({enabled:!r.enabled,updated_at:new Date().toISOString()}).eq("name",r.name);
@@ -181,7 +191,7 @@ export default function DailyReportsPage(){
      {!dayReady?<p className="ops-summary">No saved loads exist for this operating day. Do not send the daily report until the FourKites file has been fully imported and verified.</p>:missing.length>0?<p className="ops-summary">Recipient check: {missing.map(r=>r.supervisor).join(", ")} {missing.length===1?"does":"do"} not have an active matching address in the directory. Confirm before turning on distribution.</p>:<p className="ops-summary">Supervisor addresses matched for the selected day. Verify report completeness before any automatic sending.</p>}
     </section>
     {dayReady&&<section className="panel">
-     <div className="panel-heading"><div><h2>Company-wide report preview</h2><span>To: {generalTo.length} unique addresses · BCC: {generalBcc.length} · same report every day</span></div><button className="hub-secondary-link" onClick={()=>void copy(companyBody)}>Copy preview</button></div>
+     <div className="panel-heading"><div><h2>Company-wide report preview</h2><span>To: {generalTo.length} unique addresses · CC: {generalCc.length} · BCC: {generalBcc.length} · same report every day</span></div><button className="hub-secondary-link" onClick={()=>void copy(companyBody)}>Copy preview</button></div>
      <pre className="ops-daily-preview">{companyBody}</pre>
     </section>}
     <section className="panel">
@@ -212,8 +222,8 @@ export default function DailyReportsPage(){
     </section>
     <section className="panel">
      <div className="panel-heading"><div><h2>Recipient directory</h2><span>Admin-only · saved centrally · names must match Dashboard supervisor names</span></div></div>
-     <p className="ops-summary">Supervisors get the company-wide report. Gary, Emily, Chasity and Sabrina are included in the main distribution; Rachelle and Cindy receive the company-wide report as BCC. Individual under-95% reports go only to the affected supervisor plus Gary, Emily and Chasity.</p>
-     <div className="table-scroll"><table className="data-table"><thead><tr><th>Name</th><th>Group</th><th>Email</th><th>Active</th><th></th></tr></thead><tbody>{directory.map(r=><tr key={r.name}><td><strong>{r.name}</strong></td><td>{r.recipient_type==="bcc"?"BCC":r.recipient_type==="distribution"?"Distribution":"Supervisor"}</td><td><input aria-label={"Email for "+r.name} type="email" value={drafts[r.name]??r.email} onChange={e=>setDrafts(current=>({...current,[r.name]:e.target.value}))}/></td><td><input type="checkbox" aria-label={"Include "+r.name} checked={r.enabled} disabled={saving===r.name} onChange={()=>void toggleRecipient(r)}/></td><td><button type="button" className="hub-secondary-link" disabled={saving===r.name||clean(drafts[r.name]??r.email)===clean(r.email)} onClick={()=>void saveRecipient(r)}>{saving===r.name?"Saving…":"Save"}</button></td></tr>)}</tbody></table></div>
+     <p className="ops-summary">Supervisor = company-wide To plus eligible individual reviews. Distribution = company-wide To. CC = company-wide CC. BCC = company-wide BCC. Group changes save immediately. Tonya Capps Owen is not in this list and must not be added to any company-wide group. Individual reviews also include Amber Smith alongside Gary, Emily, and Chasity; their delivery routing is finalized separately.</p>
+     <div className="table-scroll"><table className="data-table"><thead><tr><th>Name</th><th>Group</th><th>Email</th><th>Active</th><th></th></tr></thead><tbody>{directory.map(r=><tr key={r.name}><td><strong>{r.name}</strong></td><td><select aria-label={"Recipient group for "+r.name} value={r.recipient_type} disabled={saving===r.name} onChange={e=>void changeGroup(r,e.target.value as Recipient["recipient_type"])}><option value="supervisor">Supervisor</option><option value="distribution">Distribution</option><option value="cc">CC</option><option value="bcc">BCC</option></select></td><td><input aria-label={"Email for "+r.name} type="email" value={drafts[r.name]??r.email} onChange={e=>setDrafts(current=>({...current,[r.name]:e.target.value}))}/></td><td><input type="checkbox" aria-label={"Include "+r.name} checked={r.enabled} disabled={saving===r.name} onChange={()=>void toggleRecipient(r)}/></td><td><button type="button" className="hub-secondary-link" disabled={saving===r.name||clean(drafts[r.name]??r.email)===clean(r.email)} onClick={()=>void saveRecipient(r)}>{saving===r.name?"Saving…":"Save"}</button></td></tr>)}</tbody></table></div>
     </section>
    </>}
  </main>;
