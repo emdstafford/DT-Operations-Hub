@@ -89,6 +89,54 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: true, ready: false, date: day, expectedLoads, savedLoads: loads.length, reason: "Imported loads do not match the saved report" }, { headers: { "Cache-Control": "no-store" } });
     }
 
+    // Prefer date-effective DT Hub assignments, then current assignments only
+    // where no dated assignment is recorded for that contract.
+    const [{ data: assignmentPeriods, error: periodsError }, { data: activeAssignments, error: assignmentsError },
+      { data: recipientRows, error: recipientsError }] = await Promise.all([
+      db.from("contract_assignment_periods").select("contract_number,supervisor,start_date,end_date")
+        .lte("start_date", day).or(`end_date.is.null,end_date.gte.${day}`),
+      db.from("contract_supervisors").select("contract_number,supervisor").eq("active", true),
+      db.from("daily_report_recipients").select("name,email,recipient_type,enabled").eq("enabled", true),
+    ]);
+    if (periodsError || assignmentsError || recipientsError) throw new Error("Could not read reporting assignments");
+    const normalizeContract = (value: string | null) => (value || "").trim().toUpperCase().replace(/^0+(?=[0-9])/, "");
+    const recipientByName = new Map<string, string>();
+    for (const row of recipientRows ?? []) {
+      if (row.recipient_type === "supervisor" && row.email) recipientByName.set(String(row.name).trim().toLowerCase(), String(row.email).trim().toLowerCase());
+    }
+    const splitAssignment = (value: string) => {
+      const label = value.trim();
+      if (recipientByName.has(label.toLowerCase())) return [label];
+      return label.split("/").map(name => name.trim()).filter(Boolean);
+    };
+    const datedByContract = new Map<string, Set<string>>();
+    const activeByContract = new Map<string, Set<string>>();
+    for (const row of assignmentPeriods ?? []) {
+      const key = normalizeContract(row.contract_number);
+      const names = datedByContract.get(key) ?? new Set<string>();
+      for (const name of splitAssignment(row.supervisor || "")) names.add(name);
+      datedByContract.set(key, names);
+    }
+    for (const row of activeAssignments ?? []) {
+      const key = normalizeContract(row.contract_number);
+      const names = activeByContract.get(key) ?? new Set<string>();
+      for (const name of splitAssignment(row.supervisor || "")) names.add(name);
+      activeByContract.set(key, names);
+    }
+    const assignmentFallbackContracts = new Set<string>();
+    const unmatchedSupervisorNames = new Set<string>();
+    const resolvedSupervisors = (load: Load) => {
+      const key = normalizeContract(load.contract_number);
+      const dated = datedByContract.get(key);
+      if (dated?.size) return [...dated];
+      // Missing historical coverage: current mapping is provisional, never
+      // proof that a supervisor held this contract on a past operating day.
+      assignmentFallbackContracts.add(key);
+      const current = activeByContract.get(key);
+      if (current?.size) return [...current];
+      // Last resort for the preview only. It must not drive unattended mail.
+      return [...new Set((load.supervisors ?? []).flatMap(splitAssignment).filter(Boolean))];
+    };
     const overall = zero(), regular = zero(), extra = zero(), unclassified = zero();
     const supervisors = new Map<string, Stats>();
     const contracts = new Map<string, Stats>();
@@ -100,12 +148,12 @@ export async function GET(request: Request) {
       add(overall, load);
       const type = tripType(load.trip_number);
       add(type === "regular" ? regular : type === "extra" ? extra : unclassified, load);
-      const contract = load.contract_number || "Unassigned contract";
+      const contract = normalizeContract(load.contract_number) || "Unassigned contract";
       group(contracts, contract, load);
       const contractBuckets = contractTripStats.get(contract) ?? { regular: zero(), extra: zero(), unclassified: zero() };
       add(contractBuckets[type], load);
       contractTripStats.set(contract, contractBuckets);
-      const names = [...new Set((load.supervisors ?? []).filter(Boolean))];
+      const names = resolvedSupervisors(load);
       for (const name of names.length ? names : ["Unassigned"]) {
         group(supervisors, name, load);
         const supervisorBuckets = supervisorTripStats.get(name) ?? { regular: zero(), extra: zero(), unclassified: zero() };
@@ -117,6 +165,13 @@ export async function GET(request: Request) {
         add(buckets[type], load);
         supervisorContractsByTrip.set(key, buckets);
       }
+    }
+    const supervisorEmails: Record<string, string> = {};
+    for (const name of supervisors.keys()) {
+      if (name === "Unassigned") continue;
+      const email = recipientByName.get(name.trim().toLowerCase());
+      if (email) supervisorEmails[name] = email;
+      else unmatchedSupervisorNames.add(name);
     }
     const supervisorRows = ranked(supervisors, "supervisor");
     const contractRows = ranked(contracts, "contract");
@@ -257,6 +312,24 @@ export async function GET(request: Request) {
           ].join("\n"),
         };
       }).filter((review): review is NonNullable<typeof review> => review !== null);
+    const oversight = ["Gary", "Chasity Cochran", "Emily Stafford", "Amber Smith"];
+    const emailByName = new Map((recipientRows ?? []).map(row => [String(row.name).trim().toLowerCase(), String(row.email).trim().toLowerCase()]));
+    const missingOversightRecipients = oversight.filter(name => !emailByName.has(name.toLowerCase()));
+    const reviewDeliveryPreview = individualReviews.map(review => ({
+      supervisor: review.supervisor,
+      to: [...new Set([supervisorEmails[review.supervisor], ...oversight.map(name => emailByName.get(name.toLowerCase()))].filter((address): address is string => Boolean(address)))],
+      subject: review.subject,
+      html: review.html,
+      failingContracts: review.failingContracts,
+    }));
+    const distributionRecipients = (recipientRows ?? []).filter(row => ["supervisor", "distribution"].includes(row.recipient_type))
+      .map(row => String(row.email).trim().toLowerCase());
+    const companyBccRecipients = (recipientRows ?? []).filter(row => row.recipient_type === "bcc")
+      .map(row => String(row.email).trim().toLowerCase());
+    // Read-only preparation. These diagnostics must all be zero and upstream
+    // completeness must be separately certified before future unattended sends.
+    const routingValidated = assignmentFallbackContracts.size === 0 &&
+      unmatchedSupervisorNames.size === 0 && missingOversightRecipients.length === 0;
     return NextResponse.json({
       ok: true, ready: true, date: day,
       importVerified: true,
@@ -276,7 +349,14 @@ export async function GET(request: Request) {
       individualReviews,
       individualReviewCount: individualReviews.length,
       // The reporting endpoint never authorizes delivery. Use a separate gated send workflow.
-      recipientsValidated: false,
+      recipientsValidated: routingValidated,
+      routingChecks: {
+        missingDatedAssignments: [...assignmentFallbackContracts].sort(),
+        missingSupervisorEmails: [...unmatchedSupervisorNames].sort(),
+        missingOversightRecipients,
+      },
+      companyDeliveryPreview: { to: [...new Set(distributionRecipients)], bcc: [...new Set(companyBccRecipients)] },
+      reviewDeliveryPreview,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ ok: false, ready: false, error: "Could not produce verified daily report" }, { status: 503, headers: { "Cache-Control": "no-store" } });
