@@ -627,7 +627,8 @@ export async function GET(request: Request) {
         signedWorkbookEvidenceVerified: workbookVerified,
       },
       // Data is for an internal test preview only, not an authorization to send.
-      sendAuthorized: false,\n      emailSettings: { deliveryEnabled: settingsRow.delivery_enabled, companyEnabled: settingsRow.company_enabled, individualEnabled: settingsRow.individual_enabled, thresholdPercent: threshold },
+      sendAuthorized: false,
+      emailSettings: { deliveryEnabled: settingsRow.delivery_enabled, companyEnabled: settingsRow.company_enabled, individualEnabled: settingsRow.individual_enabled, thresholdPercent: threshold },
       expectedLoads,
       overall: result(overall),
       regularTrips: result(regular),
