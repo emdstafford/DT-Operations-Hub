@@ -447,6 +447,12 @@ export async function GET(request: Request) {
             normalizeContract(a.load.contract_number).localeCompare(normalizeContract(b.load.contract_number), undefined, { numeric: true }) ||
             a.load.load_number.localeCompare(b.load.load_number));
         if (!overallBelow95 && failing.length === 0 && priorUpdates.length === 0) return null;
+        const scoreExplanation = "How to calculate performance accurately: Do not average daily percentages. " +
+          "For any multi-day period, add completed stops from each operating day, then divide by " +
+          "the total stops from those same days and multiply by 100. " +
+          "Use the latest corrected figures for each original operating date. " +
+          "FourKites can report an update on a later date, so a previously emailed daily rate may be revised. " +
+          "Earlier-day updates below are not extra stops for today's date.";
         const priorDescription = "This FourKites report dated " + prettyDate +
           " contains updates for loads originally operated on earlier dates. " +
           "Each load remains attributed to its original operating date and supervisor; " +
@@ -512,6 +518,7 @@ export async function GET(request: Request) {
           subject: "Performance Review — " + s.supervisor + " — " + prettyDate,
           html: shell("Supervisor Performance Review — " + s.supervisor,
             (s.totalStops ? summary(s.completionPercent) : '<p><strong>No current-day loads; this review is for prior-day FourKites updates.</strong></p>') +
+            '<p style="font-size:12px;padding:11px 13px;background:#eef2f5;border-left:4px solid #123b61;line-height:1.5"><strong>Important: Performance percentages are stop-weighted, not averaged by day.</strong> ' + esc(scoreExplanation) + '</p>' +
             '<p style="color:#742430;font-weight:bold">' + esc(overallBelow95 ? "Overall below 95%." : failing.length ? "At least one assigned contract below 95%." : "Prior-day update notice; no current-day performance issue triggered this review.") + "</p>" +
             h3("All Assigned Contracts") +
             table(["Contract", "Total Stops", "Completed", "Missed Stops", "Regular Trips %", "Extra Trips %", "% Complete"],
@@ -531,6 +538,7 @@ export async function GET(request: Request) {
             "Operating date: " + day,
             "Supervisor: " + s.supervisor,
             "Official overall completion: " + (s.totalStops ? pct(s.completionPercent) : "No current-day loads"),
+            "", "IMPORTANT — PERFORMANCE CALCULATION", scoreExplanation,
             "Reasons for review: " + [
               ...(overallBelow95 ? ["overall supervisor below 95%"] : []),
               ...(failing.length ? ["contract(s) below 95%: " + failing.map(c => c.contract).join(", ")] : []),
