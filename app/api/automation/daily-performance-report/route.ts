@@ -237,10 +237,19 @@ export async function GET(request: Request) {
     const sameSharedPerformance = Boolean(james && sidney &&
       ["loads", "totalStops", "completedStops", "incompleteStops", "completionPercent"].every(
         key => (james as unknown as Record<string, unknown>)[key] === (sidney as unknown as Record<string, unknown>)[key]));
+    const kevin = supervisorRows.find(row => row.supervisor === "Kevin Shields");
+    const bruce = supervisorRows.find(row => row.supervisor === "Bruce Stevens");
+    const sameKevinBrucePerformance = Boolean(kevin && bruce &&
+      ["loads", "totalStops", "completedStops", "incompleteStops", "completionPercent"].every(
+        key => (kevin as unknown as Record<string, unknown>)[key] === (bruce as unknown as Record<string, unknown>)[key]));
     const dailyEmailSupervisorRows = supervisorRows
-      .filter(row => !sameSharedPerformance || row.supervisor !== "Sidney Williams")
+      .filter(row =>
+        (!sameSharedPerformance || row.supervisor !== "Sidney Williams") &&
+        (!sameKevinBrucePerformance || row.supervisor !== "Bruce Stevens"))
       .map(row => sameSharedPerformance && row.supervisor === "James Bowling"
-        ? { ...row, supervisor: "James Bowling / Sidney Williams" } : row);
+        ? { ...row, supervisor: "James Bowling / Sidney Williams" }
+        : sameKevinBrucePerformance && row.supervisor === "Kevin Shields"
+          ? { ...row, supervisor: "Kevin Shields / Bruce Stevens" } : row);
     // Email presentation ranking only: highest supervisor first, lowest contract first.
     // Official totals, thresholds, and individual review eligibility are unchanged.
     const rankedDailySupervisors = [...dailyEmailSupervisorRows].sort((a, b) =>
@@ -342,7 +351,9 @@ export async function GET(request: Request) {
         // The display-only James/Sidney combined label must use their shared
         // underlying stats, not a nonexistent map key.
         const statsKey = sameSharedPerformance && s.supervisor === "James Bowling / Sidney Williams"
-          ? "James Bowling" : s.supervisor;
+          ? "James Bowling"
+          : sameKevinBrucePerformance && s.supervisor === "Kevin Shields / Bruce Stevens"
+            ? "Kevin Shields" : s.supervisor;
         const pair = tripPair(supervisorTripStats.get(statsKey));
         return { name: s.supervisor, regular: pair[0], extra: pair[1], overall: pct(s.completionPercent) };
       }), "top5") +
