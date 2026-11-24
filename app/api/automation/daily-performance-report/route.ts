@@ -447,18 +447,11 @@ export async function GET(request: Request) {
             normalizeContract(a.load.contract_number).localeCompare(normalizeContract(b.load.contract_number), undefined, { numeric: true }) ||
             a.load.load_number.localeCompare(b.load.load_number));
         if (!overallBelow95 && failing.length === 0 && priorUpdates.length === 0) return null;
-        const scoreExplanation = "How to calculate performance accurately: Do not average daily percentages. " +
-          "For any multi-day period, add completed stops from each operating day, then divide by " +
-          "the total stops from those same days and multiply by 100. " +
-          "Use the latest corrected figures for each original operating date. " +
-          "FourKites can report an update on a later date, so a previously emailed daily rate may be revised. " +
-          "Earlier-day updates below are not extra stops for today's date.";
-        const priorDescription = "This FourKites report dated " + prettyDate +
-          " contains updates for loads originally operated on earlier dates. " +
-          "Each load remains attributed to its original operating date and supervisor; " +
-          "these records are NOT added to today's operating-day totals. " +
-          "Only changes with an earlier saved value are labeled verified revisions. " +
-          "A newly received or previously dated record is not proof that a stop was completed late.";
+        const scoreExplanation = "Weekly % = total completed stops ÷ total stops. " +
+          "Do not average daily percentages. Late FourKites updates count toward the original operating date.";
+        const priorDescription = "FourKites reported these earlier-day loads on " + prettyDate +
+          ". Dates and latest stop counts are below. Only verified changes show additional credit; " +
+          "these stops are not added to today's total.";
         const priorRows = priorUpdates.map(({load, firstBefore, lastAfter}) => {
           const before = firstBefore?.event_type === "revised"
             ? fmt(Number(firstBefore.previous_completed_stops ?? 0)) + "/" + fmt(Number(firstBefore.previous_total_stops ?? 0))
@@ -518,7 +511,7 @@ export async function GET(request: Request) {
           subject: "Performance Review — " + s.supervisor + " — " + prettyDate,
           html: shell("Supervisor Performance Review — " + s.supervisor,
             (s.totalStops ? summary(s.completionPercent) : '<p><strong>No current-day loads; this review is for prior-day FourKites updates.</strong></p>') +
-            '<p style="font-size:12px;padding:11px 13px;background:#eef2f5;border-left:4px solid #123b61;line-height:1.5"><strong>Important: Performance percentages are stop-weighted, not averaged by day.</strong> ' + esc(scoreExplanation) + '</p>' +
+            '<p style="font-size:12px;padding:11px 13px;background:#eef2f5;border-left:4px solid #123b61;line-height:1.5"><strong>How your percentage works:</strong> ' + esc(scoreExplanation) + '</p>' +
             '<p style="color:#742430;font-weight:bold">' + esc(overallBelow95 ? "Overall below 95%." : failing.length ? "At least one assigned contract below 95%." : "Prior-day update notice; no current-day performance issue triggered this review.") + "</p>" +
             h3("All Assigned Contracts") +
             table(["Contract", "Total Stops", "Completed", "Missed Stops", "Regular Trips %", "Extra Trips %", "% Complete"],
