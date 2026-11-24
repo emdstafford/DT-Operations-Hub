@@ -157,8 +157,11 @@ export async function GET(request: Request) {
     const thresholdLabel = String(threshold).replace(/\\.0+$/, "") + "%";
     const normalizeContract = (value: string | null) => (value || "").trim().toUpperCase().replace(/^0+(?=[0-9])/, "");
     const recipientByName = new Map<string, string>();
+    const configuredSupervisorNames = new Set<string>();
     for (const row of recipientRows ?? []) {
-      if (row.enabled && row.recipient_type === "supervisor" && row.email) recipientByName.set(String(row.name).trim().toLowerCase(), String(row.email).trim().toLowerCase());
+      if (row.recipient_type !== "supervisor") continue;
+      configuredSupervisorNames.add(String(row.name).trim().toLowerCase());
+      if (row.enabled && row.email) recipientByName.set(String(row.name).trim().toLowerCase(), String(row.email).trim().toLowerCase());
     }
     // Tonya's separate Monday-only email is never part of this daily workflow.
     // Recognize historical spellings when assigning the performance records.
@@ -178,7 +181,7 @@ export async function GET(request: Request) {
     }
     const splitAssignment = (value: string) => {
       const label = value.trim();
-      if (recipientByName.has(label.toLowerCase())) return [cleanSupervisor(label)];
+      if (configuredSupervisorNames.has(label.toLowerCase())) return [cleanSupervisor(label)];
       return label.split("/").map(cleanSupervisor).filter(Boolean);
     };
     const datedByContract = new Map<string, Set<string>>();
