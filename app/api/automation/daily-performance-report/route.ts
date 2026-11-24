@@ -580,16 +580,45 @@ export async function GET(request: Request) {
     // completeness must be separately certified before future unattended sends.
     const routingValidated = assignmentFallbackContracts.size === 0 &&
       unmatchedSupervisorNames.size === 0 && missingOversightRecipients.length === 0;
+    const workbookEvidence = snapshot.data?.sourceVerification;
+    const workbookVerified = Boolean(
+      workbookEvidence?.provenance === "authorized_fourkites_signed_workbook" &&
+      workbookEvidence?.passed === true &&
+      /^[a-f0-9]{64}$/.test(String(workbookEvidence?.sha256 ?? "")) &&
+      workbookEvidence?.periodStart === day &&
+      workbookEvidence?.periodEnd === day &&
+      Number.isSafeInteger(workbookEvidence?.rawLoadRows) &&
+      workbookEvidence.rawLoadRows >= expectedLoads &&
+      Number(workbookEvidence?.targetDateRows) >= expectedLoads &&
+      Number(workbookEvidence?.datedLoadRows) === Number(workbookEvidence?.rawLoadRows) &&
+      String(snapshot.source_file).startsWith("TQ_DAILY_") &&
+      snapshot.period_start === day && snapshot.period_end === day &&
+      Number(matchingDay?.totalStops) === overall.totalStops &&
+      Number(matchingDay?.completedStops) === overall.completedStops &&
+      Number(matchingDay?.incompleteStops) === overall.incompleteStops &&
+      loads.length === expectedLoads &&
+      loads.every(load => {
+        const total = Number(load.total_stops), completed = Number(load.completed_stops),
+          incomplete = Number(load.incomplete_stops);
+        return Number.isSafeInteger(total) && total >= 0 &&
+          Number.isSafeInteger(completed) && completed >= 0 &&
+          Number.isSafeInteger(incomplete) && incomplete >= 0 &&
+          completed + incomplete === total;
+      })
+    );
     return NextResponse.json({
       ok: true, ready: true, date: day,
       importVerified: true,
-      // Snapshot matching verifies ingestion integrity, not that FourKites
-      // delivered all expected source loads. Keep unattended sending blocked.
-      sourceCompletenessCertified: false,
+      // Certifies the received, signed FourKites workbook and saved daily
+      // contents agree. Does NOT guarantee every expected upstream trip
+      // appeared in FourKites or that its tracking is accurate.
+      sourceCompletenessCertified: workbookVerified,
+      sourceCertificationScope: "received_signed_fourkites_workbook_only",
       sourceIntegrity: {
         dailyFile: String(snapshot.source_file).includes("TQ_DAILY_"),
         oneDayPeriod: snapshot.period_start === day && snapshot.period_end === day,
         importedLoadsMatchSnapshot: loads.length === expectedLoads,
+        signedWorkbookEvidenceVerified: workbookVerified,
       },
       // Data is for an internal test preview only, not an authorization to send.
       sendAuthorized: false,
