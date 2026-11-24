@@ -134,8 +134,7 @@ async function loadTripTypeRates(start:string,end:string,data:HubData,excludeAug
       if(contract==="3773G"&&row.operating_date>"2026-11-13")continue;
       if(excludeAugust&&row.operating_date>="2026-08-13"&&row.operating_date<="2026-08-20")continue;
       const trip=(row.trip_number??"").trim();
-      if(!trip)continue;
-      const type:"regular"|"extra"=/[a-z]/i.test(trip)?"extra":"regular";
+      const type:"regular"|"extra"=!trip||/[a-z]/i.test(trip)?"extra":"regular";
       rates.overall[type].stops+=Number(row.total_stops)||0;
       rates.overall[type].completed+=Number(row.completed_stops)||0;
       add(rates.contracts,contract,type,row);
@@ -607,7 +606,7 @@ export default function DashboardHub() {
       const splitOverall={regular:emptyStops(),extra:emptyStops(),unknown:emptyStops()};
       for(const row of rows){
         const code=(row.trip_number??"").trim();
-        const type: "regular"|"extra"|"unknown" = /[a-z]/i.test(code)?"extra":code?"regular":"unknown";
+        const type: "regular"|"extra" = !code||/[a-z]/i.test(code)?"extra":"regular";
         addStops(splitOverall[type],row);
         const key=normalizeTripContract(row.contract_number??"Unmapped");
         const existing=splitByContract.get(key)??{regular:emptyStops(),extra:emptyStops(),unknown:emptyStops()};
