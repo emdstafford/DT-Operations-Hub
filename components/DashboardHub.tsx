@@ -281,8 +281,8 @@ export default function DashboardHub() {
   const [missedLoadReviews,setMissedLoadReviews]=useState<MissedLoadReview[]>([]);
   const [loadReviewsReady,setLoadReviewsReady]=useState(false);
   const [includeAllExplanations,setIncludeAllExplanations]=useState(false);
-  const [showRegularUnassigned,setShowRegularUnassigned]=useState(true);
-  const [showExtraUnassigned,setShowExtraUnassigned]=useState(true);
+  const [showRegularUnassigned,setShowRegularUnassigned]=useState(false);
+  const [showExtraUnassigned,setShowExtraUnassigned]=useState(false);
   const [dashboardView, setDashboardView] = useState<"overview" | "investigate">("overview");
   const [investigateTab, setInvestigateTab] = useState<"contracts" | "supervisors" | "geofences" | "comparison">("contracts");
   const reportingContracts=contractOptions.filter(contract=>start<="2026-11-13"||normalizeTripContract(contract)!=="3773G");
