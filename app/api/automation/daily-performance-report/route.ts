@@ -92,15 +92,18 @@ export async function GET(request: Request) {
     // Prefer date-effective DT Hub assignments, then current assignments only
     // where no dated assignment is recorded for that contract.
     const [{ data: assignmentPeriods, error: periodsError }, { data: activeAssignments, error: assignmentsError },
-      { data: recipientRows, error: recipientsError }, { data: tripRows, error: tripError }] = await Promise.all([
+      { data: recipientRows, error: recipientsError }, { data: tripRows, error: tripError },
+      { data: notesRows, error: notesError }] = await Promise.all([
       db.from("contract_assignment_periods").select("contract_number,supervisor,start_date,end_date")
         .lte("start_date", day).or(`end_date.is.null,end_date.gte.${day}`),
       db.from("contract_supervisors").select("contract_number,supervisor").eq("active", true),
       db.from("daily_report_recipients").select("name,email,recipient_type,enabled").eq("enabled", true),
       db.from("trip_supervisor_assignments").select("contract_number,trip_number,supervisor")
         .in("contract_number", ["296B8", "296C2"]),
+      db.from("operational_notes").select("contract_number,trip_number,status,note,requested_on,effective_start,effective_end")
+        .lte("effective_start", day).or(`effective_end.is.null,effective_end.gte.${day}`),
     ]);
-    if (periodsError || assignmentsError || recipientsError || tripError) throw new Error("Could not read reporting assignments");
+    if (periodsError || assignmentsError || recipientsError || tripError || notesError) throw new Error("Could not read reporting assignments or operational notes");
     const normalizeContract = (value: string | null) => (value || "").trim().toUpperCase().replace(/^0+(?=[0-9])/, "");
     const recipientByName = new Map<string, string>();
     for (const row of recipientRows ?? []) {
@@ -145,14 +148,13 @@ export async function GET(request: Request) {
     const unmatchedSupervisorNames = new Set<string>();
     const resolvedSupervisors = (load: Load) => {
       const key = normalizeContract(load.contract_number);
-      // Both contracts are shared, but the named supervisors own different
-      // trips: 296B8 = Eric Grant/Tonya, 296C2 = Kevin Shields/Tonya.
-      // The explicit 34 and 40 Tonya trip assignments take priority; the
-      // remaining trips belong to the other supervisor, never to both.
+      // Tonya owns only her explicitly assigned trips. The remainder of
+      // 296B8 belongs to Eric; 296C2 is jointly supervised by Kevin and Bruce.
+      // Reporting shared ownership is intentional (not an additional USPS load).
       if (key === "296B8" || key === "296C2") {
         const assigned = tripAssignments.get(key + "|" + String(load.trip_number ?? "").trim());
         if (assigned?.length) return assigned;
-        return [key === "296B8" ? "Eric Grant" : "Kevin Shields"];
+        return key === "296B8" ? ["Eric Grant"] : ["Kevin Shields", "Bruce Stevens"];
       }
       const dated = datedByContract.get(key);
       if (dated?.size) return [...dated];
@@ -164,6 +166,20 @@ export async function GET(request: Request) {
       // Last resort for the preview only. It must not drive unattended mail.
       return [...new Set((load.supervisors ?? []).flatMap(splitAssignment).filter(Boolean))];
     };
+    type MissedTripDetail = {
+      contract: string; trip: string; loadNumbers: string[]; missed: number; loads: number;
+    };
+    const supervisorMissedTrips = new Map<string, Map<string, MissedTripDetail>>();
+    // Keep supervisor attribution identical to the official daily summary.
+    // A shared trip can appear in both supervisors' reviews without adding
+    // extra loads or stops to the company-wide totals.
+    const operationalNotes = (notesRows ?? []).map(row => ({
+      contract: normalizeContract(row.contract_number),
+      trip: String(row.trip_number ?? "").trim(),
+      status: String(row.status ?? ""),
+      note: String(row.note ?? ""),
+      requestedOn: row.requested_on ? String(row.requested_on) : "",
+    }));
     const overall = zero(), regular = zero(), extra = zero(), unclassified = zero();
     const supervisors = new Map<string, Stats>();
     const contracts = new Map<string, Stats>();
@@ -182,6 +198,17 @@ export async function GET(request: Request) {
       contractTripStats.set(contract, contractBuckets);
       const names = resolvedSupervisors(load);
       for (const name of names.length ? names : ["Unassigned"]) {
+        if (Number(load.incomplete_stops) > 0) {
+          const byTrip = supervisorMissedTrips.get(name) ?? new Map<string, MissedTripDetail>();
+          const trip = String(load.trip_number ?? "").trim() || "Unassigned";
+          const tripKey = contract + "|" + trip;
+          const item = byTrip.get(tripKey) ?? { contract, trip, loadNumbers: [], missed: 0, loads: 0 };
+          item.loads++;
+          item.missed += Number(load.incomplete_stops) || 0;
+          item.loadNumbers.push(String(load.load_number));
+          byTrip.set(tripKey, item);
+          supervisorMissedTrips.set(name, byTrip);
+        }
         group(supervisors, name, load);
         const supervisorBuckets = supervisorTripStats.get(name) ?? { regular: zero(), extra: zero(), unclassified: zero() };
         add(supervisorBuckets[type], load);
@@ -201,10 +228,19 @@ export async function GET(request: Request) {
       else unmatchedSupervisorNames.add(name);
     }
     const supervisorRows = ranked(supervisors, "supervisor");
-    // Tonya belongs exclusively in her separate Monday-only email report.
-    // Preserve her performance data and company-wide totals, but never show
-    // her name or individual row anywhere in the daily company email.
-    const dailyEmailSupervisorRows = supervisorRows.filter(row => !isTonya(row.supervisor));
+    // Include Tonya's performance in the company report; exclude her only
+    // from DAILY RECIPIENTS and individual daily email dispatch.
+    // James Bowling and Sidney Williams share the same loads. Display one
+    // jointly attributed row only when their computed values actually match.
+    const james = supervisorRows.find(row => row.supervisor === "James Bowling");
+    const sidney = supervisorRows.find(row => row.supervisor === "Sidney Williams");
+    const sameSharedPerformance = Boolean(james && sidney &&
+      ["loads", "totalStops", "completedStops", "incompleteStops", "completionPercent"].every(
+        key => (james as unknown as Record<string, unknown>)[key] === (sidney as unknown as Record<string, unknown>)[key]));
+    const dailyEmailSupervisorRows = supervisorRows
+      .filter(row => !sameSharedPerformance || row.supervisor !== "Sidney Williams")
+      .map(row => sameSharedPerformance && row.supervisor === "James Bowling"
+        ? { ...row, supervisor: "James Bowling / Sidney Williams" } : row);
     const contractRows = ranked(contracts, "contract");
     // A single consolidated review per supervisor is generated when either
     // their overall score OR any assigned contract falls below 95%.
@@ -307,6 +343,26 @@ export async function GET(request: Request) {
         const failing = assigned.filter(c => c.below95);
         const overallBelow95 = s.completionPercent < 95;
         if (!overallBelow95 && failing.length === 0) return null;
+        const missedTrips = [...(supervisorMissedTrips.get(s.supervisor)?.values() ?? [])]
+          .sort((a, b) => a.contract.localeCompare(b.contract, undefined, { numeric: true }) ||
+            a.trip.localeCompare(b.trip, undefined, { numeric: true }));
+        const notesForTrip = (item: MissedTripDetail) =>
+          operationalNotes.filter(note => note.contract === item.contract && (!note.trip || note.trip === item.trip));
+        const tripStatus = (item: MissedTripDetail) => {
+          const notes = notesForTrip(item);
+          return notes.some(note => note.status === "waiting_on_usps") ? "Waiting on USPS"
+            : notes.some(note => note.status === "monitoring") ? "Monitoring"
+            : notes.length ? "Documented context" : "Supervisor review";
+        };
+        const tripHtml = missedTrips.map(item => {
+          const notes = notesForTrip(item);
+          const noteHtml = notes.length
+            ? '<tr><td colspan="6" style="background:#eef2f5;padding:8px;border:1px solid #d6dde3;font-size:11px">' +
+              notes.map(note => '<strong>' + esc(note.status.replace(/_/g, " ")) + '</strong>: ' +
+                esc(note.note) + (note.requestedOn ? ' (USPS request: ' + esc(note.requestedOn) + ')' : '')).join('<hr>') + '</td></tr>'
+            : '';
+          return tr([day, item.contract, item.trip, fmt(item.missed), tripStatus(item), item.loadNumbers.join(", ")]) + noteHtml;
+        }).join("");
         return {
           supervisor: s.supervisor,
           overallCompletionPercent: s.completionPercent,
@@ -324,7 +380,12 @@ export async function GET(request: Request) {
               assigned.map(x => tr([x.contract, fmt(x.totalStops), fmt(x.completedStops), fmt(x.incompleteStops),
                 x.regularTrips.totalStops ? pct(x.regularTrips.completionPercent) : "N/A",
                 x.extraTrips.totalStops ? pct(x.extraTrips.completionPercent) : "N/A", pct(x.completionPercent)],
-                x.below95 ? "#f0c8cd" : "")).join("")),
+                x.below95 ? "#f0c8cd" : "")).join("")) +
+            h3("Incomplete Stops by Trip") +
+            '<p style="font-size:12px">This is the affected trip and load detail from the Performance Review. A saved operational note provides context, not an independently verified cause.</p>' +
+            (missedTrips.length
+              ? table(["Operating Date", "Contract", "Trip", "Incomplete Stops", "Focus", "Load Numbers"], tripHtml)
+              : '<p>No incomplete stops were recorded for this supervisor.</p>'),
           ),
           body: [
             "Davenport Transportation — Daily Supervisor Performance Review",
@@ -339,6 +400,12 @@ export async function GET(request: Request) {
             "ALL ASSIGNED CONTRACTS (including those at or above 95%)",
             "Contract | Overall | Total stops | Completed | Incomplete | Regular Trips | Extra Trips | Review",
             ...assigned.map(contractLine),
+            "", "INCOMPLETE STOPS BY TRIP",
+            "Date | Contract | Trip | Incomplete Stops | Focus | Load Numbers",
+            ...missedTrips.flatMap(item => [
+              [day, item.contract, item.trip, String(item.missed), tripStatus(item), item.loadNumbers.join(", ")].join(" | "),
+              ...notesForTrip(item).map(note => "Operational note (" + note.status + "): " + note.note),
+            ]),
             "", "See DT Hub for detailed stop explanations and missing-load reviews.",
             "https://dt-intelligence-hub.vercel.app/missed-load-reviews",
           ].join("\n"),
