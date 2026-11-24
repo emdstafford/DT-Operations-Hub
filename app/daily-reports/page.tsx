@@ -25,6 +25,7 @@ export default function DailyReportsPage(){
  const role=useAccessRole();
  const [day,setDay]=useState(yesterday);
  const [directory,setDirectory]=useState<Recipient[]>([]);
+ const [reviewThreshold,setReviewThreshold]=useState(95);
  const [assignmentPeriods,setAssignmentPeriods]=useState<Assignment[]>([]);
  const [currentAssignments,setCurrentAssignments]=useState<Assignment[]>([]);
  const [directorySearch,setDirectorySearch]=useState("");
@@ -40,14 +41,16 @@ export default function DailyReportsPage(){
  const refresh=useCallback(async()=>{
   if(!allowed)return;
   setLoading(true);setError("");setMessage("");
-  const [recipients,report,deliveryAudit,periods,assignments]=await Promise.all([
+  const [recipients,report,deliveryAudit,periods,assignments,emailSettings]=await Promise.all([
    supabase.from("daily_report_recipients").select("name,email,recipient_type,enabled").order("recipient_type").order("name"),
    supabase.rpc("dashboard_hub_filtered",{p_start:day,p_end:day,p_grain:"day",p_contracts:null,p_supervisors:null,p_exclude_august_2026:false,p_max_completion:null,p_min_missed_stops:null}),
    supabase.from("daily_report_deliveries").select("id,report_type,supervisor,recipient_email,status,attempted_at,sent_at,error_message").eq("operating_date",day).order("attempted_at",{ascending:false}).limit(500),
    supabase.from("contract_assignment_periods").select("contract_number,supervisor,start_date,end_date"),
-   supabase.from("contract_supervisors").select("contract_number,supervisor,active").eq("active",true)
+   supabase.from("contract_supervisors").select("contract_number,supervisor,active").eq("active",true),
+   supabase.from("daily_email_settings").select("threshold_percent").eq("id",1).single()
   ]);
-  if(recipients.error||report.error||deliveryAudit.error||periods.error||assignments.error){setError(recipients.error?.message||report.error?.message||deliveryAudit.error?.message||periods.error?.message||assignments.error?.message||"Unable to load reports");setLoading(false);return;}
+  if(recipients.error||report.error||deliveryAudit.error||periods.error||assignments.error||emailSettings.error){setError(recipients.error?.message||report.error?.message||deliveryAudit.error?.message||periods.error?.message||assignments.error?.message||emailSettings.error?.message||"Unable to load reports");setLoading(false);return;}
+  setReviewThreshold(Number(emailSettings.data?.threshold_percent??95));
   const saved=recipients.data as Recipient[];
   setDirectory(saved);setDrafts(Object.fromEntries(saved.map(r=>[r.name,r.email])));
   setAssignmentPeriods((periods.data||[]) as Assignment[]);
@@ -115,14 +118,14 @@ export default function DailyReportsPage(){
  const failingBySupervisor=useMemo(()=>{
   const contractMap=new Map<string,Performance[]>();
   for(const contract of data.supervisor_contracts){
-   if(!contract.supervisor||Number(contract.total_stops)<=0||Number(contract.completion_percent)>=0.95)continue;
+   if(!contract.supervisor||Number(contract.total_stops)<=0||Number(contract.completion_percent)>=reviewThreshold/100)continue;
    const key=clean(contract.supervisor);
    contractMap.set(key,[...(contractMap.get(key)||[]),contract]);
   }
   return contractMap;
- },[data.supervisor_contracts]);
+ },[data.supervisor_contracts,reviewThreshold]);
  const below=listed.filter(r=>!isTonya(r.supervisor||"")&&
-  (Number(r.completion_percent)<0.95||(failingBySupervisor.get(clean(r.supervisor||""))?.length||0)>0));
+  (Number(r.completion_percent)<reviewThreshold/100||(failingBySupervisor.get(clean(r.supervisor||""))?.length||0)>0));
  const excludedDaily=listed.filter(r=>isTonya(r.supervisor||""));
  const active=directory.filter(r=>r.enabled);
  const lookup=(name:string)=>active.find(r=>r.recipient_type==="supervisor"&&!isTonya(r.name,r.email)&&clean(r.name)===clean(name));
@@ -156,7 +159,7 @@ export default function DailyReportsPage(){
    "Operating day: "+formatDate(day),
    "Supervisor: "+r.supervisor,
    "Completion: "+pct(r.completion_percent),
-   "Review reason: "+(Number(r.completion_percent)<0.95?"Overall supervisor below 95%":"One or more individual contracts below 95%"),
+   "Review reason: "+(Number(r.completion_percent)<reviewThreshold/100?"Overall supervisor below "+reviewThreshold+"%":"One or more individual contracts below "+reviewThreshold+"%"),
    "Total stops: "+fmt(r.total_stops)+" | Completed: "+fmt(r.completed_stops)+" | Missed: "+fmt(r.incomplete_stops),
    "", "Contract Breakdown",header,...contracts.map(line),
    "", "Please review the missed stops and document the relevant explanations in DT Hub.",
@@ -207,7 +210,7 @@ export default function DailyReportsPage(){
      <div className="ops-daily-stats">
       <div><small>Completion</small><strong>{dayReady?pct(data.totals.completion_percent):"—"}</strong></div>
       <div><small>Missed stops</small><strong>{fmt(data.totals.incomplete_stops)}</strong></div>
-      <div><small>Daily supervisor reviews (overall or contract below 95%)</small><strong>{below.length}</strong></div>
+      <div><small>Daily supervisor reviews (overall or contract below {reviewThreshold}%)</small><strong>{below.length}</strong></div>
       <div><small>Supervisor emails missing</small><strong>{missing.length}</strong></div>
      </div>
      {!dayReady?<p className="ops-summary">No saved loads exist for this operating day. Do not send the daily report until the FourKites file has been fully imported and verified.</p>:missing.length>0?<p className="ops-summary">Recipient check: {missing.map(r=>r.supervisor).join(", ")} {missing.length===1?"does":"do"} not have an active matching address in the directory. Confirm before turning on distribution.</p>:<p className="ops-summary">Daily distribution addresses matched for the selected day. Verify report completeness before any automatic sending.</p>}
@@ -218,12 +221,12 @@ export default function DailyReportsPage(){
      <pre className="ops-daily-preview">{companyBody}</pre>
     </section>}
     <section className="panel">
-     <div className="panel-heading"><div><h2>Individual reviews — overall or any contract below 95%</h2><span>All assigned contracts included. Daily recipients: supervisor, Gary, Chasity, and Emily; Tonya excluded.</span></div></div>
-     {!below.length?<p className="ops-summary">{dayReady?"No eligible supervisor has an overall or individual contract below 95% for this day.":"No completed daily report to evaluate yet."}</p>:below.map(r=>{
+     <div className="panel-heading"><div><h2>Individual reviews — overall or any contract below {reviewThreshold}%</h2><span>All assigned contracts included. Daily recipients: supervisor and approved oversight contacts; Tonya excluded.</span></div></div>
+     {!below.length?<p className="ops-summary">{dayReady?`No eligible supervisor has an overall or individual contract below ${reviewThreshold}% for this day.`:"No completed daily report to evaluate yet."}</p>:below.map(r=>{
        const recipient=lookup(r.supervisor||"");
        const to=distinct([...(recipient?[recipient.email]:[]),...oversight]);
        const failing=failingBySupervisor.get(clean(r.supervisor||""))||[];
-       const reason=Number(r.completion_percent)<0.95?"Overall below 95%":`Contract below 95%: ${failing.map(c=>c.contract_number||"Unknown").join(", ")}`;
+       const reason=Number(r.completion_percent)<reviewThreshold/100?`Overall below ${reviewThreshold}%`:`Contract below {reviewThreshold}%: ${failing.map(c=>c.contract_number||"Unknown").join(", ")}`;
        return <details className="ops-daily-individual" key={r.supervisor}><summary><strong>{r.supervisor}</strong><span>{pct(r.completion_percent)} overall · {reason} · {fmt(r.incomplete_stops)} missed · {recipient?recipient.email:"ADDRESS MISSING"}</span></summary>
         <div className="ops-daily-individual-content"><p><strong>To:</strong> {to.join("; ")}</p><pre className="ops-daily-preview">{individualBody(r)}</pre><button className="hub-secondary-link" onClick={()=>void copy(individualBody(r))}>Copy individual preview</button></div></details>;
      })}
