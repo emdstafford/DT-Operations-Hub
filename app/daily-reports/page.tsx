@@ -105,19 +105,40 @@ export default function DailyReportsPage(){
  },[directory,assignmentPeriods,currentAssignments,today]);
  const visibleDirectoryRows=directoryRows.filter(r=>[r.name,r.email,...r.contracts].some(value=>value.toLowerCase().includes(directorySearch.trim().toLowerCase())));
  const listed=useMemo(()=>data.supervisors.filter(r=>r.supervisor&&r.supervisor!=="Unassigned"&&Number(r.total_stops)>0),[data]);
- const below=listed.filter(r=>Number(r.completion_percent)<0.95);
+ // Tonya's assigned trips remain in company-wide performance totals, but she
+ // receives ONLY a separately authorized Monday-only report, never a daily review.
+ const isTonya=(name:string,email="")=>{
+  const normalized=name.toLowerCase().replace(/[^a-z]/g,"");
+  return ["tonyacappsowen","tonyacappsowens","tonyaowen","tonyaowens","tonyacapps"].includes(normalized)
+   ||clean(email)==="tocapps@bellsouth.net";
+ };
+ const failingBySupervisor=useMemo(()=>{
+  const contractMap=new Map<string,Performance[]>();
+  for(const contract of data.supervisor_contracts){
+   if(!contract.supervisor||Number(contract.total_stops)<=0||Number(contract.completion_percent)>=0.95)continue;
+   const key=clean(contract.supervisor);
+   contractMap.set(key,[...(contractMap.get(key)||[]),contract]);
+  }
+  return contractMap;
+ },[data.supervisor_contracts]);
+ const below=listed.filter(r=>!isTonya(r.supervisor||"")&&
+  (Number(r.completion_percent)<0.95||(failingBySupervisor.get(clean(r.supervisor||""))?.length||0)>0));
+ const excludedDaily=listed.filter(r=>isTonya(r.supervisor||""));
  const active=directory.filter(r=>r.enabled);
- const lookup=(name:string)=>active.find(r=>r.recipient_type==="supervisor"&&clean(r.name)===clean(name));
- const supervisors=active.filter(r=>r.recipient_type==="supervisor");
- const distribution=active.filter(r=>r.recipient_type==="distribution");
- const cc=active.filter(r=>r.recipient_type==="cc");
- const bcc=active.filter(r=>r.recipient_type==="bcc");
- const missing=listed.filter(r=>!lookup(r.supervisor||""));
+ const lookup=(name:string)=>active.find(r=>r.recipient_type==="supervisor"&&!isTonya(r.name,r.email)&&clean(r.name)===clean(name));
+ // A disabled/excluded supervisor must not be inadvertently added through
+ // another recipient group, even if an old address is later re-enabled.
+ const dailyRecipients=active.filter(r=>!isTonya(r.name,r.email));
+ const supervisors=dailyRecipients.filter(r=>r.recipient_type==="supervisor");
+ const distribution=dailyRecipients.filter(r=>r.recipient_type==="distribution");
+ const cc=dailyRecipients.filter(r=>r.recipient_type==="cc");
+ const bcc=dailyRecipients.filter(r=>r.recipient_type==="bcc");
+ const missing=listed.filter(r=>!isTonya(r.supervisor||"")&&!lookup(r.supervisor||""));
  const dayReady=Number(data.totals.total_stops)>0;
  const generalTo=distinct([...supervisors.map(r=>r.email),...distribution.map(r=>r.email)]);
  const generalCc=distinct(cc.map(r=>r.email));
  const generalBcc=distinct(bcc.map(r=>r.email));
- const oversight=distinct(active.filter(r=>["Emily Stafford","Chasity Cochran","Gary","Amber Smith"].includes(r.name)).map(r=>r.email));
+ const oversight=distinct(dailyRecipients.filter(r=>["Emily Stafford","Chasity Cochran","Gary","Amber Smith"].includes(r.name)).map(r=>r.email));
  const companyBody=[
   "Davenport Transportation — USPS Daily Completion Report",
   "Operating day: "+formatDate(day),
@@ -134,7 +155,8 @@ export default function DailyReportsPage(){
    "Davenport Transportation — Daily Supervisor Performance Review",
    "Operating day: "+formatDate(day),
    "Supervisor: "+r.supervisor,
-   "Completion: "+pct(r.completion_percent)+" (below the 95% expectation)",
+   "Completion: "+pct(r.completion_percent),
+   "Review reason: "+(Number(r.completion_percent)<0.95?"Overall supervisor below 95%":"One or more individual contracts below 95%"),
    "Total stops: "+fmt(r.total_stops)+" | Completed: "+fmt(r.completed_stops)+" | Missed: "+fmt(r.incomplete_stops),
    "", "Contract Breakdown",header,...contracts.map(line),
    "", "Please review the missed stops and document the relevant explanations in DT Hub.",
@@ -181,25 +203,28 @@ export default function DailyReportsPage(){
    {message&&<p role="status" className="ops-inline-note">{message}</p>}
    {loading?<section className="panel ops-form-section">Loading daily performance…</section>:<>
     <section className="panel">
-     <div className="panel-heading"><div><h2>Previous-day performance</h2><span>{formatDate(day)}</span></div><span>{dayReady?below.length+" supervisor(s) below 95%":"No saved stops for this day"}</span></div>
+     <div className="panel-heading"><div><h2>Previous-day performance</h2><span>{formatDate(day)}</span></div><span>{dayReady?below.length+" daily review(s) required":"No saved stops for this day"}</span></div>
      <div className="ops-daily-stats">
       <div><small>Completion</small><strong>{dayReady?pct(data.totals.completion_percent):"—"}</strong></div>
       <div><small>Missed stops</small><strong>{fmt(data.totals.incomplete_stops)}</strong></div>
-      <div><small>Supervisors below 95%</small><strong>{below.length}</strong></div>
+      <div><small>Daily supervisor reviews (overall or contract below 95%)</small><strong>{below.length}</strong></div>
       <div><small>Supervisor emails missing</small><strong>{missing.length}</strong></div>
      </div>
-     {!dayReady?<p className="ops-summary">No saved loads exist for this operating day. Do not send the daily report until the FourKites file has been fully imported and verified.</p>:missing.length>0?<p className="ops-summary">Recipient check: {missing.map(r=>r.supervisor).join(", ")} {missing.length===1?"does":"do"} not have an active matching address in the directory. Confirm before turning on distribution.</p>:<p className="ops-summary">Supervisor addresses matched for the selected day. Verify report completeness before any automatic sending.</p>}
+     {!dayReady?<p className="ops-summary">No saved loads exist for this operating day. Do not send the daily report until the FourKites file has been fully imported and verified.</p>:missing.length>0?<p className="ops-summary">Recipient check: {missing.map(r=>r.supervisor).join(", ")} {missing.length===1?"does":"do"} not have an active matching address in the directory. Confirm before turning on distribution.</p>:<p className="ops-summary">Daily distribution addresses matched for the selected day. Verify report completeness before any automatic sending.</p>}
+     {dayReady&&excludedDaily.length>0&&<p className="ops-summary">Tonya Capps-Owens is included in performance totals but excluded from ALL daily email distribution. Her individually assigned trips are reserved for her separate Monday-only report.</p>}
     </section>
     {dayReady&&<section className="panel">
      <div className="panel-heading"><div><h2>Company-wide report preview</h2><span>To: {generalTo.length} unique addresses · CC: {generalCc.length} · BCC: {generalBcc.length} · same report every day</span></div><button className="hub-secondary-link" onClick={()=>void copy(companyBody)}>Copy preview</button></div>
      <pre className="ops-daily-preview">{companyBody}</pre>
     </section>}
     <section className="panel">
-     <div className="panel-heading"><div><h2>Individual reports below 95%</h2><span>Each includes the supervisor, Gary, Chasity, and Emily</span></div></div>
-     {!below.length?<p className="ops-summary">{dayReady?"No supervisor is below 95% for this day.":"No completed daily report to evaluate yet."}</p>:below.map(r=>{
+     <div className="panel-heading"><div><h2>Individual reviews — overall or any contract below 95%</h2><span>All assigned contracts included. Daily recipients: supervisor, Gary, Chasity, and Emily; Tonya excluded.</span></div></div>
+     {!below.length?<p className="ops-summary">{dayReady?"No eligible supervisor has an overall or individual contract below 95% for this day.":"No completed daily report to evaluate yet."}</p>:below.map(r=>{
        const recipient=lookup(r.supervisor||"");
        const to=distinct([...(recipient?[recipient.email]:[]),...oversight]);
-       return <details className="ops-daily-individual" key={r.supervisor}><summary><strong>{r.supervisor}</strong><span>{pct(r.completion_percent)} · {fmt(r.incomplete_stops)} missed · {recipient?recipient.email:"ADDRESS MISSING"}</span></summary>
+       const failing=failingBySupervisor.get(clean(r.supervisor||""))||[];
+       const reason=Number(r.completion_percent)<0.95?"Overall below 95%":`Contract below 95%: ${failing.map(c=>c.contract_number||"Unknown").join(", ")}`;
+       return <details className="ops-daily-individual" key={r.supervisor}><summary><strong>{r.supervisor}</strong><span>{pct(r.completion_percent)} overall · {reason} · {fmt(r.incomplete_stops)} missed · {recipient?recipient.email:"ADDRESS MISSING"}</span></summary>
         <div className="ops-daily-individual-content"><p><strong>To:</strong> {to.join("; ")}</p><pre className="ops-daily-preview">{individualBody(r)}</pre><button className="hub-secondary-link" onClick={()=>void copy(individualBody(r))}>Copy individual preview</button></div></details>;
      })}
     </section>
