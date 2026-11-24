@@ -92,22 +92,40 @@ export async function GET(request: Request) {
     // Prefer date-effective DT Hub assignments, then current assignments only
     // where no dated assignment is recorded for that contract.
     const [{ data: assignmentPeriods, error: periodsError }, { data: activeAssignments, error: assignmentsError },
-      { data: recipientRows, error: recipientsError }] = await Promise.all([
+      { data: recipientRows, error: recipientsError }, { data: tripRows, error: tripError }] = await Promise.all([
       db.from("contract_assignment_periods").select("contract_number,supervisor,start_date,end_date")
         .lte("start_date", day).or(`end_date.is.null,end_date.gte.${day}`),
       db.from("contract_supervisors").select("contract_number,supervisor").eq("active", true),
       db.from("daily_report_recipients").select("name,email,recipient_type,enabled").eq("enabled", true),
+      db.from("trip_supervisor_assignments").select("contract_number,trip_number,supervisor")
+        .in("contract_number", ["296B8", "296C2"]),
     ]);
-    if (periodsError || assignmentsError || recipientsError) throw new Error("Could not read reporting assignments");
+    if (periodsError || assignmentsError || recipientsError || tripError) throw new Error("Could not read reporting assignments");
     const normalizeContract = (value: string | null) => (value || "").trim().toUpperCase().replace(/^0+(?=[0-9])/, "");
     const recipientByName = new Map<string, string>();
     for (const row of recipientRows ?? []) {
       if (row.recipient_type === "supervisor" && row.email) recipientByName.set(String(row.name).trim().toLowerCase(), String(row.email).trim().toLowerCase());
     }
+    // Tonya's separate Monday-only email is never part of this daily workflow.
+    // Recognize historical spellings when assigning the performance records.
+    const isTonya = (name: string, email?: string) => {
+      const normalized = name.trim().toLowerCase().replace(/[^a-z]/g, "");
+      return ["tonyacappsowen", "tonyacappsowens", "tonyaowen", "tonyaowens", "tonyacapps"].includes(normalized)
+        || String(email ?? "").trim().toLowerCase() === "tocapps@bellsouth.net";
+    };
+    const cleanSupervisor = (name: string) => isTonya(name) ? "Tonya Capps-Owens" : name.trim();
+    const tripAssignments = new Map<string, string[]>();
+    for (const row of tripRows ?? []) {
+      const key = normalizeContract(row.contract_number) + "|" + String(row.trip_number ?? "").trim();
+      const found = tripAssignments.get(key) ?? [];
+      const name = cleanSupervisor(String(row.supervisor ?? ""));
+      if (name && !found.includes(name)) found.push(name);
+      tripAssignments.set(key, found);
+    }
     const splitAssignment = (value: string) => {
       const label = value.trim();
-      if (recipientByName.has(label.toLowerCase())) return [label];
-      return label.split("/").map(name => name.trim()).filter(Boolean);
+      if (recipientByName.has(label.toLowerCase())) return [cleanSupervisor(label)];
+      return label.split("/").map(cleanSupervisor).filter(Boolean);
     };
     const datedByContract = new Map<string, Set<string>>();
     const activeByContract = new Map<string, Set<string>>();
@@ -127,6 +145,15 @@ export async function GET(request: Request) {
     const unmatchedSupervisorNames = new Set<string>();
     const resolvedSupervisors = (load: Load) => {
       const key = normalizeContract(load.contract_number);
+      // Both contracts are shared, but the named supervisors own different
+      // trips: 296B8 = Eric Grant/Tonya, 296C2 = Kevin Shields/Tonya.
+      // The explicit 34 and 40 Tonya trip assignments take priority; the
+      // remaining trips belong to the other supervisor, never to both.
+      if (key === "296B8" || key === "296C2") {
+        const assigned = tripAssignments.get(key + "|" + String(load.trip_number ?? "").trim());
+        if (assigned?.length) return assigned;
+        return [key === "296B8" ? "Eric Grant" : "Kevin Shields"];
+      }
       const dated = datedByContract.get(key);
       if (dated?.size) return [...dated];
       // Missing historical coverage: current mapping is provisional, never
@@ -168,7 +195,7 @@ export async function GET(request: Request) {
     }
     const supervisorEmails: Record<string, string> = {};
     for (const name of supervisors.keys()) {
-      if (name === "Unassigned") continue;
+      if (name === "Unassigned" || isTonya(name)) continue;
       const email = recipientByName.get(name.trim().toLowerCase());
       if (email) supervisorEmails[name] = email;
       else unmatchedSupervisorNames.add(name);
@@ -270,7 +297,7 @@ export async function GET(request: Request) {
     const individualReviews = supervisorRows
       .filter(s => s.supervisor !== "Unassigned" && s.totalStops > 0)
       .map(s => {
-        if (s.supervisor.trim().toLowerCase() === "tonya capps owen") return null;
+        if (isTonya(s.supervisor)) return null;
         const assigned = detailedContracts.filter(c => c.supervisor === s.supervisor)
           .sort((a,b) => a.completionPercent - b.completionPercent || a.contract.localeCompare(b.contract));
         const failing = assigned.filter(c => c.below95);
@@ -319,11 +346,6 @@ export async function GET(request: Request) {
     // STRICT DENYLIST: Tonya receives no daily, company-wide, or standard
     // supervisor emails. Her separately approved Monday-only report must use
     // a different, explicitly allowlisted workflow.
-    const isTonya = (name: string, email?: string) => {
-      const normalized = name.trim().toLowerCase().replace(/[^a-z]/g, "");
-      const blockedNames = new Set(["tonyacappsowen", "tonyacappsowens", "tonyaowen", "tonyaowens", "tonyacapps"]);
-      return blockedNames.has(normalized) || String(email ?? "").trim().toLowerCase() === "tocapps@bellsouth.net";
-    };
     const reviewDeliveryPreview = individualReviews.filter(review => !isTonya(review.supervisor, supervisorEmails[review.supervisor])).map(review => ({
       supervisor: review.supervisor,
       to: [...new Set([supervisorEmails[review.supervisor], ...oversight.map(name => emailByName.get(name.toLowerCase()))].filter((address): address is string => Boolean(address)))],
@@ -344,7 +366,14 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ok: true, ready: true, date: day,
       importVerified: true,
+      // Snapshot matching verifies ingestion integrity, not that FourKites
+      // delivered all expected source loads. Keep unattended sending blocked.
       sourceCompletenessCertified: false,
+      sourceIntegrity: {
+        dailyFile: String(snapshot.source_file).includes("TQ_DAILY_"),
+        oneDayPeriod: snapshot.period_start === day && snapshot.period_end === day,
+        importedLoadsMatchSnapshot: loads.length === expectedLoads,
+      },
       // Data is for an internal test preview only, not an authorization to send.
       sendAuthorized: false,
       expectedLoads,
