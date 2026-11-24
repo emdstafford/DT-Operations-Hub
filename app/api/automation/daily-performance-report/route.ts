@@ -201,6 +201,10 @@ export async function GET(request: Request) {
       else unmatchedSupervisorNames.add(name);
     }
     const supervisorRows = ranked(supervisors, "supervisor");
+    // Tonya belongs exclusively in her separate Monday-only email report.
+    // Preserve her performance data and company-wide totals, but never show
+    // her name or individual row anywhere in the daily company email.
+    const dailyEmailSupervisorRows = supervisorRows.filter(row => !isTonya(row.supervisor));
     const contractRows = ranked(contracts, "contract");
     // A single consolidated review per supervisor is generated when either
     // their overall score OR any assigned contract falls below 95%.
@@ -232,7 +236,7 @@ export async function GET(request: Request) {
       "Extra Trips: " + pct(result(extra).completionPercent),
       "",
       "Supervisor | Overall | Total stops | Completed | Incomplete",
-      ...supervisorRows.map(s => [s.supervisor,pct(s.completionPercent),fmt(s.totalStops),fmt(s.completedStops),fmt(s.incompleteStops)].join(" | ")),
+      ...dailyEmailSupervisorRows.map(s => [s.supervisor,pct(s.completionPercent),fmt(s.totalStops),fmt(s.completedStops),fmt(s.incompleteStops)].join(" | ")),
       "",
       "Contract | Overall | Total stops | Completed | Incomplete",
       ...contractRows.map(s => [s.contract,pct(s.completionPercent),fmt(s.totalStops),fmt(s.completedStops),fmt(s.incompleteStops),
@@ -268,7 +272,7 @@ export async function GET(request: Request) {
     const completionTable = (rows: Array<{ name: string; regular: string; extra: string; overall: string }>) =>
       table(["Supervisor / Contract", "Regular Trips %", "Extra Trips %", "Overall Completion %"],
         rows.map(row => tr([row.name, row.regular, row.extra, row.overall])).join(""));
-    const supervisorPerformance = supervisorRows.map((s, i) => tr(
+    const supervisorPerformance = dailyEmailSupervisorRows.map((s, i) => tr(
       [s.supervisor, fmt(s.totalStops), fmt(s.incompleteStops), pct(s.completionPercent)],
       i < 5 ? "#c9e7cf" : "")).join("");
     const contractPerformance = contractRows.map((s) => tr(
@@ -286,7 +290,7 @@ export async function GET(request: Request) {
         (regular.totalStops ? pct(result(regular).completionPercent) : "N/A") + ' &nbsp; Extra Trips: ' +
         (extra.totalStops ? pct(result(extra).completionPercent) : "N/A") + ' &nbsp; Overall Completion: ' +
         pct(result(overall).completionPercent) + '</strong></p>' +
-      '<h4>Supervisors</h4>' + completionTable(supervisorRows.map(s => {
+      '<h4>Supervisors</h4>' + completionTable(dailyEmailSupervisorRows.map(s => {
         const pair = tripPair(supervisorTripStats.get(s.supervisor));
         return { name: s.supervisor, regular: pair[0], extra: pair[1], overall: pct(s.completionPercent) };
       })) +
