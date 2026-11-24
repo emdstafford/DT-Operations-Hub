@@ -142,7 +142,7 @@ export async function GET(request: Request) {
       db.from("contract_assignment_periods").select("contract_number,supervisor,start_date,end_date")
         .lte("start_date", day).or(`end_date.is.null,end_date.gte.${day}`),
       db.from("contract_supervisors").select("contract_number,supervisor").eq("active", true),
-      db.from("daily_report_recipients").select("name,email,recipient_type,enabled").eq("enabled", true),
+      db.from("daily_report_recipients").select("name,email,recipient_type,enabled"),
       db.from("trip_supervisor_assignments").select("contract_number,trip_number,supervisor")
         .in("contract_number", ["296B8", "296C2"]),
       db.from("operational_notes").select("contract_number,trip_number,status,note,requested_on,effective_start,effective_end")
@@ -158,7 +158,7 @@ export async function GET(request: Request) {
     const normalizeContract = (value: string | null) => (value || "").trim().toUpperCase().replace(/^0+(?=[0-9])/, "");
     const recipientByName = new Map<string, string>();
     for (const row of recipientRows ?? []) {
-      if (row.recipient_type === "supervisor" && row.email) recipientByName.set(String(row.name).trim().toLowerCase(), String(row.email).trim().toLowerCase());
+      if (row.enabled && row.recipient_type === "supervisor" && row.email) recipientByName.set(String(row.name).trim().toLowerCase(), String(row.email).trim().toLowerCase());
     }
     // Tonya's separate Monday-only email is never part of this daily workflow.
     // Recognize historical spellings when assigning the performance records.
@@ -291,11 +291,12 @@ export async function GET(request: Request) {
       }
     }
     const supervisorEmails: Record<string, string> = {};
+    const configuredSupervisors = new Set((recipientRows ?? []).filter(row => row.recipient_type === "supervisor").map(row => String(row.name).trim().toLowerCase()));
     for (const name of new Set([...supervisors.keys(), ...previousDayBySupervisor.keys()])) {
       if (name === "Unassigned" || isTonya(name)) continue;
       const email = recipientByName.get(name.trim().toLowerCase());
       if (email) supervisorEmails[name] = email;
-      else unmatchedSupervisorNames.add(name);
+      else if (!configuredSupervisors.has(name.trim().toLowerCase())) unmatchedSupervisorNames.add(name);
     }
     const supervisorRows = ranked(supervisors, "supervisor");
     // Include Tonya's performance in the company report; exclude her only
@@ -564,8 +565,9 @@ export async function GET(request: Request) {
         };
       }).filter((review): review is NonNullable<typeof review> => review !== null);
     const oversight = ["Gary", "Chasity Cochran", "Emily Stafford", "Amber Smith"];
-    const emailByName = new Map((recipientRows ?? []).map(row => [String(row.name).trim().toLowerCase(), String(row.email).trim().toLowerCase()]));
-    const missingOversightRecipients = oversight.filter(name => !emailByName.has(name.toLowerCase()));
+    const emailByName = new Map((recipientRows ?? []).filter(row => row.enabled).map(row => [String(row.name).trim().toLowerCase(), String(row.email).trim().toLowerCase()]));
+    const configuredOversightNames = new Set((recipientRows ?? []).map(row => String(row.name).trim().toLowerCase()));
+    const missingOversightRecipients = oversight.filter(name => !configuredOversightNames.has(name.toLowerCase()));
     // STRICT DENYLIST: Tonya receives no daily, company-wide, or standard
     // supervisor emails. Her separately approved Monday-only report must use
     // a different, explicitly allowlisted workflow.
@@ -576,11 +578,11 @@ export async function GET(request: Request) {
       html: review.html,
       failingContracts: review.failingContracts,
     }));
-    const distributionRecipients = (recipientRows ?? []).filter(row => !isTonya(String(row.name), String(row.email)) && ["supervisor", "distribution"].includes(row.recipient_type))
+    const distributionRecipients = (recipientRows ?? []).filter(row => row.enabled && !isTonya(String(row.name), String(row.email)) && ["supervisor", "distribution"].includes(row.recipient_type))
       .map(row => String(row.email).trim().toLowerCase());
-    const companyCcRecipients = (recipientRows ?? []).filter(row => !isTonya(String(row.name), String(row.email)) && row.recipient_type === "cc")
+    const companyCcRecipients = (recipientRows ?? []).filter(row => row.enabled && !isTonya(String(row.name), String(row.email)) && row.recipient_type === "cc")
       .map(row => String(row.email).trim().toLowerCase());
-    const companyBccRecipients = (recipientRows ?? []).filter(row => !isTonya(String(row.name), String(row.email)) && row.recipient_type === "bcc")
+    const companyBccRecipients = (recipientRows ?? []).filter(row => row.enabled && !isTonya(String(row.name), String(row.email)) && row.recipient_type === "bcc")
       .map(row => String(row.email).trim().toLowerCase());
     // Read-only preparation. These diagnostics must all be zero and upstream
     // completeness must be separately certified before future unattended sends.
