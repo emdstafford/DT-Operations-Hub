@@ -20,6 +20,12 @@ export async function saveAutomatedFourKitesReport(
   db: SupabaseClient,
   report: ProcessedReport,
   automationUserId: string,
+  sourceVerification?: {
+    sha256: string; rawLoadRows: number; datedLoadRows: number;
+    targetDateRows: number; duplicateCount: number;
+    periodStart: string; periodEnd: string;
+    passed: boolean;
+  },
 ) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(automationUserId)) {
     throw new Error("A valid authorized automation user ID is required");
@@ -83,6 +89,11 @@ export async function saveAutomatedFourKitesReport(
     supervisors: report.supervisors,
     duplicateCount: report.duplicateLoadNumbers.length,
     outsidePeriodCount: report.outsidePeriodCount,
+    // Recorded only by the authorized server-side FourKites import route,
+    // never inferred from a manual upload or the snapshot itself.
+    sourceVerification: sourceVerification?.passed ? {
+      ...sourceVerification, verifiedAt: now, provenance: "authorized_fourkites_signed_workbook",
+    } : null,
   };
   const { error: historyError } = await db.from("report_history")
     .upsert({
