@@ -149,6 +149,12 @@ export async function GET(request: Request) {
         .lte("effective_start", day).or(`effective_end.is.null,effective_end.gte.${day}`),
     ]);
     if (periodsError || assignmentsError || recipientsError || tripError || notesError) throw new Error("Could not read reporting assignments or operational notes");
+    const {data: settingsRow, error: settingsError} = await db.from("daily_email_settings")
+      .select("delivery_enabled,company_enabled,individual_enabled,threshold_percent").eq("id",1).single();
+    if (settingsError || !settingsRow) throw new Error("Daily email settings unavailable");
+    const threshold = Number(settingsRow.threshold_percent);
+    if (!Number.isFinite(threshold) || threshold < 1 || threshold > 100) throw new Error("Invalid email threshold");
+    const thresholdLabel = String(threshold).replace(/\\.0+$/, "") + "%";
     const normalizeContract = (value: string | null) => (value || "").trim().toUpperCase().replace(/^0+(?=[0-9])/, "");
     const recipientByName = new Map<string, string>();
     for (const row of recipientRows ?? []) {
@@ -334,15 +340,15 @@ export async function GET(request: Request) {
         regularTrips: result(buckets.regular),
         extraTrips: result(buckets.extra),
         unclassifiedTrips: result(buckets.unclassified),
-        below95: stats.totalStops > 0 && stats.completionPercent < 95,
+        below95: stats.totalStops > 0 && stats.completionPercent < threshold,
       };
     });
-    const under95 = supervisorRows.filter(row => row.supervisor !== "Unassigned" && row.totalStops > 0 && row.completionPercent < 95);
+    const under95 = supervisorRows.filter(row => row.supervisor !== "Unassigned" && row.totalStops > 0 && row.completionPercent < threshold);
     const fmt = (value: number) => value.toLocaleString("en-US");
     const pct = (value: number) => value.toFixed(2) + "%";
     const contractLine = (c: typeof detailedContracts[number]) =>
       [c.contract, pct(c.completionPercent), fmt(c.totalStops), fmt(c.completedStops), fmt(c.incompleteStops),
-       pct(c.regularTrips.completionPercent), pct(c.extraTrips.completionPercent), c.below95 ? "BELOW 95%" : ""].join(" | ");
+       pct(c.regularTrips.completionPercent), pct(c.extraTrips.completionPercent), c.below95 ? "BELOW " + thresholdLabel : ""].join(" | ");
     const companyBody = [
       "Davenport Transportation — USPS Daily Performance Report",
       "Operating date: " + day,
@@ -355,7 +361,7 @@ export async function GET(request: Request) {
       "",
       "Contract | Overall | Total stops | Completed | Incomplete",
       ...rankedDailyContracts.map(s => [s.contract,pct(s.completionPercent),fmt(s.totalStops),fmt(s.completedStops),fmt(s.incompleteStops),
-        s.totalStops > 0 && s.completionPercent < 95 ? "BELOW 95%" : ""].join(" | ")),
+        s.totalStops > 0 && s.completionPercent < threshold ? "BELOW " + thresholdLabel : ""].join(" | ")),
       "", "DT Hub: https://dt-intelligence-hub.vercel.app/daily-reports",
     ].join("\n");
 
@@ -441,7 +447,7 @@ export async function GET(request: Request) {
         const assigned = detailedContracts.filter(c => c.supervisor === s.supervisor)
           .sort((a,b) => a.completionPercent - b.completionPercent || a.contract.localeCompare(b.contract));
         const failing = assigned.filter(c => c.below95);
-        const overallBelow95 = s.totalStops > 0 && s.completionPercent < 95;
+        const overallBelow95 = s.totalStops > 0 && s.completionPercent < threshold;
         const priorUpdates = [...(previousDayBySupervisor.get(s.supervisor) ?? [])]
           .sort((a,b) => a.load.operating_date.localeCompare(b.load.operating_date) ||
             normalizeContract(a.load.contract_number).localeCompare(normalizeContract(b.load.contract_number), undefined, { numeric: true }) ||
@@ -512,7 +518,7 @@ export async function GET(request: Request) {
           html: shell("Supervisor Performance Review — " + s.supervisor,
             (s.totalStops ? summary(s.completionPercent) : '<p><strong>No current-day loads; this review is for prior-day FourKites updates.</strong></p>') +
             '<p style="font-size:12px;padding:11px 13px;background:#eef2f5;border-left:4px solid #123b61;line-height:1.5"><strong>How your percentage works:</strong> ' + esc(scoreExplanation) + '</p>' +
-            '<p style="color:#742430;font-weight:bold">' + esc(overallBelow95 ? "Overall below 95%." : failing.length ? "At least one assigned contract below 95%." : "Prior-day update notice; no current-day performance issue triggered this review.") + "</p>" +
+            '<p style="color:#742430;font-weight:bold">' + esc(overallBelow95 ? "Overall below " + thresholdLabel + "." : failing.length ? "At least one assigned contract below " + thresholdLabel + "." : "Prior-day update notice; no current-day performance issue triggered this review.") + "</p>" +
             h3("All Assigned Contracts") +
             table(["Contract", "Total Stops", "Completed", "Missed Stops", "Regular Trips %", "Extra Trips %", "% Complete"],
               assigned.map(x => tr([x.contract, fmt(x.totalStops), fmt(x.completedStops), fmt(x.incompleteStops),
@@ -533,12 +539,12 @@ export async function GET(request: Request) {
             "Official overall completion: " + (s.totalStops ? pct(s.completionPercent) : "No current-day loads"),
             "", "IMPORTANT — PERFORMANCE CALCULATION", scoreExplanation,
             "Reasons for review: " + [
-              ...(overallBelow95 ? ["overall supervisor below 95%"] : []),
-              ...(failing.length ? ["contract(s) below 95%: " + failing.map(c => c.contract).join(", ")] : []),
+              ...(overallBelow95 ? ["overall supervisor below " + thresholdLabel] : []),
+              ...(failing.length ? ["contract(s) below " + thresholdLabel + ": " + failing.map(c => c.contract).join(", ")] : []),
               ...(priorRows.length ? ["earlier operating-day records appeared in this FourKites report"] : []),
             ].join("; "),
             "",
-            "ALL ASSIGNED CONTRACTS (including those at or above 95%)",
+            "ALL ASSIGNED CONTRACTS (including those at or above " + thresholdLabel + ")",
             "Contract | Overall | Total stops | Completed | Incomplete | Regular Trips | Extra Trips | Review",
             ...assigned.map(contractLine),
             "", "INCOMPLETE STOPS BY TRIP",
@@ -622,6 +628,7 @@ export async function GET(request: Request) {
       },
       // Data is for an internal test preview only, not an authorization to send.
       sendAuthorized: false,
+      emailSettings: { deliveryEnabled: settingsRow.delivery_enabled, companyEnabled: settingsRow.company_enabled, individualEnabled: settingsRow.individual_enabled, thresholdPercent: threshold },
       expectedLoads,
       overall: result(overall),
       regularTrips: result(regular),
