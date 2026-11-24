@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { processReport } from "@/lib/processors/reportProcessor";
@@ -155,6 +155,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "No dated FourKites loads found" }, { status: 422 });
     }
     const filename = decodeURIComponent(destination.pathname.split("/").at(-1) ?? "fourkites.xlsx");
+    const sourceSha256 = createHash("sha256").update(bytes).digest("hex");
+    // Count every dated source load by declared operating day. Prior-day
+    // rows are expected and remain attributed to their own operating dates.
+    const rawLoadRows = validLoads;
+    const datedLoadRows = [...dates.values()].reduce((sum, count) => sum + count, 0);
     if (input.mode === "import") {
       if (process.env.AUTOMATION_IMPORT_ENABLED !== "true") {
         return NextResponse.json({ ok: false, error: "Automated database import is not enabled" }, { status: 409 });
@@ -182,13 +187,42 @@ export async function POST(request: Request) {
         assignments: (assignments ?? []) as Array<{contract_number:string|null;supervisor:string|null}>,
         assignmentPeriods: (periods ?? []) as Array<{contract_number:string;supervisor:string;start_date:string;end_date:string|null}>,
       });
-      const result = await saveAutomatedFourKitesReport(db, parsed, automationUserId);
+      const sameFile = parsed.fileName === filename;
+      const dailyNamed = filename.startsWith("TQ_DAILY_");
+      const isOneDay = parsed.periodStart === parsed.periodEnd && Boolean(parsed.periodStart);
+      const expectedDay = parsed.periodEnd;
+      const dayInRawWorkbook = dates.get(expectedDay) ?? 0;
+      const parsedDaily = parsed.daily.find(row => row.key === expectedDay);
+      // Duplicates may occur in received workbooks; deduped load IDs must
+      // reconcile with all source rows. We do not treat prior-day rows as
+      // today's loads, or require the workbook to contain a single date.
+      const parsedLoadCountMatches = parsed.historicalLoads.length + parsed.duplicateLoadNumbers.length === rawLoadRows;
+      const parsedDayMatches = Boolean(parsedDaily && parsedDaily.loadCount > 0 &&
+        parsedDaily.loadCount <= dayInRawWorkbook &&
+        parsed.reportLoads.length === parsedDaily.loadCount);
+      const allLoadMathValid = parsed.historicalLoads.every(load =>
+        Number.isSafeInteger(load.totalStops) && load.totalStops >= 0 &&
+        Number.isSafeInteger(load.completedStops) && load.completedStops >= 0 &&
+        Number.isSafeInteger(load.incompleteStops) && load.incompleteStops >= 0 &&
+        load.completedStops + load.incompleteStops === load.totalStops);
+      const sourceVerified = sameFile && dailyNamed && isOneDay &&
+        parsedLoadCountMatches && parsedDayMatches && allLoadMathValid &&
+        rawLoadRows === datedLoadRows;
+      const result = await saveAutomatedFourKitesReport(db, parsed, automationUserId, {
+        sha256: sourceSha256, rawLoadRows, datedLoadRows,
+        targetDateRows: dayInRawWorkbook, duplicateCount: parsed.duplicateLoadNumbers.length,
+        periodStart: parsed.periodStart, periodEnd: parsed.periodEnd,
+        passed: sourceVerified,
+      });
       return NextResponse.json({
         ok: true,
         ...result,
         filename,
         loadCount: validLoads,
         loadsByOperatingDate: Object.fromEntries([...dates.entries()].sort(([a], [b]) => a.localeCompare(b))),
+        // This establishes completeness relative to the received workbook,
+        // not an independent guarantee of upstream FourKites coverage.
+        receivedWorkbookVerified: sourceVerified,
       }, { headers: { "Cache-Control": "no-store" } });
     }
     return NextResponse.json({
