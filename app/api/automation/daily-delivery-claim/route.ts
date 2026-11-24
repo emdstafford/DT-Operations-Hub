@@ -68,9 +68,16 @@ export async function POST(request: Request) {
   const key = parseKey(input);
   if (!key) return response({ok:false,error:"Invalid delivery key"},400);
   try {
-    if (!await validateRecipient(key)) return response({ok:false,error:"Recipient not authorized"},403);
-    if (!await certified(key.date)) return response({ok:true,claimed:false,reason:"Workbook not certified"});
     const db = automationDatabase();
+    const {data: settings, error: settingsError} = await db.from("daily_email_settings")
+      .select("delivery_enabled,company_enabled,individual_enabled").eq("id",1).single();
+    if (settingsError || !settings) return response({ok:false,error:"Email settings unavailable"},503);
+    if (!settings.delivery_enabled ||
+        (key.reportType === "company" && !settings.company_enabled) ||
+        (key.reportType === "individual" && !settings.individual_enabled))
+      return response({ok:true,claimed:false,reason:"Delivery held in DT Hub"});
+    if (!await validateRecipient(key)) return response({ok:true,claimed:false,reason:"Recipient is on hold or no longer authorized"});
+    if (!await certified(key.date)) return response({ok:true,claimed:false,reason:"Workbook not certified"});
     // Atomic ON CONFLICT DO NOTHING. Two flow runs cannot both claim the
     // same date/report/supervisor/recipient.
     const { data, error } = await db.from("daily_report_deliveries")
