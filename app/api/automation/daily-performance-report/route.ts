@@ -617,6 +617,25 @@ export async function GET(request: Request) {
           completed + incomplete === total;
       })
     );
+    // A delivery plan is generated afresh from current Hub settings and recipient
+    // records. Each planned message has exactly one recipient and must still
+    // acquire an individual server-side claim before Outlook sends it.
+    const companyRecipients = [...new Set([...distributionRecipients, ...companyCcRecipients, ...companyBccRecipients])];
+    const deliveryPlanPreview = (
+      settingsRow.delivery_enabled && routingValidated && workbookVerified
+        ? [
+          ...(settingsRow.company_enabled ? companyRecipients.map(recipient => ({
+            reportType: "company" as const, supervisor: "", recipient,
+            subject: "USPS Completion Report " + prettyDate + " - " + prettyDate,
+            html: companyHtml,
+          })) : []),
+          ...(settingsRow.individual_enabled ? reviewDeliveryPreview.flatMap(review =>
+            review.to.map(recipient => ({
+              reportType: "individual" as const, supervisor: review.supervisor, recipient,
+              subject: review.subject, html: review.html,
+            }))) : []),
+        ] : []
+    );
     return NextResponse.json({
       ok: true, ready: true, date: day,
       importVerified: true,
@@ -655,6 +674,7 @@ export async function GET(request: Request) {
       },
       companyDeliveryPreview: { to: [...new Set(distributionRecipients)], cc: [...new Set(companyCcRecipients)], bcc: [...new Set(companyBccRecipients)] },
       reviewDeliveryPreview,
+      deliveryPlanPreview,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ ok: false, ready: false, error: "Could not produce verified daily report" }, { status: 503, headers: { "Cache-Control": "no-store" } });
