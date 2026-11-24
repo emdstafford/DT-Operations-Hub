@@ -241,7 +241,13 @@ export async function GET(request: Request) {
       .filter(row => !sameSharedPerformance || row.supervisor !== "Sidney Williams")
       .map(row => sameSharedPerformance && row.supervisor === "James Bowling"
         ? { ...row, supervisor: "James Bowling / Sidney Williams" } : row);
+    // Email presentation ranking only: highest supervisor first, lowest contract first.
+    // Official totals, thresholds, and individual review eligibility are unchanged.
+    const rankedDailySupervisors = [...dailyEmailSupervisorRows].sort((a, b) =>
+      b.completionPercent - a.completionPercent || a.supervisor.localeCompare(b.supervisor));
     const contractRows = ranked(contracts, "contract");
+    const rankedDailyContracts = [...contractRows].sort((a, b) =>
+      a.completionPercent - b.completionPercent || a.contract.localeCompare(b.contract, undefined, { numeric: true }));
     // A single consolidated review per supervisor is generated when either
     // their overall score OR any assigned contract falls below 95%.
     const supervisorContractsRows = ranked(supervisorContracts, "supervisorContract");
@@ -272,10 +278,10 @@ export async function GET(request: Request) {
       "Extra Trips: " + pct(result(extra).completionPercent),
       "",
       "Supervisor | Overall | Total stops | Completed | Incomplete",
-      ...dailyEmailSupervisorRows.map(s => [s.supervisor,pct(s.completionPercent),fmt(s.totalStops),fmt(s.completedStops),fmt(s.incompleteStops)].join(" | ")),
+      ...rankedDailySupervisors.map(s => [s.supervisor,pct(s.completionPercent),fmt(s.totalStops),fmt(s.completedStops),fmt(s.incompleteStops)].join(" | ")),
       "",
       "Contract | Overall | Total stops | Completed | Incomplete",
-      ...contractRows.map(s => [s.contract,pct(s.completionPercent),fmt(s.totalStops),fmt(s.completedStops),fmt(s.incompleteStops),
+      ...rankedDailyContracts.map(s => [s.contract,pct(s.completionPercent),fmt(s.totalStops),fmt(s.completedStops),fmt(s.incompleteStops),
         s.totalStops > 0 && s.completionPercent < 95 ? "BELOW 95%" : ""].join(" | ")),
       "", "DT Hub: https://dt-intelligence-hub.vercel.app/daily-reports",
     ].join("\n");
@@ -305,15 +311,21 @@ export async function GET(request: Request) {
     const tripPair = (buckets: { regular: Stats; extra: Stats; unclassified: Stats } | undefined) =>
       [buckets?.regular.totalStops ? pct(result(buckets.regular).completionPercent) : "N/A",
        buckets?.extra.totalStops ? pct(result(buckets.extra).completionPercent) : "N/A"];
-    const completionTable = (rows: Array<{ name: string; regular: string; extra: string; overall: string }>) =>
+    const completionTable = (
+      rows: Array<{ name: string; regular: string; extra: string; overall: string }>,
+      highlight: "top5" | "bottom10",
+    ) =>
       table(["Supervisor / Contract", "Regular Trips %", "Extra Trips %", "Overall Completion %"],
-        rows.map(row => tr([row.name, row.regular, row.extra, row.overall])).join(""));
-    const supervisorPerformance = dailyEmailSupervisorRows.map((s, i) => tr(
+        rows.map((row, i) => tr(
+          [row.name, row.regular, row.extra, row.overall],
+          highlight === "top5" ? (i < 5 ? "#c9e7cf" : "") : (i < 10 ? "#f0c8cd" : ""),
+        )).join(""));
+    const supervisorPerformance = rankedDailySupervisors.map((s, i) => tr(
       [s.supervisor, fmt(s.totalStops), fmt(s.incompleteStops), pct(s.completionPercent)],
       i < 5 ? "#c9e7cf" : "")).join("");
-    const contractPerformance = contractRows.map((s) => tr(
+    const contractPerformance = rankedDailyContracts.map((s, i) => tr(
       [s.contract, fmt(s.totalStops), fmt(s.completedStops), fmt(s.incompleteStops), pct(s.completionPercent)],
-      s.totalStops > 0 && s.completionPercent < 95 ? "#f0c8cd" : "")).join("");
+      i < 10 ? "#f0c8cd" : "")).join("");
     const companyHtml = shell("USPS Completion Report",
       summary(result(overall).completionPercent) +
       h3("Supervisor Performance") +
@@ -326,14 +338,18 @@ export async function GET(request: Request) {
         (regular.totalStops ? pct(result(regular).completionPercent) : "N/A") + ' &nbsp; Extra Trips: ' +
         (extra.totalStops ? pct(result(extra).completionPercent) : "N/A") + ' &nbsp; Overall Completion: ' +
         pct(result(overall).completionPercent) + '</strong></p>' +
-      '<h4>Supervisors</h4>' + completionTable(dailyEmailSupervisorRows.map(s => {
-        const pair = tripPair(supervisorTripStats.get(s.supervisor));
+      '<h4>Supervisors</h4>' + completionTable(rankedDailySupervisors.map(s => {
+        // The display-only James/Sidney combined label must use their shared
+        // underlying stats, not a nonexistent map key.
+        const statsKey = sameSharedPerformance && s.supervisor === "James Bowling / Sidney Williams"
+          ? "James Bowling" : s.supervisor;
+        const pair = tripPair(supervisorTripStats.get(statsKey));
         return { name: s.supervisor, regular: pair[0], extra: pair[1], overall: pct(s.completionPercent) };
-      })) +
-      '<h4>Contracts</h4>' + completionTable(contractRows.map(s => {
+      }), "top5") +
+      '<h4>Contracts</h4>' + completionTable(rankedDailyContracts.map(s => {
         const pair = tripPair(contractTripStats.get(s.contract));
         return { name: s.contract, regular: pair[0], extra: pair[1], overall: pct(s.completionPercent) };
-      })));
+      }), "bottom10"));
     const individualReviews = supervisorRows
       .filter(s => s.supervisor !== "Unassigned" && s.totalStops > 0)
       .map(s => {
