@@ -221,12 +221,12 @@ export default function DailyReportsPage(){
      <pre className="ops-daily-preview">{companyBody}</pre>
     </section>}
     <section className="panel">
-     <div className="panel-heading"><div><h2>Individual reviews — overall or any contract below {reviewThreshold}%</h2><span>All assigned contracts included. Daily recipients: supervisor, Gary, Chasity, and Emily; Tonya excluded.</span></div></div>
-     {!below.length?<p className="ops-summary">{dayReady?"No eligible supervisor has an overall or individual contract below {reviewThreshold}% for this day.":"No completed daily report to evaluate yet."}</p>:below.map(r=>{
+     <div className="panel-heading"><div><h2>Individual reviews — overall or any contract below {reviewThreshold}%</h2><span>All assigned contracts included. Daily recipients: supervisor and approved oversight contacts; Tonya excluded.</span></div></div>
+     {!below.length?<p className="ops-summary">{dayReady?`No eligible supervisor has an overall or individual contract below ${reviewThreshold}% for this day.`:"No completed daily report to evaluate yet."}</p>:below.map(r=>{
        const recipient=lookup(r.supervisor||"");
        const to=distinct([...(recipient?[recipient.email]:[]),...oversight]);
        const failing=failingBySupervisor.get(clean(r.supervisor||""))||[];
-       const reason=Number(r.completion_percent)<reviewThreshold/100?"Overall below {reviewThreshold}%":`Contract below {reviewThreshold}%: ${failing.map(c=>c.contract_number||"Unknown").join(", ")}`;
+       const reason=Number(r.completion_percent)<reviewThreshold/100?`Overall below ${reviewThreshold}%`:`Contract below {reviewThreshold}%: ${failing.map(c=>c.contract_number||"Unknown").join(", ")}`;
        return <details className="ops-daily-individual" key={r.supervisor}><summary><strong>{r.supervisor}</strong><span>{pct(r.completion_percent)} overall · {reason} · {fmt(r.incomplete_stops)} missed · {recipient?recipient.email:"ADDRESS MISSING"}</span></summary>
         <div className="ops-daily-individual-content"><p><strong>To:</strong> {to.join("; ")}</p><pre className="ops-daily-preview">{individualBody(r)}</pre><button className="hub-secondary-link" onClick={()=>void copy(individualBody(r))}>Copy individual preview</button></div></details>;
      })}
