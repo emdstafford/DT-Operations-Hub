@@ -5,7 +5,6 @@ import Link from "next/link";
 import {supabase} from "@/lib/supabase";
 import {useAccessRole} from "@/components/AccessRole";
 
-type Assignment={contract_number:string;supervisor:string;start_date?:string|null;end_date?:string|null;active?:boolean|null};
 type Recipient={name:string;email:string;recipient_type:"supervisor"|"distribution"|"cc"|"bcc";enabled:boolean};
 type Delivery={id:number;report_type:"company"|"individual";supervisor:string;recipient_email:string;status:"pending"|"sent"|"failed"|"skipped";attempted_at:string;sent_at:string|null;error_message:string|null};
 type Performance={supervisor?:string;contract_number?:string;total_stops:number;completed_stops:number;incomplete_stops:number;completion_percent:number;load_count:number};
@@ -26,87 +25,31 @@ export default function DailyReportsPage(){
  const [day,setDay]=useState(yesterday);
  const [directory,setDirectory]=useState<Recipient[]>([]);
  const [reviewThreshold,setReviewThreshold]=useState(95);
- const [assignmentPeriods,setAssignmentPeriods]=useState<Assignment[]>([]);
- const [currentAssignments,setCurrentAssignments]=useState<Assignment[]>([]);
- const [directorySearch,setDirectorySearch]=useState("");
- const [drafts,setDrafts]=useState<Record<string,string>>({});
  const [data,setData]=useState<DashboardData>(empty);
  const [deliveries,setDeliveries]=useState<Delivery[]>([]);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
- const [saving,setSaving]=useState("");
  const [message,setMessage]=useState("");
  const allowed=role==="admin";
 
  const refresh=useCallback(async()=>{
   if(!allowed)return;
   setLoading(true);setError("");setMessage("");
-  const [recipients,report,deliveryAudit,periods,assignments,emailSettings]=await Promise.all([
+  const [recipients,report,deliveryAudit,emailSettings]=await Promise.all([
    supabase.from("daily_report_recipients").select("name,email,recipient_type,enabled").order("recipient_type").order("name"),
    supabase.rpc("dashboard_hub_filtered",{p_start:day,p_end:day,p_grain:"day",p_contracts:null,p_supervisors:null,p_exclude_august_2026:false,p_max_completion:null,p_min_missed_stops:null}),
    supabase.from("daily_report_deliveries").select("id,report_type,supervisor,recipient_email,status,attempted_at,sent_at,error_message").eq("operating_date",day).order("attempted_at",{ascending:false}).limit(500),
-   supabase.from("contract_assignment_periods").select("contract_number,supervisor,start_date,end_date"),
-   supabase.from("contract_supervisors").select("contract_number,supervisor,active").eq("active",true),
    supabase.from("daily_email_settings").select("threshold_percent").eq("id",1).single()
   ]);
-  if(recipients.error||report.error||deliveryAudit.error||periods.error||assignments.error||emailSettings.error){setError(recipients.error?.message||report.error?.message||deliveryAudit.error?.message||periods.error?.message||assignments.error?.message||emailSettings.error?.message||"Unable to load reports");setLoading(false);return;}
+  if(recipients.error||report.error||deliveryAudit.error||emailSettings.error){setError(recipients.error?.message||report.error?.message||deliveryAudit.error?.message||emailSettings.error?.message||"Unable to load reports");setLoading(false);return;}
   setReviewThreshold(Number(emailSettings.data?.threshold_percent??95));
   const saved=recipients.data as Recipient[];
-  setDirectory(saved);setDrafts(Object.fromEntries(saved.map(r=>[r.name,r.email])));
-  setAssignmentPeriods((periods.data||[]) as Assignment[]);
-  setCurrentAssignments((assignments.data||[]) as Assignment[]);
+  setDirectory(saved);
   setDeliveries((deliveryAudit.data||[]) as Delivery[]);
   setData((report.data as unknown as DashboardData)||empty);setLoading(false);
  },[allowed,day]);
  useEffect(()=>{void refresh()},[refresh]);
 
- const today=dateInNewYork();
- const normContract=(value:string)=>value.trim().toUpperCase().replace(/^0+(?=[0-9])/,"");
- const assignmentNames=(value:string)=>value.split("/").map(v=>v.trim()).filter(Boolean);
- const directoryRows=useMemo(()=>{
-  const dated=new Map<string,Set<string>>();
-  const current=new Map<string,Set<string>>();
-  for(const entry of assignmentPeriods){
-   if(entry.start_date&&entry.start_date>today)continue;
-   if(entry.end_date&&entry.end_date<today)continue;
-   const key=normContract(entry.contract_number);
-   const names=dated.get(key)||new Set<string>();
-   assignmentNames(entry.supervisor).forEach(name=>names.add(name));
-   dated.set(key,names);
-  }
-  for(const entry of currentAssignments){
-   const key=normContract(entry.contract_number);
-   const names=current.get(key)||new Set<string>();
-   assignmentNames(entry.supervisor).forEach(name=>names.add(name));
-   current.set(key,names);
-  }
-  const map=new Map<string,{contracts:Set<string>;provisional:Set<string>}>();
-  for(const [contract,names] of current){
-   const effective=dated.get(contract);
-   for(const name of effective?.size?effective:names){
-    const key=clean(name);
-    const row=map.get(key)||{contracts:new Set<string>(),provisional:new Set<string>()};
-    row.contracts.add(contract);
-    if(!effective?.size)row.provisional.add(contract);
-    map.set(key,row);
-   }
-  }
-  for(const [contract,names] of dated){
-   if(current.has(contract))continue;
-   for(const name of names){
-    const key=clean(name);
-    const row=map.get(key)||{contracts:new Set<string>(),provisional:new Set<string>()};
-    row.contracts.add(contract);
-    map.set(key,row);
-   }
-  }
-  return directory.filter(r=>r.recipient_type==="supervisor").map(r=>{
-   const matches=map.get(clean(r.name));
-   return {...r,contracts:[...(matches?.contracts||[])].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})),
-    provisional:[...(matches?.provisional||[])],};
-  }).sort((a,b)=>a.name.localeCompare(b.name));
- },[directory,assignmentPeriods,currentAssignments,today]);
- const visibleDirectoryRows=directoryRows.filter(r=>[r.name,r.email,...r.contracts].some(value=>value.toLowerCase().includes(directorySearch.trim().toLowerCase())));
  const listed=useMemo(()=>data.supervisors.filter(r=>r.supervisor&&r.supervisor!=="Unassigned"&&Number(r.total_stops)>0),[data]);
  // Tonya's assigned trips remain in company-wide performance totals, but she
  // receives ONLY a separately authorized Monday-only report, never a daily review.
@@ -170,36 +113,12 @@ export default function DailyReportsPage(){
   try{await navigator.clipboard.writeText(content);setMessage("Copied report preview. This does not send an email.");}
   catch{setError("Clipboard access is unavailable in this browser.");}
  }
- async function saveRecipient(r:Recipient){
-  const email=(drafts[r.name]||"").trim().toLowerCase();
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){setError("Enter a valid email for "+r.name);return;}
-  setSaving(r.name);setError("");setMessage("");
-  const response=await supabase.from("daily_report_recipients").update({email,updated_at:new Date().toISOString()}).eq("name",r.name);
-  if(response.error)setError(response.error.message);
-  else{setDirectory(current=>current.map(c=>c.name===r.name?{...c,email}:c));setMessage("Saved "+r.name+"'s email.");}
-  setSaving("");
- }
- async function changeGroup(r:Recipient,recipient_type:Recipient["recipient_type"]){
-  if(r.recipient_type===recipient_type)return;
-  setSaving(r.name);setError("");setMessage("");
-  const response=await supabase.from("daily_report_recipients").update({recipient_type,updated_at:new Date().toISOString()}).eq("name",r.name);
-  if(response.error)setError(response.error.message);
-  else{setDirectory(current=>current.map(item=>item.name===r.name?{...item,recipient_type}:item));setMessage("Updated "+r.name+" to "+recipient_type+".");}
-  setSaving("");
- }
- async function toggleRecipient(r:Recipient){
-  setSaving(r.name);setError("");setMessage("");
-  const response=await supabase.from("daily_report_recipients").update({enabled:!r.enabled,updated_at:new Date().toISOString()}).eq("name",r.name);
-  if(response.error)setError(response.error.message);
-  else setDirectory(current=>current.map(c=>c.name===r.name?{...c,enabled:!c.enabled}:c));
-  setSaving("");
- }
  if(!allowed)return <main className="page-shell operations-polish"><h1>Daily Email Reports</h1><p>Only approved DT administrators can manage recipients and report previews.</p></main>;
  return <main className="page-shell dashboard-page operations-polish ops-daily-reports">
-   <header className="hub-header"><div><p className="eyebrow">DT Intelligence Hub</p><h1>Daily Email Reports</h1><p>Preview previous-day results, verify recipients, and prepare the 7:00 AM Eastern distribution.</p></div><Link className="hub-secondary-link" href="/">Dashboard</Link></header>
+   <header className="hub-header"><div><p className="eyebrow">DT Intelligence Hub</p><h1>Daily Email Reports</h1><p>Preview previous-day results, verify recipients, and prepare the 7:00 AM Eastern distribution.</p></div><Link className="hub-secondary-link" href="/admin/daily-email-settings">Email Settings</Link></header>
    <section className="panel">
     <div className="panel-heading"><div><h2>Automation status</h2><span>Sender: it@dtexpress.net · Daily at 7:00 AM Eastern</span></div><strong className="ops-automation-off">Sending not connected</strong></div>
-    <p className="ops-summary">Recipient directory and daily previews are available. <strong>Automatic ingestion and email sending are NOT enabled.</strong> Microsoft Power Automate and the shared-mailbox connection must be configured and tested first. No messages are sent from this page.</p>
+    <p className="ops-summary">Daily report previews and delivery history are available. Manage the supervisor directory in Email Settings. <strong>Automatic ingestion and email sending are NOT enabled.</strong> Microsoft Power Automate and the shared-mailbox connection must be configured and tested first. No messages are sent from this page.</p>
     <div className="ops-filter-grid"><label>Operating day<input type="date" value={day} onChange={e=>setDay(e.target.value)}/></label><div className="ops-daily-actions"><button type="button" className="hub-secondary-link" onClick={()=>setDay(yesterday())}>Previous day</button><button type="button" className="hub-secondary-link" onClick={()=>void refresh()} disabled={loading}>{loading?"Loading…":"Refresh"}</button></div></div>
    </section>
    {error&&<div className="alert alert-error" role="alert">{error}</div>}
@@ -235,29 +154,6 @@ export default function DailyReportsPage(){
      <div className="panel-heading"><div><h2>Actual email delivery history</h2><span>Microsoft 365 send results only · operating day {formatDate(day)}</span></div><span>{deliveries.length} recorded recipient(s)</span></div>
      {!deliveries.length?<p className="ops-summary"><strong>No emails recorded as sent.</strong> The Microsoft 365 dispatch connection has not been activated. Previewing or copying reports does not count as sending.</p>:
       <div className="table-scroll"><table className="data-table"><thead><tr><th>Report</th><th>Supervisor</th><th>Recipient</th><th>Status</th><th>Recorded</th></tr></thead><tbody>{deliveries.map(item=><tr key={item.id}><td>{item.report_type==="company"?"Company-wide":"Individual"}</td><td>{item.supervisor||"—"}</td><td>{item.recipient_email}</td><td><strong>{item.status.toUpperCase()}</strong>{item.error_message&&<small style={{display:"block"}}>{item.error_message}</small>}</td><td>{new Date(item.sent_at||item.attempted_at).toLocaleString("en-US",{timeZone:"America/New_York"})}</td></tr>)}</tbody></table></div>}
-    </section>
-    <section className="panel" id="supervisor-contract-directory">
-     <div className="panel-heading"><div><h2>Supervisor &amp; Email Directory</h2><span>Current assignments as of {formatDate(today)} · DT Hub source of truth</span></div><strong>{directory.length} recipients</strong></div>
-     <label style={{display:"block",marginBottom:12}}>Search name, email or contract
-      <input type="search" placeholder="Search name, email, or contract number" value={directorySearch} onChange={e=>setDirectorySearch(e.target.value)} style={{display:"block",width:"100%",maxWidth:520,marginTop:6}}/>
-     </label>
-     <div className="table-scroll"><table className="data-table"><thead><tr><th>Name</th><th>Group</th><th>Email</th><th>Enabled</th><th>Assigned Contracts</th><th></th></tr></thead><tbody>
-      {directory.filter(r=>{
-       const row=directoryRows.find(x=>clean(x.name)===clean(r.name));
-       return [r.name,r.email,...(row?.contracts||[])].some(value=>value.toLowerCase().includes(directorySearch.trim().toLowerCase()));
-      }).map(r=>{
-       const row=directoryRows.find(x=>clean(x.name)===clean(r.name));
-       return <tr key={r.name}>
-        <td><strong>{r.name}</strong></td>
-        <td><select aria-label={"Group for "+r.name} value={r.recipient_type} disabled={saving===r.name} onChange={e=>void changeGroup(r,e.target.value as Recipient["recipient_type"])}><option value="supervisor">Supervisor</option><option value="distribution">Distribution</option><option value="cc">CC</option><option value="bcc">BCC</option></select></td>
-        <td><input aria-label={"Email for "+r.name} type="email" value={drafts[r.name]??r.email} disabled={saving===r.name} onChange={e=>setDrafts(current=>({...current,[r.name]:e.target.value}))}/></td>
-        <td><input type="checkbox" aria-label={"Enabled "+r.name} checked={r.enabled} disabled={saving===r.name} onChange={()=>void toggleRecipient(r)}/></td>
-        <td>{row?.contracts.length?row.contracts.map((contract,i)=><span key={contract}>{i?", ":""}<Link href={`/contracts/${encodeURIComponent(contract)}`}>{contract}</Link>{row.provisional.includes(contract)?" *":""}</span>):r.recipient_type==="supervisor"?<strong style={{color:"#a24444"}}>No current contract assignment found</strong>:"—"}</td>
-        <td><button type="button" className="hub-secondary-link" disabled={saving===r.name||clean(drafts[r.name]??r.email)===clean(r.email)} onClick={()=>void saveRecipient(r)}>{saving===r.name?"Saving…":"Save email"}</button></td>
-       </tr>;
-      })}
-      </tbody></table></div>
-     <p className="ops-summary">Contract assignments reflect DT Hub’s current effective-date records. Asterisk (*) means the contract has no matching dated assignment and is using its current assignment as a provisional fallback. Edit contracts through the existing contract management workflow.</p>
     </section>
    </>}
  </main>;
