@@ -145,17 +145,14 @@ export async function GET(request: Request) {
     const unmatchedSupervisorNames = new Set<string>();
     const resolvedSupervisors = (load: Load) => {
       const key = normalizeContract(load.contract_number);
-      // 296B8 and 296C2 have exact trip-level ownership.
-      // Do not credit Tonya's assigned trips to Eric, or vice versa.
-      // The original imported supervisor attribution is the fallback for
-      // non-Tonya trips, not the shared contract header.
+      // Both contracts are shared, but the named supervisors own different
+      // trips: 296B8 = Eric Grant/Tonya, 296C2 = Kevin Shields/Tonya.
+      // The explicit 34 and 40 Tonya trip assignments take priority; the
+      // remaining trips belong to the other supervisor, never to both.
       if (key === "296B8" || key === "296C2") {
         const assigned = tripAssignments.get(key + "|" + String(load.trip_number ?? "").trim());
         if (assigned?.length) return assigned;
-        const imported = [...new Set((load.supervisors ?? []).flatMap(splitAssignment).filter(Boolean))];
-        if (imported.length === 1) return imported;
-        assignmentFallbackContracts.add(key);
-        return imported.length ? imported : ["Unassigned"];
+        return [key === "296B8" ? "Eric Grant" : "Kevin Shields"];
       }
       const dated = datedByContract.get(key);
       if (dated?.size) return [...dated];
