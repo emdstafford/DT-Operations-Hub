@@ -167,7 +167,7 @@ export default function DailyEmailSettingsPage(){
        return <tr key={r.name}>
         <td><strong>{r.name}</strong></td>
         <td><select aria-label={"Group for "+r.name} value={r.recipient_type} disabled={Boolean(busy)||isTonya(r)} onChange={e=>void changeGroup(r,e.target.value as Recipient["recipient_type"])}><option value="supervisor">Supervisor</option><option value="distribution">Distribution</option><option value="cc">CC</option><option value="bcc">BCC</option></select></td>
-        <td><input aria-label={"Email for "+r.name} type="email" value={draftEmails[r.name]??r.email} disabled={Boolean(busy)} onChange={e=>setDraftEmails(current=>({...current,[r.name]:e.target.value}))}/></td>
+        <td><input aria-label={"Email for "+r.name} type="email" value={draftEmails[r.name]??r.email} disabled={Boolean(busy)||isTonya(r)} onChange={e=>setDraftEmails(current=>({...current,[r.name]:e.target.value}))}/></td>
         <td><input type="checkbox" aria-label={"Enabled "+r.name} checked={r.enabled} disabled={Boolean(busy)||isTonya(r)} onChange={()=>void toggleRecipient(r)}/></td>
         <td>{row?.contracts.length?row.contracts.map((contract,i)=><span key={contract}>{i?", ":""}<Link href={`/contracts/${encodeURIComponent(contract)}`}>{contract}</Link>{row.provisional.includes(contract)?" *":""}</span>):r.recipient_type==="supervisor"?<strong style={{color:"#a24444"}}>No current contract assignment found</strong>:"—"}</td>
         <td><button type="button" className="hub-secondary-link" disabled={Boolean(busy)||isTonya(r)||clean(draftEmails[r.name]??r.email)===clean(r.email)} onClick={()=>void saveRecipient(r,{email:draftEmails[r.name]})}>{busy===r.name?"Saving…":"Save email"}</button></td>
