@@ -562,8 +562,7 @@ export async function GET(request: Request) {
               "Original Date | FourKites Report Date | Contract / Trip | Load | Previous Completed / Total | Latest Completed / Total | Update",
               ...priorRows.map(row => [row.originalDate, day, row.contract + " / " + row.trip, row.number, row.before, row.after, row.description].join(" | ")),
             ] : []),
-            "", "See DT Hub for detailed stop explanations and missing-load reviews.",
-            "https://dt-intelligence-hub.vercel.app/missed-load-reviews",
+            "", "All assigned contracts, incomplete trips, affected load numbers, and any saved operational notes are included above.",
           ].join("\n"),
         };
       }).filter((review): review is NonNullable<typeof review> => review !== null);
