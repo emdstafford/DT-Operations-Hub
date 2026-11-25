@@ -33,7 +33,7 @@ export default function RecurringMissedTripsPage(){
    supabase.rpc("recurring_missed_trips",{p_end:end,p_weeks:weeks}),
    supabase.from("operational_notes").select("contract_number,trip_number,status,note,effective_start,effective_end").is("effective_end",null).limit(2000)
   ]);
-  if(repeats.error||tripNotes.error)setError(repeats.error?.message||tripNotes.error?.message||"Could not retrieve recurring trips");
+  if(repeats.error||tripNotes.error){setError("Unable to load recurring trips: "+(repeats.error?.message||tripNotes.error?.message||"Unknown error"));setRows([]);setNotes([]);}
   else {setRows((repeats.data||[]) as RepeatRow[]);setNotes((tripNotes.data||[]) as TripNote[]);}
   setLoading(false);
  },[allowed,end,weeks]);
@@ -61,7 +61,7 @@ export default function RecurringMissedTripsPage(){
    <p className="ops-summary">Candidate follow-up: investigate whether the route schedule, frequency, trip assignment, or USPS contract information needs correction. A repeated flag is not proof of the cause.</p>
   </section>
   {error&&<section className="panel"><p role="alert">{error}</p></section>}
-  {loading?<section className="panel">Checking saved trip history…</section>:<>
+  {loading?<section className="panel">Checking saved trip history…</section>:error?<section className="panel"><p>The recurring-trip results could not be loaded. Please retry; zero results are not implied by this error.</p></section>:<>
    <section className="panel"><div className="panel-heading"><div><h2>Recurring issues — 3+ weeks</h2></div><strong>{repeating.length} flagged</strong></div>{render(repeating)}</section>
    <section className="panel"><div className="panel-heading"><div><h2>Worth watching — 2 weeks</h2></div><strong>{watching.length} flagged</strong></div>{render(watching)}</section>
    <section className="panel"><p className="ops-summary">Each operating-day load is counted once using its latest saved FourKites observation. Counts reflect the weeks represented in available imports; missing coverage can understate recurrence. This page does not modify completion percentages or send emails.</p></section>
