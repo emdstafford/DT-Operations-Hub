@@ -7,6 +7,8 @@ import { supabase } from "@/lib/supabase";
 type Daily = { operating_date: string; contract_number: string; weekday_number: number; load_count: number; distinct_trips: number; unmapped_loads: number; extra_loads: number; regular_loads: number; total_stops: number; completed_stops: number; incomplete_stops: number; unmapped_total_stops: number; unmapped_incomplete_stops: number };
 type FourKitesWeek = { contract_number: string; period_start: string; period_end: string; total_loads: number; total_stops: number; geofence_stops: number; missing_geofence_stops: number; geofence_compliance_percent: number | null; source_version_count: number; source_file: string; exclude_from_performance: boolean };
 type Trip = { operating_date: string; contract_number: string; trip_number: string; trip_type: string; weekday_number: number; load_count: number; total_stops: number; completed_stops: number; incomplete_stops: number };
+type TripNote = { id: string; contract_number: string; trip_number: string | null; note: string; status: string; effective_start: string; effective_end: string | null };
+type LoadReviewNote = { load_number: string; operating_date: string; contract_number: string; trip_number: string; explanation: string; reason: string; review_status: string; ticket_status: string };
 type Metric = { loads: number; stops: number; completed: number; incomplete: number };
 const blank = (): Metric => ({ loads: 0, stops: 0, completed: 0, incomplete: 0 });
 const pct = (complete: number, total: number) => total ? (100 * complete / total).toFixed(2) + "%" : "—";
@@ -28,6 +30,8 @@ export default function ContractTrendsPage() {
   const [daily, setDaily] = useState<Daily[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [fourkites, setFourkites] = useState<FourKitesWeek[]>([]);
+  const [tripNotes, setTripNotes] = useState<TripNote[]>([]);
+  const [reviewNotes, setReviewNotes] = useState<LoadReviewNote[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -60,16 +64,22 @@ export default function ContractTrendsPage() {
           }
           throw new Error("Too many daily trend rows; choose a shorter date range.");
         };
-        const [dayRows, tripRows, fk] = await Promise.all([
+        const [dayRows, tripRows, fk, savedTripNotes, savedReviewNotes] = await Promise.all([
           fetchRows("dt_contract_daily_trends"),
           fetchRows("dt_contract_trip_daily_trends"),
           supabase.from("dt_fourkites_contract_trends").select("*")
             .eq("contract_number", contract).lte("period_start", end)
             .gte("period_end", start).order("period_start"),
+          supabase.from("operational_notes").select("id,contract_number,trip_number,note,status,effective_start,effective_end")
+            .eq("contract_number",contract).lte("effective_start",end).or(`effective_end.is.null,effective_end.gte.${start}`).limit(1000),
+          supabase.from("missed_load_reviews").select("load_number,operating_date,contract_number,trip_number,explanation,reason,review_status,ticket_status")
+            .eq("contract_number",contract).gte("operating_date",start).lte("operating_date",end).limit(10000),
         ]);
         if (fk.error) throw fk.error;
-        if (active) { setDaily(dayRows as Daily[]); setTrips(tripRows as Trip[]); setFourkites((fk.data || []) as FourKitesWeek[]); }
-      } catch (e) { if (active) { setError(e instanceof Error ? e.message : String(e)); setDaily([]); setTrips([]); setFourkites([]); } }
+        if (savedTripNotes.error) throw savedTripNotes.error;
+        if (savedReviewNotes.error) throw savedReviewNotes.error;
+        if (active) { setDaily(dayRows as Daily[]); setTrips(tripRows as Trip[]); setFourkites((fk.data || []) as FourKitesWeek[]); setTripNotes((savedTripNotes.data || []) as TripNote[]); setReviewNotes((savedReviewNotes.data || []) as LoadReviewNote[]); }
+      } catch (e) { if (active) { setError(e instanceof Error ? e.message : String(e)); setDaily([]); setTrips([]); setFourkites([]); setTripNotes([]); setReviewNotes([]); } }
       finally { if (active) setLoading(false); }
     })();
     return () => { active = false; };
@@ -96,6 +106,8 @@ export default function ContractTrendsPage() {
     const m = blank(); tripStats.filter(x => x.type === type).forEach(x => { m.loads += x.loads; m.stops += x.stops; m.completed += x.completed; m.incomplete += x.incomplete; });
     return { type, ...m };
   }), [tripStats]);
+  const notesForTrip = (trip: string) => tripNotes.filter(n => n.trip_number?.trim() === trip.trim() && filteredTrips.some(t => t.trip_number === trip && t.operating_date >= n.effective_start && (!n.effective_end || t.operating_date <= n.effective_end)));
+  const reviewsForTrip = (trip: string) => reviewNotes.filter(n => n.trip_number?.trim() === trip.trim() && filteredTrips.some(t => t.trip_number === trip && t.operating_date === n.operating_date));
   const best = Math.max(1, ...weekdays.map(d => d.stops));
   const worst = weekdays.filter(x => x.stops > 0).sort((a, b) => a.completed / a.stops - b.completed / b.stops)[0];
   return <main className="page-shell" style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 18px 60px" }}>
@@ -145,9 +157,18 @@ export default function ContractTrendsPage() {
         {visibleFk.some(w => w.source_version_count > 1) && <p style={{ fontSize: 13, opacity: .8 }}>Overlapping uploads need review: for now this table selects the source with the latest available exception window, without adding both together.</p>}
       </section>
       <section style={card}>
+        <h2>Saved notes for this contract</h2>
+        <p>Read directly from the existing trip notes and missed-load reviews. Updating a note in its original editor will update this view on refresh.</p>
+        {tripNotes.length === 0 && reviewNotes.length === 0 ? <p>No saved notes or reviewed loads in this date range.</p> : <div style={{ display: "grid", gap: 10 }}>
+          {tripNotes.slice(0, 30).map(n => <div key={n.id} style={{ borderTop: "1px solid #dce3e8", paddingTop: 10 }}><strong>{n.trip_number || "Contract-wide note"}</strong> · {n.status.replaceAll("_"," ")} · {n.effective_start}{n.effective_end ? " to " + n.effective_end : " onward"}<p style={{ margin: "4px 0" }}>{n.note}</p></div>)}
+          {reviewNotes.filter(n => n.explanation?.trim()).slice(0, 30).map(n => <div key={n.load_number+"|"+n.operating_date} style={{ borderTop: "1px solid #dce3e8", paddingTop: 10 }}><strong>Load {n.load_number}</strong> · {n.operating_date} · Trip {n.trip_number}<p style={{ margin: "4px 0" }}>{n.reason}: {n.explanation} ({n.review_status.replaceAll("_"," ")})</p></div>)}
+        </div>}
+        {(tripNotes.length > 30 || reviewNotes.length > 30) && <p>Showing recent saved notes here. Open Missed Load Reviews to see the complete filtered list.</p>}
+      </section>
+      <section style={card}>
         <h2>Trips with the most incomplete stops</h2>
         <p>Sorted by incomplete stops; compare recurring trips using the number of distinct service dates. Select a trip to open its existing Missed Load Reviews with the same contract and date range.</p>
-        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th align="left">Trip</th><th align="left">Category</th><th align="right">Days observed</th><th align="right">Loads</th><th align="right">Incomplete</th><th align="right">Completion</th></tr></thead><tbody>{tripStats.slice(0, 25).map(t => <tr style={{ borderTop: "1px solid #dce3e8" }} key={t.type+"|"+t.trip}><td style={{ padding: "8px 3px" }}><Link href={`/missed-load-reviews?${new URLSearchParams({contract,trip:t.trip,start,end}).toString()}`} title={`Review missed loads on trip ${t.trip}`}>{t.trip} ↗</Link></td><td>{t.type}</td><td align="right">{t.days.size}</td><td align="right">{fmt(t.loads)}</td><td align="right">{fmt(t.incomplete)}</td><td align="right">{pct(t.completed, t.stops)}</td></tr>)}</tbody></table></div>
+        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th align="left">Trip</th><th align="left">Category</th><th align="right">Days observed</th><th align="right">Loads</th><th align="right">Incomplete</th><th align="right">Completion</th></tr></thead><tbody>{tripStats.slice(0, 25).map(t => <tr style={{ borderTop: "1px solid #dce3e8" }} key={t.type+"|"+t.trip}><td style={{ padding: "8px 3px" }}><Link href={`/missed-load-reviews?${new URLSearchParams({contract,trip:t.trip,start,end}).toString()}`} title={`Review missed loads on trip ${t.trip}`}>{t.trip} ↗</Link>{notesForTrip(t.trip).length > 0 && <div style={{ fontSize: 12, marginTop: 3 }} title={notesForTrip(t.trip).map(n=>n.note).join(" • ")}>📝 {notesForTrip(t.trip).length} trip note(s)</div>}{reviewsForTrip(t.trip).length > 0 && <div style={{ fontSize: 12, marginTop: 3 }} title={reviewsForTrip(t.trip).map(n=>n.explanation).join(" • ")}>📋 {reviewsForTrip(t.trip).length} reviewed load(s)</div>}</td><td>{t.type}</td><td align="right">{t.days.size}</td><td align="right">{fmt(t.loads)}</td><td align="right">{fmt(t.incomplete)}</td><td align="right">{pct(t.completed, t.stops)}</td></tr>)}</tbody></table></div>
         {!tripStats.length && <p>No saved trips for this contract and date range.</p>}
       </section>
     </div>}
