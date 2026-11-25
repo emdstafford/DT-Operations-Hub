@@ -126,6 +126,17 @@ export default function ContractTrendsPage() {
     }
     return map;
   }, [filteredTrips]);
+  const displayedWeeks = useMemo(() => {
+    if (start > end) return [] as string[];
+    const weeks: string[] = [];
+    const d = new Date(mondayOf(start) + "T12:00:00Z");
+    const last = mondayOf(end);
+    for (let i=0; i<260 && dateOnly(d) <= last; i++) {
+      weeks.push(dateOnly(d));
+      d.setUTCDate(d.getUTCDate()+7);
+    }
+    return weeks.slice(-16);
+  }, [start, end]);
   const kinds = useMemo(() => ["regular", "extra"].map(type => {
     const m = blank(); tripStats.filter(x => x.type === type).forEach(x => { m.loads += x.loads; m.stops += x.stops; m.completed += x.completed; m.incomplete += x.incomplete; });
     return { type, ...m };
@@ -190,16 +201,30 @@ export default function ContractTrendsPage() {
         {(tripNotes.length > 30 || reviewNotes.length > 30) && <p>Showing recent saved notes here. Open Missed Load Reviews to see the complete filtered list.</p>}
       </section>
       <section style={card}>
-        <h2>Repeated missed-stop weeks</h2>
-        <p>Which trips have a recurring problem? Each week is counted once if the trip has at least one incomplete stop. Weeks here run Monday–Sunday; the counts use only dates with saved loads.</p>
+        <h2>Trips with recurring missed stops</h2>
+        <p>See the pattern at a glance. Each colored block is one Monday–Sunday week. Red means at least one incomplete stop; green means all recorded stops were completed; gray means no trip data was recorded that week.</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, fontSize: 13, margin: "8px 0 18px" }}>
+          <span><span aria-hidden="true" style={{ display: "inline-block", width: 11, height: 11, borderRadius: 3, marginRight: 5, background: "#c66e65" }}/>Missed stops</span>
+          <span><span aria-hidden="true" style={{ display: "inline-block", width: 11, height: 11, borderRadius: 3, marginRight: 5, background: "#8aad9b" }}/>No misses</span>
+          <span><span aria-hidden="true" style={{ display: "inline-block", width: 11, height: 11, borderRadius: 3, marginRight: 5, background: "#cfd5db" }}/>No data</span>
+        </div>
         {tripStats.filter(t => (recurringTrips.get(t.type+"|"+t.trip)?.affected.size || 0) >= 2).sort((a,b) =>
           (recurringTrips.get(b.type+"|"+b.trip)?.affected.size || 0)-(recurringTrips.get(a.type+"|"+a.trip)?.affected.size || 0) || b.incomplete-a.incomplete).slice(0,12).map(t => {
           const r = recurringTrips.get(t.type+"|"+t.trip);
-          return <div key={t.type+"|"+t.trip} style={{ padding: "11px 0", borderTop: "1px solid #dce3e8", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
-            <div><strong>{t.trip}</strong> · {r?.affected.size} of {r?.observed.size} observed weeks with missed stops
-              <div style={{ fontSize: 13, opacity: .8 }}>Weeks beginning {[...(r?.affected || [])].sort().map(shortDate).join(", ")} · {fmt(t.incomplete)} incomplete stops</div>
+          return <div key={t.type+"|"+t.trip} style={{ padding: "16px 0", borderTop: "1px solid #dce3e8" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+              <div><strong style={{ fontSize: 17 }}>{t.trip}</strong><span style={{ marginLeft: 8, fontSize: 12, opacity: .75 }}>{t.type === "extra" ? "Extra trip" : "Regular trip"}</span>
+                <div style={{ marginTop: 3 }}><strong style={{ fontSize: 20 }}>{r?.affected.size ?? 0} of {r?.observed.size ?? 0} weeks</strong> <span style={{ fontSize: 13, opacity: .75 }}>with missed stops</span></div>
+              </div>
+              <Link href={`/missed-load-reviews?${new URLSearchParams({contract,trip:t.trip,start,end}).toString()}`}>Review loads and notes →</Link>
             </div>
-            <Link href={`/missed-load-reviews?${new URLSearchParams({contract,trip:t.trip,start,end}).toString()}`}>Review loads →</Link>
+            <div style={{ display: "flex", gap: 4, marginTop: 12, width: "100%" }} role="img" aria-label={displayedWeeks.map(w => `Week of ${shortDate(w)}: ${r?.affected.has(w) ? "missed stops" : r?.observed.has(w) ? "no missed stops" : "no data"}`).join("; ")}>
+              {displayedWeeks.map((w,i) => <div key={w} style={{ flex: 1, minWidth: 0, textAlign: "center" }}>
+                <div title={`Week of ${shortDate(w)}: ${r?.affected.has(w) ? "missed stops" : r?.observed.has(w) ? "no missed stops" : "no data"}`} style={{ background: r?.affected.has(w) ? "#c66e65" : r?.observed.has(w) ? "#8aad9b" : "#cfd5db", height: 25, borderRadius: 4 }}/>
+                <div style={{ fontSize: 10, marginTop: 4, color: "var(--text-muted, #667085)" }}>W{i+1}</div>
+              </div>)}
+            </div>
+            <p style={{ fontSize: 12, opacity: .72, marginTop: 8 }}>Showing {displayedWeeks.length} most recent weeks in your date range, ending {displayedWeeks.length ? shortDate(displayedWeeks[displayedWeeks.length-1]) : "—"}. {fmt(t.incomplete)} incomplete stops across the full selected range.</p>
           </div>;
         })}
         {!tripStats.some(t=>(recurringTrips.get(t.type+"|"+t.trip)?.affected.size||0)>=2) && <p>No trips with misses across two or more observed weeks for this contract and date range.</p>}
