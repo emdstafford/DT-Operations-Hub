@@ -21,7 +21,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
   const [contractsOpen,setContractsOpen] = useState(false);
   const [reportsOpen,setReportsOpen] = useState(false);
   const [adminOpen,setAdminOpen] = useState(false);
-  useEffect(()=>{if(pathname.startsWith("/contracts")||pathname.startsWith("/unassigned-trips")||pathname.startsWith("/missed-load-reviews")||pathname.startsWith("/recurring-missed-trips")||pathname.startsWith("/schedule-builder"))setContractsOpen(true);if(pathname.startsWith("/reports")||pathname.startsWith("/daily-reports"))setReportsOpen(true);if(pathname.startsWith("/admin/"))setAdminOpen(true)},[pathname]);
+  useEffect(()=>{if(pathname.startsWith("/contracts")||pathname.startsWith("/unassigned-trips")||pathname.startsWith("/missed-load-reviews")||pathname.startsWith("/recurring-missed-trips")||pathname.startsWith("/schedule-builder"))setContractsOpen(true);if(pathname.startsWith("/reports")||pathname.startsWith("/daily-reports")||pathname.startsWith("/history"))setReportsOpen(true);if(pathname.startsWith("/admin/"))setAdminOpen(true)},[pathname]);
   const [reviewAlerts,setReviewAlerts] = useState(0);
   const [billingAlerts,setBillingAlerts] = useState(0);
   const [reviewAlertsEnabled,setReviewAlertsEnabled] = useState(false);
@@ -96,16 +96,16 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
          </div>}
         </div>}
         {(operationsAccess || fuelAccess || payrollAccess) && !isNoReportsRole && <div className="nav-subgroup">
-         <button type="button" className={`nav-subgroup-toggle${pathname.startsWith("/reports")||pathname.startsWith("/daily-reports")?" current":""}`} aria-expanded={reportsOpen} onClick={()=>setReportsOpen(v=>!v)}>Reports <span aria-hidden="true">{reportsOpen?"▾":"▸"}</span></button>
+         <button type="button" className={`nav-subgroup-toggle${pathname.startsWith("/reports")||pathname.startsWith("/daily-reports")||pathname.startsWith("/history")?" current":""}`} aria-expanded={reportsOpen} onClick={()=>setReportsOpen(v=>!v)}>Reports <span aria-hidden="true">{reportsOpen?"▾":"▸"}</span></button>
          {reportsOpen&&<div className="nav-subgroup-items">
           <Link className={pathname.startsWith("/reports")?"active":""} href="/reports">All Reports</Link>
           {operationsRole==="admin"&&<Link className={pathname.startsWith("/daily-reports")?"active":""} href="/daily-reports">Daily Email Reports</Link>}
+          {operationsAccess&&canManageReports&&<Link className={pathname.startsWith("/history")?"active":""} href="/history">History</Link>}
          </div>}
         </div>}
         {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel</Link>}
         {payrollAccess && !isContractsFuelViewer && <Link className={pathname.startsWith("/payroll") ? "active" : ""} href="/payroll">Payroll</Link>}
         {techInvoiceAccess && !isContractsFuelViewer && <Link className={pathname.startsWith("/tech-invoices") ? "active" : ""} href="/tech-invoices">Tech invoices{reviewAlertsEnabled&&billingAlerts>0&&<span className="ops-review-notice" title="Invoices inside their configured reminder window">{billingAlerts} due</span>}</Link>}
-        {operationsAccess && canManageReports && <Link className={pathname.startsWith("/history") ? "active" : ""} href="/history">History</Link>}
         {hasUserManagement&&<div className="nav-subgroup">
          <button type="button" className={`nav-subgroup-toggle${pathname.startsWith("/admin/")?" current":""}`} aria-expanded={adminOpen} onClick={()=>setAdminOpen(v=>!v)}>Admin <span aria-hidden="true">{adminOpen?"▾":"▸"}</span></button>
          {adminOpen&&<div className="nav-subgroup-items">
