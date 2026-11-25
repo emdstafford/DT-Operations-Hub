@@ -93,10 +93,10 @@ export default function DailyReportsPage(){
   "",
   "Supervisor Performance",header,...listed.map(line),"",
   "Contract Performance",header,...data.contracts.map(line),"",
-  "DT Hub: https://dt-intelligence-hub.vercel.app/"
+  "Full performance figures are included above."
  ].join("\n");
  const individualBody=(r:Performance)=>{
-  const contracts=data.supervisor_contracts.filter(c=>c.supervisor===r.supervisor);
+  const contracts=data.supervisor_contracts.filter(c=>c.supervisor===r.supervisor).sort((a,b)=>Number(a.completion_percent)-Number(b.completion_percent)||(a.contract_number||"").localeCompare(b.contract_number||"",undefined,{numeric:true}));
   return [
    "Davenport Transportation — Daily Supervisor Performance Review",
    "Operating day: "+formatDate(day),
@@ -104,9 +104,11 @@ export default function DailyReportsPage(){
    "Completion: "+pct(r.completion_percent),
    "Review reason: "+(Number(r.completion_percent)<reviewThreshold/100?"Overall supervisor below "+reviewThreshold+"%":"One or more individual contracts below "+reviewThreshold+"%"),
    "Total stops: "+fmt(r.total_stops)+" | Completed: "+fmt(r.completed_stops)+" | Missed: "+fmt(r.incomplete_stops),
-   "", "Contract Breakdown",header,...contracts.map(line),
-   "", "Please review the missed stops and document the relevant explanations in DT Hub.",
-   "https://dt-intelligence-hub.vercel.app/missed-load-reviews"
+   "", "ALL ASSIGNED CONTRACTS",
+   "Contract | Completion | Total stops | Completed | Missed | Review",
+   ...contracts.map(c=>[c.contract_number||"Unassigned contract",pct(c.completion_percent),fmt(c.total_stops),fmt(c.completed_stops),fmt(c.incomplete_stops),Number(c.total_stops)>0&&Number(c.completion_percent)<reviewThreshold/100?"BELOW "+reviewThreshold+"%":"—"].join(" | ")),
+   "", "Contract numbers and performance are included here for review.",
+   "The scheduled email also includes incomplete stops by trip, affected load numbers, and saved operational notes directly in the message."
   ].join("\n");
  };
  async function copy(content:string){
@@ -145,7 +147,7 @@ export default function DailyReportsPage(){
        const recipient=lookup(r.supervisor||"");
        const to=distinct([...(recipient?[recipient.email]:[]),...oversight]);
        const failing=failingBySupervisor.get(clean(r.supervisor||""))||[];
-       const reason=Number(r.completion_percent)<reviewThreshold/100?`Overall below ${reviewThreshold}%`:`Contract below {reviewThreshold}%: ${failing.map(c=>c.contract_number||"Unknown").join(", ")}`;
+       const reason=Number(r.completion_percent)<reviewThreshold/100?`Overall below ${reviewThreshold}%`:`Contract below ${reviewThreshold}%: ${failing.map(c=>c.contract_number||"Unknown").join(", ")}`;
        return <details className="ops-daily-individual" key={r.supervisor}><summary><strong>{r.supervisor}</strong><span>{pct(r.completion_percent)} overall · {reason} · {fmt(r.incomplete_stops)} missed · {recipient?recipient.email:"ADDRESS MISSING"}</span></summary>
         <div className="ops-daily-individual-content"><p><strong>To:</strong> {to.join("; ")}</p><pre className="ops-daily-preview">{individualBody(r)}</pre><button className="hub-secondary-link" onClick={()=>void copy(individualBody(r))}>Copy individual preview</button></div></details>;
      })}
