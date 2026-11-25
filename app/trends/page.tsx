@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type Daily = { operating_date: string; contract_number: string; weekday_number: number; load_count: number; distinct_trips: number; unmapped_loads: number; extra_loads: number; regular_loads: number; total_stops: number; completed_stops: number; incomplete_stops: number; unmapped_total_stops: number; unmapped_incomplete_stops: number };
-type FourKitesWeek = { contract_number: string; period_start: string; period_end: string; total_loads: number; total_stops: number; geofence_stops: number; missing_geofence_stops: number; geofence_compliance_percent: number | null; source_version_count: number; source_file: string; exclude_from_performance: boolean };\ntype Trip = { operating_date: string; contract_number: string; trip_number: string; trip_type: string; weekday_number: number; load_count: number; total_stops: number; completed_stops: number; incomplete_stops: number };
+type FourKitesWeek = { contract_number: string; period_start: string; period_end: string; total_loads: number; total_stops: number; geofence_stops: number; missing_geofence_stops: number; geofence_compliance_percent: number | null; source_version_count: number; source_file: string; exclude_from_performance: boolean };
+type Trip = { operating_date: string; contract_number: string; trip_number: string; trip_type: string; weekday_number: number; load_count: number; total_stops: number; completed_stops: number; incomplete_stops: number };
 type Metric = { loads: number; stops: number; completed: number; incomplete: number };
 const blank = (): Metric => ({ loads: 0, stops: 0, completed: 0, incomplete: 0 });
 const pct = (complete: number, total: number) => total ? (100 * complete / total).toFixed(2) + "%" : "—";
@@ -25,7 +26,8 @@ export default function ContractTrendsPage() {
   const [end, setEnd] = useState(() => dateOnly(new Date()));
   const [includeAugust, setIncludeAugust] = useState(false);
   const [daily, setDaily] = useState<Daily[]>([]);
-  const [trips, setTrips] = useState<Trip[]>([]);\n  const [fourkites, setFourkites] = useState<FourKitesWeek[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [fourkites, setFourkites] = useState<FourKitesWeek[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -74,7 +76,8 @@ export default function ContractTrendsPage() {
   }, [contract, start, end]);
   const filteredDaily = useMemo(() => daily.filter(d => includeAugust || !(d.operating_date >= "2026-08-07" && d.operating_date <= "2026-08-13")), [daily, includeAugust]);
   const filteredTrips = useMemo(() => trips.filter(d => includeAugust || !(d.operating_date >= "2026-08-07" && d.operating_date <= "2026-08-13")), [trips, includeAugust]);
-  const visibleFk = useMemo(() => fourkites.filter(w => includeAugust || !w.exclude_from_performance), [fourkites, includeAugust]);\n  const summary = useMemo(() => { const m = blank(); filteredDaily.forEach(d => add(m, d)); return m; }, [filteredDaily]);
+  const visibleFk = useMemo(() => fourkites.filter(w => includeAugust || !w.exclude_from_performance), [fourkites, includeAugust]);
+  const summary = useMemo(() => { const m = blank(); filteredDaily.forEach(d => add(m, d)); return m; }, [filteredDaily]);
   const weekdays = useMemo(() => {
     const map = days.map(name => ({ name, ...blank(), dates: new Set<string>() }));
     for (const d of filteredDaily) { const x = map[d.weekday_number - 1]; if (x) { add(x, d); x.dates.add(d.operating_date); } }
