@@ -21,6 +21,18 @@ export default function MissedLoadReviewHub(){
  const [loads,setLoads]=useState<Load[]>([]),[reviews,setReviews]=useState<MissedLoadReview[]>([]),[existingNotes,setExistingNotes]=useState<OperationalNote[]>([]);
  const [error,setError]=useState(""),[notice,setNotice]=useState(""),[loading,setLoading]=useState(false),[saving,setSaving]=useState(false);
  const [contract,setContract]=useState(""),[supervisor,setSupervisor]=useState(""),[reasonFilter,setReasonFilter]=useState(""),[status,setStatus]=useState(""),[sort,setSort]=useState("date");
+ const [tripFilter,setTripFilter]=useState("");
+ useEffect(()=>{
+   const params=new URLSearchParams(window.location.search);
+   const linkedContract=params.get("contract")||"";
+   const linkedTrip=params.get("trip")||"";
+   const linkedStart=params.get("start")||"";
+   const linkedEnd=params.get("end")||"";
+   if(linkedContract)setContract(normalizeTripContract(linkedContract));
+   if(linkedTrip)setTripFilter(linkedTrip);
+   if(/^\\d{4}-\\d{2}-\\d{2}$/.test(linkedStart))setStart(linkedStart);
+   if(/^\\d{4}-\\d{2}-\\d{2}$/.test(linkedEnd))setEnd(linkedEnd);
+ },[]);
  const [selected,setSelected]=useState(""),[draft,setDraft]=useState<Draft>(fresh()),[events,setEvents]=useState<{changed_at:string;changed_by_email:string;event_type:string}[]>([]);
  const [saveStatus,setSaveStatus]=useState<"idle"|"unsaved"|"saving"|"saved"|"error">("idle");
  const [prefilledFromTrip,setPrefilledFromTrip]=useState(false);
@@ -76,7 +88,7 @@ export default function MissedLoadReviewHub(){
     return matchingNotes(l).some(n=>n.status==="waiting_on_usps");
  };
  const needsExplanation=(l:Load)=>!byKey.has(key(l))&&!waitingOnUsps(l);
- const shown=grouped.filter(l=>{const r=byKey.get(key(l));return (!contract||l.contract_number===contract)&&(!supervisor||(l.supervisors||[]).includes(supervisor))&&(!reasonFilter||(reasonFilter==="unexplained"?needsExplanation(l):r?.reason===reasonFilter))&&(!status||(status==="unexplained"?needsExplanation(l):status==="existing_note"?matchingNotes(l).length>0:status==="waiting_usps"?waitingOnUsps(l):status.startsWith("ticket:")?r?.ticket_status===status.slice(7):r?.review_status===status))}).sort((a,b)=>sort==="missed"?b.incomplete_stops-a.incomplete_stops:sort==="contract"?(a.contract_number||"").localeCompare(b.contract_number||"",undefined,{numeric:true}):b.operating_date.localeCompare(a.operating_date));
+ const shown=grouped.filter(l=>{const r=byKey.get(key(l));return (!contract||l.contract_number===contract)&&(!supervisor||(l.supervisors||[]).includes(supervisor))&&(!tripFilter||(l.trip_number||"").trim()===tripFilter.trim())&&(!reasonFilter||(reasonFilter==="unexplained"?needsExplanation(l):r?.reason===reasonFilter))&&(!status||(status==="unexplained"?needsExplanation(l):status==="existing_note"?matchingNotes(l).length>0:status==="waiting_usps"?waitingOnUsps(l):status.startsWith("ticket:")?r?.ticket_status===status.slice(7):r?.review_status===status))}).sort((a,b)=>sort==="missed"?b.incomplete_stops-a.incomplete_stops:sort==="contract"?(a.contract_number||"").localeCompare(b.contract_number||"",undefined,{numeric:true}):b.operating_date.localeCompare(a.operating_date));
  const waitingCount=shown.filter(waitingOnUsps).length;
  const waitingMissed=shown.filter(waitingOnUsps).reduce((sum,l)=>sum+l.incomplete_stops,0);
  const current=grouped.find(l=>key(l)===selected),review=current?byKey.get(key(current)):undefined;
@@ -149,11 +161,11 @@ export default function MissedLoadReviewHub(){
     <label>Through <input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label>
     <label>Supervisor <select value={supervisor} onChange={e=>setSupervisor(e.target.value)}><option value="">All</option>{allSupervisors.map(s=><option key={s}>{s}</option>)}</select></label>
     <label>Contract <select value={contract} onChange={e=>setContract(e.target.value)}><option value="">All</option>{allContracts.map(s=><option key={s}>{s}</option>)}</select></label>
-    <label>Reason <select value={reasonFilter} onChange={e=>setReasonFilter(e.target.value)}><option value="">All</option><option value="unexplained">Awaiting explanation</option>{reasons.map(s=><option key={s}>{s}</option>)}</select></label>
+    <label>Trip <input value={tripFilter} onChange={e=>setTripFilter(e.target.value)} placeholder="All trips"/></label>\n    <label>Reason <select value={reasonFilter} onChange={e=>setReasonFilter(e.target.value)}><option value="">All</option><option value="unexplained">Awaiting explanation</option>{reasons.map(s=><option key={s}>{s}</option>)}</select></label>
     <label>Status <select value={status} onChange={e=>setStatus(e.target.value)}><option value="">All</option><option value="unexplained">Awaiting explanation</option><option value="existing_note">Existing trip note</option><option value="waiting_usps">Waiting on USPS</option>{Object.entries(labels).filter(([id])=>!["not_needed"].includes(id)).map(([id,text])=><option key={id} value={["needs_ticket","ticket_sent","resolved"].includes(id)?"ticket:"+id:id}>{text}</option>)}</select></label>
     <label>Sort by <select value={sort} onChange={e=>setSort(e.target.value)}><option value="date">Newest</option><option value="contract">Contract</option><option value="missed">Most missed stops</option></select></label>
    </div>
-   {error&&<div className="alert alert-error">{error}</div>}{notice&&<div className="alert">{notice}</div>}
+   {tripFilter&&<p className="ops-summary">Showing trip <strong>{tripFilter}</strong>. <button type="button" className="hub-secondary-link" onClick={()=>setTripFilter("")}>Clear trip filter</button></p>}\n   {error&&<div className="alert alert-error">{error}</div>}{notice&&<div className="alert">{notice}</div>}
    <p className="ops-summary"><strong>{shown.length}</strong> missed loads · <strong>{shown.filter(l=>!needsExplanation(l)).length}</strong> explained · <strong>{shown.filter(needsExplanation).length}</strong> awaiting explanation · <strong>{waitingCount}</strong> waiting on USPS ({waitingMissed.toLocaleString()} missed stops)</p>
    <div className="table-scroll"><table className="data-table"><thead><tr><th>Date</th><th>Contract</th><th>Supervisor</th><th>Trip</th><th>Load</th><th>Missed</th><th>Status</th></tr></thead><tbody>{shown.map(l=>{
       const r=byKey.get(key(l)),notes=matchingNotes(l),expanded=selected===key(l);
