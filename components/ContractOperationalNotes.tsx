@@ -54,7 +54,18 @@ export default function ContractOperationalNotes({ contract }: { contract: strin
       const email = userData.user?.email?.toLowerCase();
       if (!email) return;
       const { data } = await supabase.from("approved_users").select("role").eq("email", email).eq("active", true).maybeSingle();
-      setCanEdit(data?.role === "admin" || data?.role === "uploader");
+      const permitted = data?.role === "admin" || data?.role === "uploader";
+      setCanEdit(permitted);
+      // A recurring-miss link opens the existing contract note editor prefilled for the trip.
+      if (permitted) {
+        const params = new URLSearchParams(window.location.search);
+        const requestedTrip = params.get("trip");
+        if (requestedTrip && requestedTrip.trim()) {
+          setTrip(requestedTrip.trim());
+          setStatus("monitoring");
+          setShowForm(true);
+        }
+      }
     })();
   }, [loadNotes]);
 
