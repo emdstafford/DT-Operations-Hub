@@ -90,7 +90,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
          {contractsOpen&&<div className="nav-subgroup-items">
           <Link className={pathname.startsWith("/contracts")?"active":""} href="/contracts">All Contracts</Link>
           {canManageReports&&<Link className={pathname.startsWith("/unassigned-trips")?"active":""} href="/unassigned-trips">Unassigned Trips</Link>}
-          {["admin","uploader","viewer"].includes(operationsRole)&&<Link className={pathname.startsWith("/missed-load-reviews")?"active":""} href="/missed-load-reviews">Missed Load Reviews</Link>}
+          {["admin","uploader","viewer"].includes(operationsRole)&&<Link className={pathname.startsWith("/missed-load-reviews")?"active":""} href="/missed-load-reviews">Missed Load Reviews{reviewAlertsEnabled&&reviewAlerts>0&&<span className="ops-review-notice" title="Saved explanations or corrections requiring review">{reviewAlerts} to check</span>}</Link>}
           {["admin","uploader","viewer"].includes(operationsRole)&&<Link className={pathname.startsWith("/recurring-missed-trips")?"active":""} href="/recurring-missed-trips">Recurring Trips</Link>}
           {canManageReports&&<Link className={pathname.startsWith("/schedule-builder")?"active":""} href="/schedule-builder">Schedule</Link>}
          </div>}
