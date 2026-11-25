@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type Daily = { operating_date: string; contract_number: string; weekday_number: number; load_count: number; distinct_trips: number; unmapped_loads: number; extra_loads: number; regular_loads: number; total_stops: number; completed_stops: number; incomplete_stops: number; unmapped_total_stops: number; unmapped_incomplete_stops: number };
-type Trip = { operating_date: string; contract_number: string; trip_number: string; trip_type: string; weekday_number: number; load_count: number; total_stops: number; completed_stops: number; incomplete_stops: number };
+type FourKitesWeek = { contract_number: string; period_start: string; period_end: string; total_loads: number; total_stops: number; geofence_stops: number; missing_geofence_stops: number; geofence_compliance_percent: number | null; source_version_count: number; source_file: string; exclude_from_performance: boolean };\ntype Trip = { operating_date: string; contract_number: string; trip_number: string; trip_type: string; weekday_number: number; load_count: number; total_stops: number; completed_stops: number; incomplete_stops: number };
 type Metric = { loads: number; stops: number; completed: number; incomplete: number };
 const blank = (): Metric => ({ loads: 0, stops: 0, completed: 0, incomplete: 0 });
 const pct = (complete: number, total: number) => total ? (100 * complete / total).toFixed(2) + "%" : "—";
@@ -25,7 +25,7 @@ export default function ContractTrendsPage() {
   const [end, setEnd] = useState(() => dateOnly(new Date()));
   const [includeAugust, setIncludeAugust] = useState(false);
   const [daily, setDaily] = useState<Daily[]>([]);
-  const [trips, setTrips] = useState<Trip[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);\n  const [fourkites, setFourkites] = useState<FourKitesWeek[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -58,19 +58,23 @@ export default function ContractTrendsPage() {
           }
           throw new Error("Too many daily trend rows; choose a shorter date range.");
         };
-        const [dayRows, tripRows] = await Promise.all([
+        const [dayRows, tripRows, fk] = await Promise.all([
           fetchRows("dt_contract_daily_trends"),
           fetchRows("dt_contract_trip_daily_trends"),
+          supabase.from("dt_fourkites_contract_trends").select("*")
+            .eq("contract_number", contract).lte("period_start", end)
+            .gte("period_end", start).order("period_start"),
         ]);
-        if (active) { setDaily(dayRows as Daily[]); setTrips(tripRows as Trip[]); }
-      } catch (e) { if (active) { setError(e instanceof Error ? e.message : String(e)); setDaily([]); setTrips([]); } }
+        if (fk.error) throw fk.error;
+        if (active) { setDaily(dayRows as Daily[]); setTrips(tripRows as Trip[]); setFourkites((fk.data || []) as FourKitesWeek[]); }
+      } catch (e) { if (active) { setError(e instanceof Error ? e.message : String(e)); setDaily([]); setTrips([]); setFourkites([]); } }
       finally { if (active) setLoading(false); }
     })();
     return () => { active = false; };
   }, [contract, start, end]);
   const filteredDaily = useMemo(() => daily.filter(d => includeAugust || !(d.operating_date >= "2026-08-07" && d.operating_date <= "2026-08-13")), [daily, includeAugust]);
   const filteredTrips = useMemo(() => trips.filter(d => includeAugust || !(d.operating_date >= "2026-08-07" && d.operating_date <= "2026-08-13")), [trips, includeAugust]);
-  const summary = useMemo(() => { const m = blank(); filteredDaily.forEach(d => add(m, d)); return m; }, [filteredDaily]);
+  const visibleFk = useMemo(() => fourkites.filter(w => includeAugust || !w.exclude_from_performance), [fourkites, includeAugust]);\n  const summary = useMemo(() => { const m = blank(); filteredDaily.forEach(d => add(m, d)); return m; }, [filteredDaily]);
   const weekdays = useMemo(() => {
     const map = days.map(name => ({ name, ...blank(), dates: new Set<string>() }));
     for (const d of filteredDaily) { const x = map[d.weekday_number - 1]; if (x) { add(x, d); x.dates.add(d.operating_date); } }
@@ -121,6 +125,21 @@ export default function ContractTrendsPage() {
         <h2>Regular and extra trips</h2>
         <div style={{ overflowX: "auto" }}><table style={{ width: "100%" }}><thead><tr><th align="left">Trip category</th><th align="right">Loads</th><th align="right">Stops</th><th align="right">Incomplete</th><th align="right">Completion</th></tr></thead><tbody>{kinds.map(k => <tr key={k.type}><td style={{ textTransform: "capitalize" }}>{k.type}</td><td align="right">{fmt(k.loads)}</td><td align="right">{fmt(k.stops)}</td><td align="right">{fmt(k.incomplete)}</td><td align="right">{pct(k.completed,k.stops)}</td></tr>)}</tbody></table></div>
         <p style={{ fontSize: 13, opacity: .75 }}>Unmapped loads in this period: {fmt(filteredDaily.reduce((n, d) => n + Number(d.unmapped_loads || 0), 0))}. Unmapped loads are included in Extra Trips, consistent with the existing performance reports. They remain labeled Unmapped in the problem-trip list for follow-up.</p>
+      </section>
+      <section style={card}>
+        <h2>FourKites geofence compliance — historical weeks</h2>
+        <p>Separate from USPS stop completion above. These historical supplier exports cover 11 contracts. When multiple source versions exist for a reporting week, one is selected; originals are retained for audit.</p>
+        {visibleFk.length ? <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr><th align="left">Week ending</th><th align="right">Loads</th><th align="right">Stops</th><th align="right">Missing geofence</th><th align="right">Compliance</th><th align="right">Versions</th></tr></thead>
+          <tbody>{visibleFk.map(w => <tr key={w.period_start+"|"+w.period_end} style={{ borderTop: "1px solid #dce3e8" }}>
+            <td style={{ padding: "9px 3px" }}>{w.period_end}{w.exclude_from_performance ? " (flagged)" : ""}</td>
+            <td align="right">{fmt(w.total_loads)}</td><td align="right">{fmt(w.total_stops)}</td>
+            <td align="right">{fmt(w.missing_geofence_stops)}</td>
+            <td align="right"><strong>{w.geofence_compliance_percent === null ? "—" : Number(w.geofence_compliance_percent).toFixed(2)+"%"}</strong></td>
+            <td align="right" title={w.source_file}>{w.source_version_count}{w.source_version_count > 1 ? " (review)" : ""}</td>
+          </tr>)}</tbody>
+        </table></div> : <p>No FourKites weekly contract exports for this contract and selected date range.</p>}
+        {visibleFk.some(w => w.source_version_count > 1) && <p style={{ fontSize: 13, opacity: .8 }}>Overlapping uploads need review: for now this table selects the source with the latest available exception window, without adding both together.</p>}
       </section>
       <section style={card}>
         <h2>Trips with the most incomplete stops</h2>
