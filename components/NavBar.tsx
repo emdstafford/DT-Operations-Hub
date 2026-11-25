@@ -105,7 +105,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
         </div>}
         {fuelAccess && <Link className={pathname.startsWith("/fuel") ? "active" : ""} href="/fuel">Fuel</Link>}
         {payrollAccess && !isContractsFuelViewer && <Link className={pathname.startsWith("/payroll") ? "active" : ""} href="/payroll">Payroll</Link>}
-        {techInvoiceAccess && !isContractsFuelViewer && <Link className={pathname.startsWith("/tech-invoices") ? "active" : ""} href="/tech-invoices">Tech invoices{reviewAlertsEnabled&&billingAlerts>0&&<span className="ops-review-notice" title="Invoices inside their configured reminder window">{billingAlerts} due</span>}</Link>}
+        {techInvoiceAccess && !isContractsFuelViewer && <Link className={pathname.startsWith("/tech-invoices") ? "active" : ""} href="/tech-invoices">Tech Invoices{reviewAlertsEnabled&&billingAlerts>0&&<span className="ops-review-notice" title="Invoices inside their configured reminder window">{billingAlerts} due</span>}</Link>}
         {hasUserManagement&&<div className="nav-subgroup">
          <button type="button" className={`nav-subgroup-toggle${pathname.startsWith("/admin/")?" current":""}`} aria-expanded={adminOpen} onClick={()=>setAdminOpen(v=>!v)}>Admin <span aria-hidden="true">{adminOpen?"▾":"▸"}</span></button>
          {adminOpen&&<div className="nav-subgroup-items">
