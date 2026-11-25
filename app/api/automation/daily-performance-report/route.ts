@@ -620,8 +620,6 @@ export async function GET(request: Request) {
     // records. Each planned message has exactly one recipient and must still
     // acquire an individual server-side claim before Outlook sends it.
     const companyRecipients = [...new Set([...distributionRecipients, ...companyCcRecipients, ...companyBccRecipients])];
-    // TEMPORARY: prepare only two messages for Em (one company and Jerry\'s review).
-    // This preview restriction is backed by a separate authorization guard in the claim endpoint.
     const deliveryPlanPreview = (
       settingsRow.delivery_enabled && routingValidated && workbookVerified
         ? [
@@ -635,9 +633,7 @@ export async function GET(request: Request) {
               reportType: "individual" as const, supervisor: review.supervisor, recipient,
               subject: review.subject, html: review.html,
             }))) : []),
-        ].filter(item => item.recipient === "estafford@dtexpress.net" &&
-          (item.reportType === "company" || (item.reportType === "individual" && item.supervisor === "Jerry Bradwell")))
-        : []
+        ] : []
     );
     return NextResponse.json({
       ok: true, ready: true, date: day,
