@@ -19,6 +19,9 @@ export default function Page() {
       <Link href="/contracts/monthly-reconciliation" style={card}>
         <div><div style={{ fontSize: 12, fontWeight: 800, opacity: .72, letterSpacing: ".08em" }}>CONTRACT FINANCIALS</div><div style={{ fontSize: 19, fontWeight: 850, marginTop: 3 }}>Monthly Reconciliation</div><div style={{ fontSize: 13, opacity: .82, marginTop: 3 }}>CLEAR actuals, monthly rates, approvals, and final supervisor reports</div></div><div style={{ fontSize: 25 }}>→</div>
       </Link>
+      <Link href="/trends" style={card}>
+        <div><div style={{ fontSize: 12, fontWeight: 800, opacity: .72, letterSpacing: ".08em" }}>CONTRACT PERFORMANCE</div><div style={{ fontSize: 19, fontWeight: 850, marginTop: 3 }}>Contract Trends</div><div style={{ fontSize: 13, opacity: .82, marginTop: 3 }}>See recurring missed stops, trips, weekday patterns, and historical FourKites compliance</div></div><div style={{ fontSize: 25 }}>→</div>
+      </Link>
       <Link href="/contracts/load-reconciliation" style={card}>
         <div><div style={{ fontSize: 12, fontWeight: 800, opacity: .72, letterSpacing: ".08em" }}>OPERATIONS CHECKS & BALANCES</div><div style={{ fontSize: 19, fontWeight: 850, marginTop: 3 }}>Load Reconciliation</div><div style={{ fontSize: 13, opacity: .82, marginTop: 3 }}>CLEAR vs FourKites, extras, cancellations, and unmatched loads</div></div><div style={{ fontSize: 25 }}>→</div>
       </Link>
