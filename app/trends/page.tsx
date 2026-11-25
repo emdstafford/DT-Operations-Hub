@@ -146,8 +146,8 @@ export default function ContractTrendsPage() {
       </section>
       <section style={card}>
         <h2>Trips with the most incomplete stops</h2>
-        <p>Sorted by incomplete stops; compare recurring trips using the number of distinct service dates.</p>
-        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th align="left">Trip</th><th align="left">Category</th><th align="right">Days observed</th><th align="right">Loads</th><th align="right">Incomplete</th><th align="right">Completion</th></tr></thead><tbody>{tripStats.slice(0, 25).map(t => <tr style={{ borderTop: "1px solid #dce3e8" }} key={t.type+"|"+t.trip}><td style={{ padding: "8px 3px" }}>{t.trip}</td><td>{t.type}</td><td align="right">{t.days.size}</td><td align="right">{fmt(t.loads)}</td><td align="right">{fmt(t.incomplete)}</td><td align="right">{pct(t.completed, t.stops)}</td></tr>)}</tbody></table></div>
+        <p>Sorted by incomplete stops; compare recurring trips using the number of distinct service dates. Select a trip to open its existing Missed Load Reviews with the same contract and date range.</p>
+        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th align="left">Trip</th><th align="left">Category</th><th align="right">Days observed</th><th align="right">Loads</th><th align="right">Incomplete</th><th align="right">Completion</th></tr></thead><tbody>{tripStats.slice(0, 25).map(t => <tr style={{ borderTop: "1px solid #dce3e8" }} key={t.type+"|"+t.trip}><td style={{ padding: "8px 3px" }}><Link href={`/missed-load-reviews?${new URLSearchParams({contract,trip:t.trip,start,end}).toString()}`} title={`Review missed loads on trip ${t.trip}`}>{t.trip} ↗</Link></td><td>{t.type}</td><td align="right">{t.days.size}</td><td align="right">{fmt(t.loads)}</td><td align="right">{fmt(t.incomplete)}</td><td align="right">{pct(t.completed, t.stops)}</td></tr>)}</tbody></table></div>
         {!tripStats.length && <p>No saved trips for this contract and date range.</p>}
       </section>
     </div>}
