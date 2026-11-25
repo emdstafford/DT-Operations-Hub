@@ -857,3 +857,15 @@ button, input { font: inherit; }
  .timecard-page .timecard-print-pages .timecard-person{break-inside:avoid;page-break-inside:avoid}
  .timecard-page .timecard-print-pages .timecard-person h3{break-after:avoid}
 }
+
+
+/* Expandable primary sidebar groups; retain existing link permissions and active highlighting. */
+.main-nav .nav-subgroup{min-width:0;display:grid;gap:3px}
+.main-nav .nav-subgroup-toggle{width:100%;min-height:42px;display:flex;align-items:center;gap:8px;justify-content:space-between;padding:11px 13px;color:#cddbe7;background:transparent;border:0;border-radius:8px;text-align:left;font-size:.86rem;font-weight:700;cursor:pointer}
+.main-nav .nav-subgroup-toggle:hover,.main-nav .nav-subgroup-toggle.current{background:rgb(255 255 255 / 8%);color:#fff}
+.main-nav .nav-subgroup-toggle>span:first-of-type{margin-left:auto}
+.main-nav .nav-subgroup-toggle:focus-visible{outline:2px solid #dce6ef;outline-offset:2px}
+.main-nav .nav-subgroup-items{display:grid;gap:3px;margin:1px 0 7px 12px;padding-left:9px;border-left:1px solid rgb(255 255 255 / 22%)}
+.main-nav .nav-subgroup-items a{display:block;white-space:normal;padding:9px 11px;font-size:.81rem}
+@media(max-width:900px){.main-nav .nav-subgroup{flex:0 0 auto}.main-nav .nav-subgroup-items{margin:2px 0 0 8px;min-width:170px}.main-nav .nav-subgroup-toggle{white-space:nowrap}}
+@media(max-width:700px){.main-nav.is-open .nav-subgroup{width:100%}.main-nav.is-open .nav-subgroup-items{margin-bottom:6px}}
