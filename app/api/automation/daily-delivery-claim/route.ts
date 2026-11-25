@@ -67,11 +67,6 @@ export async function POST(request: Request) {
   catch { return response({ok:false,error:"JSON required"},400); }
   const key = parseKey(input);
   if (!key) return response({ok:false,error:"Invalid delivery key"},400);
-  // TEMPORARY CONTROLLED TEST ONLY: deny all other addresses and report types at the server.
-  // Do not remove this guard until the authorized single-mailbox test passes.
-  if (key.recipient !== "estafford@dtexpress.net" ||
-      (key.reportType !== "company" && !(key.reportType === "individual" && key.supervisor === "Jerry Bradwell")))
-    return response({ok:true,claimed:false,reason:"Temporary single-mailbox test restriction"});
   try {
     const db = automationDatabase();
     const {data: settings, error: settingsError} = await db.from("daily_email_settings")
