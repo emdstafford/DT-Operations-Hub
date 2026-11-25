@@ -45,14 +45,24 @@ export default function ContractTrendsPage() {
     let active = true; setLoading(true); setError("");
     void (async () => {
       try {
-        const [a, b] = await Promise.all([
-          supabase.from("dt_contract_daily_trends").select("*").eq("contract_number", contract).gte("operating_date", start).lte("operating_date", end).order("operating_date").limit(1000),
-          supabase.from("dt_contract_trip_daily_trends").select("*").eq("contract_number", contract).gte("operating_date", start).lte("operating_date", end).order("operating_date").limit(10000),
+        const fetchRows = async (view: "dt_contract_daily_trends" | "dt_contract_trip_daily_trends") => {
+          const rows: (Daily | Trip)[] = [];
+          for (let offset = 0; offset < 25000; offset += 1000) {
+            const result = await supabase.from(view).select("*").eq("contract_number", contract)
+              .gte("operating_date", start).lte("operating_date", end)
+              .order("operating_date").range(offset, offset + 999);
+            if (result.error) throw result.error;
+            const batch = (result.data || []) as (Daily | Trip)[];
+            rows.push(...batch);
+            if (batch.length < 1000) return rows;
+          }
+          throw new Error("Too many daily trend rows; choose a shorter date range.");
+        };
+        const [dayRows, tripRows] = await Promise.all([
+          fetchRows("dt_contract_daily_trends"),
+          fetchRows("dt_contract_trip_daily_trends"),
         ]);
-        if (a.error) throw a.error;
-        if (b.error) throw b.error;
-        if ((b.data || []).length >= 10000) throw new Error("The selected range has too many trip rows; choose a shorter date range.");
-        if (active) { setDaily((a.data || []) as Daily[]); setTrips((b.data || []) as Trip[]); }
+        if (active) { setDaily(dayRows as Daily[]); setTrips(tripRows as Trip[]); }
       } catch (e) { if (active) { setError(e instanceof Error ? e.message : String(e)); setDaily([]); setTrips([]); } }
       finally { if (active) setLoading(false); }
     })();
