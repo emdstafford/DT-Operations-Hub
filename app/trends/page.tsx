@@ -15,6 +15,14 @@ const pct = (complete: number, total: number) => total ? (100 * complete / total
 const fmt = (n: number) => n.toLocaleString("en-US");
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const dateOnly = (d: Date) => d.toISOString().slice(0, 10);
+const mondayOf = (date: string) => {
+  const d = new Date(date + "T12:00:00Z");
+  const weekday = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() - ((weekday + 6) % 7));
+  return dateOnly(d);
+};
+const shortDate = (s: string) => new Date(s + "T12:00:00Z").toLocaleDateString("en-US", {month:"short",day:"numeric",timeZone:"UTC"});
+
 const card: React.CSSProperties = { border: "1px solid #d9e1e5", borderRadius: 12, padding: 16, background: "var(--card-bg, #fff)" };
 const field: React.CSSProperties = { padding: "9px 12px", borderRadius: 8, border: "1px solid #aebac2", maxWidth: "100%" };
 function add(m: Metric, v: { load_count: number; total_stops: number; completed_stops: number; incomplete_stops: number }) {
@@ -102,6 +110,22 @@ export default function ContractTrendsPage() {
     }
     return [...map.values()].sort((a, b) => b.incomplete - a.incomplete || b.loads - a.loads);
   }, [filteredTrips]);
+  const recurringTrips = useMemo(() => {
+    const map = new Map<string, { affected: Set<string>; observed: Set<string>; missedDays: Set<string>; missedStops: number }>();
+    for (const t of filteredTrips) {
+      const key = t.trip_type + "|" + t.trip_number;
+      const record = map.get(key) || { affected: new Set<string>(), observed: new Set<string>(), missedDays: new Set<string>(), missedStops: 0 };
+      const week = mondayOf(t.operating_date);
+      record.observed.add(week);
+      if (Number(t.incomplete_stops) > 0) {
+        record.affected.add(week);
+        record.missedDays.add(t.operating_date);
+        record.missedStops += Number(t.incomplete_stops);
+      }
+      map.set(key, record);
+    }
+    return map;
+  }, [filteredTrips]);
   const kinds = useMemo(() => ["regular", "extra"].map(type => {
     const m = blank(); tripStats.filter(x => x.type === type).forEach(x => { m.loads += x.loads; m.stops += x.stops; m.completed += x.completed; m.incomplete += x.incomplete; });
     return { type, ...m };
@@ -166,9 +190,25 @@ export default function ContractTrendsPage() {
         {(tripNotes.length > 30 || reviewNotes.length > 30) && <p>Showing recent saved notes here. Open Missed Load Reviews to see the complete filtered list.</p>}
       </section>
       <section style={card}>
+        <h2>Repeated missed-stop weeks</h2>
+        <p>Which trips have a recurring problem? Each week is counted once if the trip has at least one incomplete stop. Weeks here run Monday–Sunday; the counts use only dates with saved loads.</p>
+        {tripStats.filter(t => (recurringTrips.get(t.type+"|"+t.trip)?.affected.size || 0) >= 2).sort((a,b) =>
+          (recurringTrips.get(b.type+"|"+b.trip)?.affected.size || 0)-(recurringTrips.get(a.type+"|"+a.trip)?.affected.size || 0) || b.incomplete-a.incomplete).slice(0,12).map(t => {
+          const r = recurringTrips.get(t.type+"|"+t.trip);
+          return <div key={t.type+"|"+t.trip} style={{ padding: "11px 0", borderTop: "1px solid #dce3e8", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
+            <div><strong>{t.trip}</strong> · {r?.affected.size} of {r?.observed.size} observed weeks with missed stops
+              <div style={{ fontSize: 13, opacity: .8 }}>Weeks beginning {[...(r?.affected || [])].sort().map(shortDate).join(", ")} · {fmt(t.incomplete)} incomplete stops</div>
+            </div>
+            <Link href={`/missed-load-reviews?${new URLSearchParams({contract,trip:t.trip,start,end}).toString()}`}>Review loads →</Link>
+          </div>;
+        })}
+        {!tripStats.some(t=>(recurringTrips.get(t.type+"|"+t.trip)?.affected.size||0)>=2) && <p>No trips with misses across two or more observed weeks for this contract and date range.</p>}
+        <p style={{ marginTop: 12 }}><Link href="/recurring-missed-trips">Compare recurring trips across all contracts →</Link></p>
+      </section>
+      <section style={card}>
         <h2>Trips with the most incomplete stops</h2>
-        <p>Sorted by incomplete stops; compare recurring trips using the number of distinct service dates. Select a trip to open its existing Missed Load Reviews with the same contract and date range.</p>
-        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th align="left">Trip</th><th align="left">Category</th><th align="right">Days observed</th><th align="right">Loads</th><th align="right">Incomplete</th><th align="right">Completion</th></tr></thead><tbody>{tripStats.slice(0, 25).map(t => <tr style={{ borderTop: "1px solid #dce3e8" }} key={t.type+"|"+t.trip}><td style={{ padding: "8px 3px" }}><Link href={`/missed-load-reviews?${new URLSearchParams({contract,trip:t.trip,start,end}).toString()}`} title={`Review missed loads on trip ${t.trip}`}>{t.trip} ↗</Link>{notesForTrip(t.trip).length > 0 && <div style={{ fontSize: 12, marginTop: 3 }} title={notesForTrip(t.trip).map(n=>n.note).join(" • ")}>📝 {notesForTrip(t.trip).length} trip note(s)</div>}{reviewsForTrip(t.trip).length > 0 && <div style={{ fontSize: 12, marginTop: 3 }} title={reviewsForTrip(t.trip).map(n=>n.explanation).join(" • ")}>📋 {reviewsForTrip(t.trip).length} reviewed load(s)</div>}</td><td>{t.type}</td><td align="right">{t.days.size}</td><td align="right">{fmt(t.loads)}</td><td align="right">{fmt(t.incomplete)}</td><td align="right">{pct(t.completed, t.stops)}</td></tr>)}</tbody></table></div>
+        <p>Each week with one or more incomplete stops counts once, regardless of how many loads were affected. Weeks start Monday. Select a trip to open its existing Missed Load Reviews with the same contract and date range.</p>
+        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th align="left">Trip</th><th align="left">Category</th><th align="right">Weeks with misses</th><th align="left">Weeks affected (Monday start)</th><th align="right">Days observed</th><th align="right">Loads</th><th align="right">Incomplete</th><th align="right">Completion</th></tr></thead><tbody>{tripStats.slice(0, 25).map(t => <tr style={{ borderTop: "1px solid #dce3e8" }} key={t.type+"|"+t.trip}><td style={{ padding: "8px 3px" }}><Link href={`/missed-load-reviews?${new URLSearchParams({contract,trip:t.trip,start,end}).toString()}`} title={`Review missed loads on trip ${t.trip}`}>{t.trip} ↗</Link>{notesForTrip(t.trip).length > 0 && <div style={{ fontSize: 12, marginTop: 3 }} title={notesForTrip(t.trip).map(n=>n.note).join(" • ")}>📝 {notesForTrip(t.trip).length} trip note(s)</div>}{reviewsForTrip(t.trip).length > 0 && <div style={{ fontSize: 12, marginTop: 3 }} title={reviewsForTrip(t.trip).map(n=>n.explanation).join(" • ")}>📋 {reviewsForTrip(t.trip).length} reviewed load(s)</div>}</td><td>{t.type}</td><td align="right"><strong>{recurringTrips.get(t.type+"|"+t.trip)?.affected.size ?? 0} of {recurringTrips.get(t.type+"|"+t.trip)?.observed.size ?? 0}</strong></td><td style={{ fontSize: 12, minWidth: 160 }}>{[...(recurringTrips.get(t.type+"|"+t.trip)?.affected ?? [])].sort().map(shortDate).join(", ") || "—"}</td><td align="right">{t.days.size}</td><td align="right">{fmt(t.loads)}</td><td align="right">{fmt(t.incomplete)}</td><td align="right">{pct(t.completed, t.stops)}</td></tr>)}</tbody></table></div>
         {!tripStats.length && <p>No saved trips for this contract and date range.</p>}
       </section>
     </div>}
