@@ -85,7 +85,7 @@ export default function ContractTrendsPage() {
     }
     return [...map.values()].sort((a, b) => b.incomplete - a.incomplete || b.loads - a.loads);
   }, [filteredTrips]);
-  const kinds = useMemo(() => ["regular", "extra", "unmapped"].map(type => {
+  const kinds = useMemo(() => ["regular", "extra"].map(type => {
     const m = blank(); tripStats.filter(x => x.type === type).forEach(x => { m.loads += x.loads; m.stops += x.stops; m.completed += x.completed; m.incomplete += x.incomplete; });
     return { type, ...m };
   }), [tripStats]);
@@ -118,9 +118,9 @@ export default function ContractTrendsPage() {
         <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th align="left">Day</th><th align="right">Recorded days</th><th align="right">Loads</th><th align="right">Stops</th><th align="right">Incomplete</th><th align="right">Completion</th></tr></thead><tbody>{weekdays.map(d => <tr key={d.name} style={{ borderTop: "1px solid #dce3e8" }}><td style={{ padding: "10px 4px" }}>{d.name}<div style={{ width: Math.round(110 * d.stops / best), height: 5, background: "#087f8c", borderRadius: 5 }}/></td><td align="right">{d.activeDays}</td><td align="right">{fmt(d.loads)}</td><td align="right">{fmt(d.stops)}</td><td align="right">{fmt(d.incomplete)}</td><td align="right"><strong>{pct(d.completed, d.stops)}</strong></td></tr>)}</tbody></table></div>
       </section>
       <section style={card}>
-        <h2>Regular, extra and unmapped</h2>
+        <h2>Regular and extra trips</h2>
         <div style={{ overflowX: "auto" }}><table style={{ width: "100%" }}><thead><tr><th align="left">Trip category</th><th align="right">Loads</th><th align="right">Stops</th><th align="right">Incomplete</th><th align="right">Completion</th></tr></thead><tbody>{kinds.map(k => <tr key={k.type}><td style={{ textTransform: "capitalize" }}>{k.type}</td><td align="right">{fmt(k.loads)}</td><td align="right">{fmt(k.stops)}</td><td align="right">{fmt(k.incomplete)}</td><td align="right">{pct(k.completed,k.stops)}</td></tr>)}</tbody></table></div>
-        <p style={{ fontSize: 13, opacity: .75 }}>An unmapped load has no trip number. Extra trips contain letters in the actual trip identifier; regular trips do not. Unmapped is never silently counted as regular.</p>
+        <p style={{ fontSize: 13, opacity: .75 }}>Unmapped loads in this period: {fmt(filteredDaily.reduce((n, d) => n + Number(d.unmapped_loads || 0), 0))}. Unmapped loads are included in Extra Trips, consistent with the existing performance reports. They remain labeled Unmapped in the problem-trip list for follow-up.</p>
       </section>
       <section style={card}>
         <h2>Trips with the most incomplete stops</h2>
