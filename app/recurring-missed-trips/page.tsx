@@ -5,6 +5,7 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {supabase} from "@/lib/supabase";
 import {useAccessRole} from "@/components/AccessRole";
 
+type TripNote={contract_number:string;trip_number:string|null;status:string;note:string;effective_start:string;effective_end:string|null};
 type RepeatRow={
  contract_number:string;trip_number:string;weeks_affected:number;weeks_observed:number;
  affected_weeks:string[];missed_days:number;missed_stops:number;last_missed_date:string;
@@ -21,25 +22,35 @@ export default function RecurringMissedTripsPage(){
  const [end,setEnd]=useState(lastSunday);
  const [weeks,setWeeks]=useState(8);
  const [rows,setRows]=useState<RepeatRow[]>([]);
+ const [notes,setNotes]=useState<TripNote[]>([]);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const allowed=["admin","uploader","viewer"].includes(role||"");
  const refresh=useCallback(async()=>{
   if(!allowed)return;
   setLoading(true);setError("");
-  const {data,error:issue}=await supabase.rpc("recurring_missed_trips",{p_end:end,p_weeks:weeks});
-  if(issue)setError(issue.message);else setRows((data||[]) as RepeatRow[]);
+  const [repeats,tripNotes]=await Promise.all([
+   supabase.rpc("recurring_missed_trips",{p_end:end,p_weeks:weeks}),
+   supabase.from("operational_notes").select("contract_number,trip_number,status,note,effective_start,effective_end").is("effective_end",null).limit(2000)
+  ]);
+  if(repeats.error||tripNotes.error)setError(repeats.error?.message||tripNotes.error?.message||"Could not retrieve recurring trips");
+  else {setRows((repeats.data||[]) as RepeatRow[]);setNotes((tripNotes.data||[]) as TripNote[]);}
   setLoading(false);
  },[allowed,end,weeks]);
  useEffect(()=>{void refresh()},[refresh]);
  const repeating=useMemo(()=>rows.filter(r=>r.weeks_affected>=3),[rows]);
  const watching=useMemo(()=>rows.filter(r=>r.weeks_affected===2),[rows]);
+ const noteFor=(r:RepeatRow)=>notes.find(n=>
+   n.contract_number.trim().toUpperCase().replace(/^0+(?=[0-9])/,"")===r.contract_number &&
+   n.trip_number?.trim()===r.trip_number && n.status!=="resolved");
  if(!allowed)return <main className="page-shell operations-polish"><h1>Recurring Missed Trips</h1><p>This reporting view is available to approved operations employees.</p></main>;
- const render=(items:RepeatRow[])=>items.length?<div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Trip</th><th>Weeks with misses</th><th>Missed days</th><th>Reported missed stops</th><th>Last seen</th><th>Weeks affected (starting Monday)</th></tr></thead><tbody>{items.map(row=><tr key={row.contract_number+"|"+row.trip_number}>
+ const render=(items:RepeatRow[])=>items.length?<div className="table-scroll"><table className="data-table"><thead><tr><th>Contract</th><th>Trip</th><th>Weeks with misses</th><th>Missed days</th><th>Reported missed stops</th><th>Last seen</th><th>Existing trip note</th><th>Action</th><th>Weeks affected (starting Monday)</th></tr></thead><tbody>{items.map(row=><tr key={row.contract_number+"|"+row.trip_number}>
  <td><Link href={`/contracts/${encodeURIComponent(row.contract_number)}`}>{row.contract_number}</Link></td>
  <td><strong>{row.trip_number}</strong></td>
  <td><strong>{row.weeks_affected} of {row.weeks_observed}</strong></td>
  <td>{fmt(row.missed_days)}</td><td>{fmt(row.missed_stops)}</td><td>{row.last_missed_date}</td>
+ <td>{noteFor(row)?<><strong>{noteFor(row)?.status.replaceAll("_"," ")}</strong><span style={{display:"block",maxWidth:340}}>{noteFor(row)?.note}</span></>:"No trip note yet"}</td>
+ <td><Link className="hub-secondary-link" href={`/contracts/${encodeURIComponent(row.contract_number)}?trip=${encodeURIComponent(row.trip_number==="Unassigned"?"":row.trip_number)}#contract-notes`}>View / add note</Link></td>
  <td>{row.affected_weeks.join(", ")}</td>
  </tr>)}</tbody></table></div>:<p className="ops-summary">No contract/trip combinations meet this frequency in the selected period.</p>;
  return <main className="page-shell dashboard-page operations-polish">
