@@ -21,7 +21,7 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
   const [contractsOpen,setContractsOpen] = useState(false);
   const [reportsOpen,setReportsOpen] = useState(false);
   const [adminOpen,setAdminOpen] = useState(false);
-  useEffect(()=>{if(pathname.startsWith("/contracts")||pathname.startsWith("/unassigned-trips")||pathname.startsWith("/missed-load-reviews")||pathname.startsWith("/recurring-missed-trips")||pathname.startsWith("/trends")||pathname.startsWith("/schedule-builder"))setContractsOpen(true);if(pathname.startsWith("/reports")||pathname.startsWith("/daily-reports")||pathname.startsWith("/history"))setReportsOpen(true);if(pathname.startsWith("/admin/"))setAdminOpen(true)},[pathname]);
+  useEffect(()=>{if(pathname.startsWith("/contracts")||pathname.startsWith("/unassigned-trips")||pathname.startsWith("/missed-load-reviews")||(pathname.startsWith("/recurring-missed-trips")||pathname.startsWith("/recurring-trip-watchlist"))||pathname.startsWith("/trends")||pathname.startsWith("/schedule-builder"))setContractsOpen(true);if(pathname.startsWith("/reports")||pathname.startsWith("/daily-reports")||pathname.startsWith("/history"))setReportsOpen(true);if(pathname.startsWith("/admin/"))setAdminOpen(true)},[pathname]);
   const [reviewAlerts,setReviewAlerts] = useState(0);
   const [billingAlerts,setBillingAlerts] = useState(0);
   const [reviewAlertsEnabled,setReviewAlertsEnabled] = useState(false);
@@ -86,13 +86,14 @@ export default function NavBar({ operationsRole, payrollAccess, fuelAccess, tech
         {operationsAccess && <Link className={pathname === "/" ? "active" : ""} href="/">Dashboard</Link>}
 
         {operationsAccess && operationsRole !== "dashboard_fuel_viewer" && <div className="nav-subgroup">
-         <button type="button" className={`nav-subgroup-toggle${pathname.startsWith("/contracts")||pathname.startsWith("/unassigned-trips")||pathname.startsWith("/missed-load-reviews")||pathname.startsWith("/recurring-missed-trips")||pathname.startsWith("/trends")||pathname.startsWith("/schedule-builder")?" current":""}`} aria-expanded={contractsOpen} onClick={()=>setContractsOpen(v=>!v)}>Contracts <span aria-hidden="true">{contractsOpen?"▾":"▸"}</span>{reviewAlertsEnabled&&reviewAlerts>0&&<span className="ops-review-notice">{reviewAlerts} to check</span>}</button>
+         <button type="button" className={`nav-subgroup-toggle${pathname.startsWith("/contracts")||pathname.startsWith("/unassigned-trips")||pathname.startsWith("/missed-load-reviews")||(pathname.startsWith("/recurring-missed-trips")||pathname.startsWith("/recurring-trip-watchlist"))||pathname.startsWith("/trends")||pathname.startsWith("/schedule-builder")?" current":""}`} aria-expanded={contractsOpen} onClick={()=>setContractsOpen(v=>!v)}>Contracts <span aria-hidden="true">{contractsOpen?"▾":"▸"}</span>{reviewAlertsEnabled&&reviewAlerts>0&&<span className="ops-review-notice">{reviewAlerts} to check</span>}</button>
          {contractsOpen&&<div className="nav-subgroup-items">
           <Link className={pathname.startsWith("/contracts")?"active":""} href="/contracts">All Contracts</Link>
           {canManageReports&&<Link className={pathname.startsWith("/unassigned-trips")?"active":""} href="/unassigned-trips">Unassigned Trips</Link>}
           {["admin","uploader","viewer"].includes(operationsRole)&&<Link className={pathname.startsWith("/missed-load-reviews")?"active":""} href="/missed-load-reviews">Missed Load Reviews{reviewAlertsEnabled&&reviewAlerts>0&&<span className="ops-review-notice" title="Saved explanations or corrections requiring review">{reviewAlerts} to check</span>}</Link>}
           {["admin","uploader","viewer"].includes(operationsRole)&&<Link className={pathname.startsWith("/trends")?"active":""} href="/trends">Contract Trends</Link>}
           {["admin","uploader","viewer"].includes(operationsRole)&&<Link className={pathname.startsWith("/recurring-missed-trips")?"active":""} href="/recurring-missed-trips">Recurring Trips</Link>}
+          {reviewAlertsEnabled&&<Link className={pathname.startsWith("/recurring-trip-watchlist")?"active":""} href="/recurring-trip-watchlist">Recurring Trip Watchlist</Link>}
           {canManageReports&&<Link className={pathname.startsWith("/schedule-builder")?"active":""} href="/schedule-builder">Schedule</Link>}
          </div>}
         </div>}
