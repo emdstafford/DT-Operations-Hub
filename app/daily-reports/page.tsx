@@ -27,6 +27,8 @@ export default function DailyReportsPage(){
  const [reviewThreshold,setReviewThreshold]=useState(95);
  const [data,setData]=useState<DashboardData>(empty);
  const [deliveries,setDeliveries]=useState<Delivery[]>([]);
+ const [deliverySettings,setDeliverySettings]=useState<{delivery_enabled:boolean;company_enabled:boolean;individual_enabled:boolean}|null>(null);
+ const [lastSent,setLastSent]=useState<string|null>(null);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const [message,setMessage]=useState("");
@@ -34,15 +36,18 @@ export default function DailyReportsPage(){
 
  const refresh=useCallback(async()=>{
   if(!allowed)return;
-  setLoading(true);setError("");setMessage("");
-  const [recipients,report,deliveryAudit,emailSettings]=await Promise.all([
+  setLoading(true);setError("");setMessage("");setDeliverySettings(null);setLastSent(null);setDeliveries([]);
+  const [recipients,report,deliveryAudit,emailSettings,lastDelivery]=await Promise.all([
    supabase.from("daily_report_recipients").select("name,email,recipient_type,enabled").order("recipient_type").order("name"),
    supabase.rpc("dashboard_hub_filtered",{p_start:day,p_end:day,p_grain:"day",p_contracts:null,p_supervisors:null,p_exclude_august_2026:false,p_max_completion:null,p_min_missed_stops:null}),
    supabase.from("daily_report_deliveries").select("id,report_type,supervisor,recipient_email,status,attempted_at,sent_at,error_message").eq("operating_date",day).order("attempted_at",{ascending:false}).limit(500),
-   supabase.from("daily_email_settings").select("threshold_percent").eq("id",1).single()
+   supabase.from("daily_email_settings").select("threshold_percent,delivery_enabled,company_enabled,individual_enabled").eq("id",1).single(),
+   supabase.from("daily_report_deliveries").select("sent_at").eq("status","sent").not("sent_at","is",null).order("sent_at",{ascending:false}).limit(1)
   ]);
   if(recipients.error||report.error||deliveryAudit.error||emailSettings.error){setError(recipients.error?.message||report.error?.message||deliveryAudit.error?.message||emailSettings.error?.message||"Unable to load reports");setLoading(false);return;}
   setReviewThreshold(Number(emailSettings.data?.threshold_percent??95));
+  setDeliverySettings(emailSettings.data);
+  setLastSent(lastDelivery.data?.[0]?.sent_at??null);
   const saved=recipients.data as Recipient[];
   setDirectory(saved);
   setDeliveries((deliveryAudit.data||[]) as Delivery[]);
@@ -81,6 +86,11 @@ export default function DailyReportsPage(){
  const bcc=dailyRecipients.filter(r=>r.recipient_type==="bcc");
  const missing=listed.filter(r=>!isTonya(r.supervisor||"")&&!lookup(r.supervisor||""));
  const dayReady=Number(data.totals.total_stops)>0;
+ const sentCount=deliveries.filter(d=>d.status==="sent").length;
+ const failedCount=deliveries.filter(d=>d.status==="failed").length;
+ const pendingCount=deliveries.filter(d=>d.status==="pending").length;
+ const paused=deliverySettings!==null&&(!deliverySettings.delivery_enabled||(!deliverySettings.company_enabled&&!deliverySettings.individual_enabled));
+ const automationStatus=loading?"Checking…":!deliverySettings?"Status unavailable":paused?"Paused":failedCount?"Delivery errors":lastSent||sentCount?"Delivery verified":"Enabled · not yet verified";
  const generalTo=distinct([...supervisors.map(r=>r.email),...distribution.map(r=>r.email)]);
  const generalCc=distinct(cc.map(r=>r.email));
  const generalBcc=distinct(bcc.map(r=>r.email));
@@ -119,8 +129,9 @@ export default function DailyReportsPage(){
  return <main className="page-shell dashboard-page operations-polish ops-daily-reports">
    <header className="hub-header"><div><p className="eyebrow">DT Intelligence Hub</p><h1>Daily Email Reports</h1><p>Preview previous-day results, verify recipients, and prepare the 7:00 AM Eastern distribution.</p></div><Link className="hub-secondary-link" href="/admin/daily-email-settings">Email Settings</Link></header>
    <section className="panel">
-    <div className="panel-heading"><div><h2>Automation status</h2><span>Sender: it@dtexpress.net · Daily at 7:00 AM Eastern</span></div><strong className="ops-automation-off">Sending not connected</strong></div>
-    <p className="ops-summary">Daily report previews and delivery history are available. Manage the supervisor directory in Email Settings. <strong>Automatic ingestion and email sending are NOT enabled.</strong> Microsoft Power Automate and the shared-mailbox connection must be configured and tested first. No messages are sent from this page.</p>
+    <div className="panel-heading"><div><h2>Automation status</h2><span>Sender: it@dtexpress.net · Daily at 7:00 AM Eastern</span></div><strong className={paused||failedCount?"ops-automation-off":"ops-inline-note"}>{automationStatus}</strong></div>
+    <p className="ops-summary">Scheduled delivery runs through Microsoft Power Automate. Status reflects saved Hub settings and recorded Microsoft 365 delivery results, not a live connection test. No messages are sent from this page.</p>
+    {!loading&&deliverySettings&&<><p className="ops-summary"><strong>Company report:</strong> {deliverySettings.delivery_enabled&&deliverySettings.company_enabled?"Enabled":"Paused"} · <strong>Individual reviews:</strong> {deliverySettings.delivery_enabled&&deliverySettings.individual_enabled?"Enabled":"Paused"}<br/><strong>Last recorded successful delivery:</strong> {lastSent?new Date(lastSent).toLocaleString("en-US",{timeZone:"America/New_York"} )+" ET":"Not available"}</p><div className="ops-daily-stats"><div><small>Sent · selected day</small><strong>{sentCount}</strong></div><div><small>Failed · selected day</small><strong>{failedCount}</strong></div><div><small>Pending · selected day</small><strong>{pendingCount}</strong></div></div></>}
     <div className="ops-filter-grid"><label>Operating day<input type="date" value={day} onChange={e=>setDay(e.target.value)}/></label><div className="ops-daily-actions"><button type="button" className="hub-secondary-link" onClick={()=>setDay(yesterday())}>Previous day</button><button type="button" className="hub-secondary-link" onClick={()=>void refresh()} disabled={loading}>{loading?"Loading…":"Refresh"}</button></div></div>
    </section>
    {error&&<div className="alert alert-error" role="alert">{error}</div>}
@@ -154,7 +165,7 @@ export default function DailyReportsPage(){
     </section>
     <section className="panel">
      <div className="panel-heading"><div><h2>Actual email delivery history</h2><span>Microsoft 365 send results only · operating day {formatDate(day)}</span></div><span>{deliveries.length} recorded recipient(s)</span></div>
-     {!deliveries.length?<p className="ops-summary"><strong>No emails recorded as sent.</strong> The Microsoft 365 dispatch connection has not been activated. Previewing or copying reports does not count as sending.</p>:
+     {!deliveries.length?<p className="ops-summary"><strong>No delivery records for this operating day.</strong> This does not establish whether the Microsoft 365 connection is active. Previewing or copying reports does not count as sending.</p>:
       <div className="table-scroll"><table className="data-table"><thead><tr><th>Report</th><th>Supervisor</th><th>Recipient</th><th>Status</th><th>Recorded</th></tr></thead><tbody>{deliveries.map(item=><tr key={item.id}><td>{item.report_type==="company"?"Company-wide":"Individual"}</td><td>{item.supervisor||"—"}</td><td>{item.recipient_email}</td><td><strong>{item.status.toUpperCase()}</strong>{item.error_message&&<small style={{display:"block"}}>{item.error_message}</small>}</td><td>{new Date(item.sent_at||item.attempted_at).toLocaleString("en-US",{timeZone:"America/New_York"})}</td></tr>)}</tbody></table></div>}
     </section>
    </>}
