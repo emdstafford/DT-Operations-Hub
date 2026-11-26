@@ -435,17 +435,9 @@ export async function GET(request: Request) {
         const pair = tripPair(contractTripStats.get(s.contract));
         return { name: s.contract, regular: pair[0], extra: pair[1], overall: pct(s.completionPercent) };
       }), "bottom10"));
-    // Supervisors whose only activity is a historical correction still
-    // deserve the update. Do not mislabel them as 0% for the current day.
-    const reviewCandidates = [
-      ...supervisorRows,
-      ...[...previousDayBySupervisor.keys()]
-        .filter(name => !supervisors.has(name))
-        .map(supervisor => ({ ...result(zero()), supervisor })),
-    ];
-    const individualReviews = reviewCandidates
-      .filter(s => s.supervisor !== "Unassigned" &&
-        (s.totalStops > 0 || (previousDayBySupervisor.get(s.supervisor)?.length ?? 0) > 0))
+    // Prior-day corrections are context for eligible reviews, not a delivery trigger.
+    const individualReviews = supervisorRows
+      .filter(s => s.supervisor !== "Unassigned" && s.totalStops > 0)
       .map(s => {
         if (isTonya(s.supervisor)) return null;
         const assigned = detailedContracts.filter(c => c.supervisor === s.supervisor)
@@ -456,7 +448,7 @@ export async function GET(request: Request) {
           .sort((a,b) => a.load.operating_date.localeCompare(b.load.operating_date) ||
             normalizeContract(a.load.contract_number).localeCompare(normalizeContract(b.load.contract_number), undefined, { numeric: true }) ||
             a.load.load_number.localeCompare(b.load.load_number));
-        if (!overallBelow95 && failing.length === 0 && priorUpdates.length === 0) return null;
+        if (!overallBelow95 && failing.length === 0) return null;
         const scoreExplanation = "Weekly % = total completed stops ÷ total stops. " +
           "Do not average daily percentages. Late FourKites updates count toward the original operating date.";
         const priorDescription = "FourKites reported these earlier-day loads on " + prettyDate +
@@ -522,7 +514,7 @@ export async function GET(request: Request) {
           html: shell("Supervisor Performance Review — " + s.supervisor,
             (s.totalStops ? summary(s.completionPercent) : '<p><strong>No current-day loads; this review is for prior-day FourKites updates.</strong></p>') +
             '<p style="font-size:12px;padding:11px 13px;background:#eef2f5;border-left:4px solid #123b61;line-height:1.5"><strong>How your percentage works:</strong> ' + esc(scoreExplanation) + '</p>' +
-            '<p style="color:#742430;font-weight:bold">' + esc(overallBelow95 ? "Overall below " + thresholdLabel + "." : failing.length ? "At least one assigned contract below " + thresholdLabel + "." : "Prior-day update notice; no current-day performance issue triggered this review.") + "</p>" +
+            '<p style="color:#742430;font-weight:bold">' + esc(overallBelow95 ? "Overall below " + thresholdLabel + "." : "At least one assigned contract below " + thresholdLabel + ".") + "</p>" +
             h3("All Assigned Contracts") +
             table(["Contract", "Total Stops", "Completed", "Missed Stops", "Regular Trips %", "Extra Trips %", "% Complete"],
               assigned.map(x => tr([x.contract, fmt(x.totalStops), fmt(x.completedStops), fmt(x.incompleteStops),
