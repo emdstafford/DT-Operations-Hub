@@ -71,11 +71,13 @@ export default function TripWatchlist(){
    ];
    for (const row of applicable) {
      const contractNumber = canon(row.contract_number);
-     const name = row.supervisor?.trim();
-     if (!name || !watchlistContracts.has(contractNumber)) continue;
-     const contracts = bySupervisor.get(name) ?? new Set<string>();
-     contracts.add(contractNumber);
-     bySupervisor.set(name, contracts);
+     if (!watchlistContracts.has(contractNumber)) continue;
+     const names = (row.supervisor ?? "").split("/").map(name => name.trim()).filter(Boolean);
+     for (const name of names) {
+       const contracts = bySupervisor.get(name) ?? new Set<string>();
+       contracts.add(contractNumber);
+       bySupervisor.set(name, contracts);
+     }
    }
    return bySupervisor;
  }, [assignments, watchlistContracts, start, end]);
