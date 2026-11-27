@@ -2,6 +2,7 @@
 import Link from "next/link";
 import {useEffect,useMemo,useState} from "react";
 import {supabase} from "@/lib/supabase";
+import {getContracts,getContractAssignmentPeriods,type ContractAssignmentPeriod} from "@/lib/getContracts";
 import {useAccessRole} from "@/components/AccessRole";
 
 type SavedNote={id:string;contract_number:string;trip_number:string|null;status:string;note:string;effective_start:string;effective_end:string|null};
@@ -24,7 +25,7 @@ export default function TripWatchlist(){
  const [supervisor,setSupervisor]=useState("");
  const [contract,setContract]=useState("");
  const [assignmentResult,setAssignmentResult]=useState<{
-   start: string; end: string; refresh: number; rows: SupervisorContract[]; error: string;
+   refresh: number; current: SupervisorContract[]; dated: ContractAssignmentPeriod[]; failed: boolean;
  } | null>(null);
  const [rows,setRows]=useState<Trip[]>([]);
  const [loading,setLoading]=useState(true);
@@ -47,39 +48,41 @@ export default function TripWatchlist(){
  useEffect(() => {
    if (access !== true || role !== "admin") return;
    let live = true;
-   void supabase.rpc("dashboard_hub_filtered", {
-     p_start: start,
-     p_end: end,
-     p_grain: "week",
-     p_exclude_august_2026: false,
-   }).then(({ data, error }) => {
-     if (live) setAssignmentResult({
-       start, end, refresh,
-       rows: data?.supervisor_contracts ?? [],
-       error: error?.message ?? "",
+   void Promise.all([getContracts(), getContractAssignmentPeriods()])
+     .then(([current, dated]) => {
+       if (live) setAssignmentResult({ refresh, current, dated, failed: false });
+     })
+     .catch(() => {
+       if (live) setAssignmentResult({ refresh, current: [], dated: [], failed: true });
      });
-   });
    return () => { live = false; };
- }, [access, role, start, end, refresh]);
+ }, [access, role, refresh]);
 
- const assignments = assignmentResult?.start === start && assignmentResult.end === end
-   && assignmentResult.refresh === refresh ? assignmentResult : null;
+ const assignments = assignmentResult?.refresh === refresh ? assignmentResult : null;
  const watchlistContracts = useMemo(() => new Set(rows.map(t => t.contract)), [rows]);
  const supervisorContracts = useMemo(() => {
    const bySupervisor = new Map<string, Set<string>>();
-   for (const row of assignments?.rows ?? []) {
+   if (!assignments || assignments.failed) return bySupervisor;
+
+   const datedContracts = new Set(assignments.dated.map(row => canon(row.contract_number)));
+   const applicable = [
+     ...assignments.current.filter(row => !datedContracts.has(canon(row.contract_number))),
+     ...assignments.dated.filter(row => row.start_date <= end && (!row.end_date || row.end_date >= start)),
+   ];
+   for (const row of applicable) {
      const contractNumber = canon(row.contract_number);
-     if (!watchlistContracts.has(contractNumber)) continue;
-     const contracts = bySupervisor.get(row.supervisor) ?? new Set<string>();
+     const name = row.supervisor?.trim();
+     if (!name || !watchlistContracts.has(contractNumber)) continue;
+     const contracts = bySupervisor.get(name) ?? new Set<string>();
      contracts.add(contractNumber);
-     bySupervisor.set(row.supervisor, contracts);
+     bySupervisor.set(name, contracts);
    }
    return bySupervisor;
- }, [assignments, watchlistContracts]);
+ }, [assignments, watchlistContracts, start, end]);
  const matchedContracts = supervisorContracts.get(supervisor);
  const contractOptions = [...(supervisor ? matchedContracts ?? [] : watchlistContracts)].sort();
  const supervisorFilterLoading = !!supervisor && !assignments;
- const supervisorFilterError = !!supervisor && !!assignments?.error;
+ const supervisorFilterError = !!supervisor && !!assignments?.failed;
  const weekStarts=Array.from({length:weeks},(_,i)=>shift(start,i*7));
  const high=Math.ceil(weeks/2);
  const groups=useMemo(()=>{const m=new Map<string,Trip[]>();const term=query.trim().toUpperCase();for(const t of rows){
@@ -100,7 +103,7 @@ export default function TripWatchlist(){
  <label>Through (Friday)<input type="date" value={end} max={lastFriday()} onChange={e=>{if(e.target.value){setEnd(e.target.value);setSupervisor("");setContract("")}}}/></label>
  <label>Lookback<select value={weeks} onChange={e=>{const n=Number(e.target.value);setWeeks(n);setMinimum(Math.ceil(n/2));setSupervisor("");setContract("")}}>{[4,8,12,14,16].map(n=><option key={n} value={n}>{n} weeks</option>)}</select></label>
  <label>Minimum weeks with misses<select value={minimum} onChange={e=>setMinimum(Number(e.target.value))}>{Array.from({length:weeks-1},(_,i)=>i+2).map(n=><option key={n} value={n}>{n} weeks</option>)}</select></label>
- <label>Supervisor<select value={supervisor} onChange={e=>{setSupervisor(e.target.value);setContract("")}}>
+ <label>Supervisor<select value={supervisor} disabled={!assignments || assignments.failed} onChange={e=>{setSupervisor(e.target.value);setContract("")}}>
    <option value="">All supervisors</option>
    {supervisor && !matchedContracts && <option value={supervisor}>{supervisor}</option>}
    {[...supervisorContracts.keys()].sort().map(name=><option key={name} value={name}>{name}</option>)}
@@ -114,7 +117,7 @@ export default function TripWatchlist(){
  <button className="hub-secondary-link" onClick={()=>setRefresh(n=>n+1)}>Refresh</button><label>Checklist size<select value={printLimit} onChange={e=>setPrintLimit(Number(e.target.value))}><option value={25}>Top 25</option><option value={50}>Top 50</option><option value={100}>Top 100</option><option value={0}>All filtered trips</option></select></label><button className="hub-secondary-link" onClick={printChecklist} disabled={loading||!!error||supervisorFilterLoading||supervisorFilterError}>Print checklist</button></div>
  <p className="ops-summary">Saturday–Friday weeks. Default shows trips with misses in at least half of the selected weeks. The flagged August 7–13 period is excluded, as is 3773G after November 13. Unmapped trips are grouped by contract; they may represent more than one underlying trip. These are investigation leads, not proof of responsibility.</p></section>
  {!assignments && <p role="status">Loading supervisor options…</p>}
- {assignments?.error && <p role="alert">Unable to load supervisor options. Select Refresh to retry.</p>}
+ {assignments?.failed && <p role="alert">Unable to load supervisor options. Select Refresh to retry.</p>}
  {noteError&&<p role="alert">{noteError}</p>}
  {loading?<p>Checking saved USPS load history…</p>:error?<p role="alert">Unable to load the watchlist: {error}. Choose a completed Friday and retry.</p>:supervisorFilterLoading||supervisorFilterError?null:<>
  <section className="panel"><div className="panel-heading"><h2>{start} – {end}</h2><span>Filtered results</span></div><div className="ops-daily-stats"><div><small>Contracts flagged</small><strong>{groups.length}</strong></div><div><small>Recurring trips</small><strong>{groups.reduce((n,g)=>n+g.trips.length,0)}</strong></div><div><small>High priority ({high}+ weeks)</small><strong>{groups.reduce((n,g)=>n+g.high,0)}</strong></div></div><p className="ops-summary">Red = incomplete stops; green = recorded stops with no misses; gray = no recorded stops. Missing data is not counted as successful completion.</p></section>
